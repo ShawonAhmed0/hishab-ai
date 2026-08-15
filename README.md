@@ -85,6 +85,28 @@ That creates a confirmed login (`rafiq@paperstar.demo` / `HishabDemo2026!`),
 পেপার স্টার with a customer, a vendor, two products and the spec's ৳80,000 sale
 — posted through the real engine, not painted on.
 
+## Deploying to Vercel
+
+Set these in **Project Settings → Environment Variables**:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | from Project Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Project Settings → API |
+| `DATABASE_URL` | `hishabai_app` on the **transaction** pooler, **port 6543** |
+| `DATABASE_POOL_MAX` | `1` |
+
+Two things differ from local:
+
+- **Port 6543, not 5432.** Session mode holds a connection for the life of the
+  client, and serverless fan-out exhausts the pool almost immediately.
+  Transaction mode works here because `withTenant()` sets its identity with
+  `set_config(..., true)` — transaction-scoped — and prepared statements are
+  already off.
+- **Do not set `SUPABASE_DB_ADMIN_URL`.** It is the owner connection with
+  `BYPASSRLS`, and it is needed only by `npm run db:migrate`, which you run
+  from your machine.
+
 ---
 
 ## Layout
