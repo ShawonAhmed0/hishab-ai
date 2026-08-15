@@ -1,0 +1,22 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+*.log
+npm-debug.log*
+
+.vercel
+.turbo
+
+# Backups of env files — these contain real credentials
+*.bak
+.env.local.bak

@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: the toggle is a company/user preference, not just an
+   OS setting, so it has to be switchable from inside the app. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   HishabAI design tokens
+   Style: Data-Dense Dashboard (variance 4 / motion 3 / density 8)
+   See design-system/hishabai/MASTER.md — including the deliberate typography
+   override, since neither font the generator picked can render Bengali.
+   ========================================================================== */
+
+@theme {
+  /* --- Brand ------------------------------------------------------------- */
+  --color-primary: #1e40af;
+  --color-primary-hover: #1d3a9e;
+  --color-primary-soft: #eff4ff;
+  --color-on-primary: #ffffff;
+  --color-secondary: #3b82f6;
+  --color-accent: #d97706;
+  --color-accent-soft: #fef6e7;
+  --color-on-accent: #1a1204;
+
+  /* --- Surfaces ---------------------------------------------------------- */
+  --color-background: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #eef2f8;
+  --color-border: #dde5f0;
+  --color-border-strong: #c2cfe0;
+
+  /* --- Text -------------------------------------------------------------- */
+  /* Slate rather than the generator's navy: navy-on-white loses too much
+     contrast once tables get to eight columns. */
+  --color-foreground: #0f172a;
+  --color-muted-foreground: #526074;
+  --color-subtle-foreground: #78899f;
+
+  /* --- Finance semantics -------------------------------------------------
+     Money needs its own vocabulary. These are used for amounts and deltas
+     only — never as decoration — and every one of them is paired with a
+     label or an icon so colour is never the sole carrier of meaning. */
+  --color-credit: #047857; /* আয় / জমা */
+  --color-credit-soft: #e8f6f0;
+  --color-debit: #be123c; /* ব্যয় / খরচ */
+  --color-debit-soft: #fdeef1;
+  --color-due: #b45309; /* বকেয়া */
+  --color-due-soft: #fdf3e4;
+  --color-info: #1e40af;
+  --color-info-soft: #eff4ff;
+
+  --color-destructive: #dc2626;
+  --color-on-destructive: #ffffff;
+  --color-ring: #1e40af;
+
+  /* --- Typography --------------------------------------------------------
+     Two families by role: Bengali text needs a face with matras and
+     conjuncts; currency figures need fixed-width digits so columns align. */
+  --font-sans: "Noto Sans Bengali", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-num: "Inter", "Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif;
+
+  /* Bengali sits taller and deeper than Latin — 15px floor, 1.6 leading. */
+  --text-xs: 0.8125rem; /* 13px — labels and captions only */
+  --text-sm: 0.875rem; /* 14px */
+  --text-base: 0.9375rem; /* 15px — body floor */
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  /* --- Spacing (density 8/10) -------------------------------------------- */
+  --spacing-card: 1rem;
+  --spacing-section: 1.5rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 6px -1px rgb(15 23 42 / 0.07), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-overlay: 0 20px 25px -5px rgb(15 23 42 / 0.12), 0 8px 10px -6px rgb(15 23 42 / 0.08);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Dark ------------------------------------------------------------------
+   Same roles, re-pointed. Credit/debit hues are lifted so they still clear
+   4.5:1 against a dark surface. */
+@layer base {
+  .dark {
+    --color-background: #0b1120;
+    --color-surface: #131c2e;
+    --color-surface-raised: #1a2438;
+    --color-surface-sunken: #0f1728;
+    --color-border: #26324a;
+    --color-border-strong: #3a4a68;
+
+    --color-foreground: #e8edf6;
+    --color-muted-foreground: #9dabc2;
+    --color-subtle-foreground: #748299;
+
+    --color-primary: #5b8def;
+    --color-primary-hover: #6f9bf2;
+    --color-primary-soft: #17233d;
+    --color-on-primary: #06122b;
+
+    --color-accent: #f0a52a;
+    --color-accent-soft: #2c2110;
+
+    --color-credit: #34d399;
+    --color-credit-soft: #12291f;
+    --color-debit: #fb7185;
+    --color-debit-soft: #2c1319;
+    --color-due: #fbbf24;
+    --color-due-soft: #2b2110;
+    --color-info: #5b8def;
+    --color-info-soft: #17233d;
+
+    --color-destructive: #f87171;
+    --color-ring: #5b8def;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
+    --shadow-raised: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-overlay: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    /* Never disable zoom; Bengali readers zoom more than Latin readers do. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    /* 1.6, not 1.5: at 1.5 the matra of one line touches the descender above. */
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.35;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+  }
+
+  /* Focus is never removed, only restyled. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+  }
+
+  /* Motion is decoration here, so it goes away entirely when asked. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Every currency figure on the product goes through this: fixed-width
+     digits so columns line up and a changing total does not shift the row. */
+  .num {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.01em;
+  }
+
+  .num-lg {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.02em;
+    font-weight: 620;
+  }
+
+  /* Wide tables scroll inside their own box; the page body never does. */
+  .table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .stack-fade {
+    animation: fade-up 0.35s var(--ease-out) both;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    /* Small offset — it should read as a fade, not a slide. */
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Print: statements and reports are meant to come out on paper. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+  }
+  .card {
+    box-shadow: none;
+    border: 1px solid #999;
+    break-inside: avoid;
+  }
+}

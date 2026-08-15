@@ -1,0 +1,30 @@
+{
+  "name": "hishabai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "HishabAI — Smart হিসাব, Smarter Business",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @hishabai/web",
+    "build": "npm run build -w @hishabai/web",
+    "start": "npm run start -w @hishabai/web",
+    "lint": "npm run lint -w @hishabai/web",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "npm run generate -w @hishabai/db",
+    "db:migrate": "npm run migrate -w @hishabai/db",
+    "db:seed:demo": "node --env-file-if-exists=.env.local --import tsx scripts/seed-demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

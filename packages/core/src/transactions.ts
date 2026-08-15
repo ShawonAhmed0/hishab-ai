@@ -1,0 +1,791 @@
+/**
+ * Turning one entry into every record it implies.
+ *
+ * The engine decides what should happen; this file writes it down. All of it
+ * runs inside a single database transaction, so an entry either lands complete
+ * — journal, stock, payments, audit — or does not land at all.
+ */
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import {
+  accounts,
+  auditLogs,
+  financialAccounts,
+  journalEntries,
+  journalLines,
+  parties,
+  partyBalances,
+  productStock,
+  products,
+  profiles,
+  stockMovements,
+  transactionLines,
+  transactionPayments,
+  transactions,
+  units,
+  withTenant,
+  type Transaction as Tx,
+} from "@hishabai/db";
+import {
+  postTransaction,
+  reverseTransaction,
+  type PostingResult,
+  type StockMovementDraft,
+} from "@hishabai/accounting";
+import {
+  ZERO,
+  bn,
+  money,
+  moneyFromDb,
+  moneyToDb,
+  multiplyRate,
+  qty,
+  qtyToDb,
+  transactionInputSchema,
+  type Money,
+  type TransactionInput,
+  type TransactionType,
+} from "@hishabai/shared";
+import { loadPostingContext, loadProductStates } from "./posting-context";
+import { requirePermission, type Session } from "./session";
+
+/** Voucher prefixes, so a number tells you what it is at a glance. */
+const VOUCHER_PREFIX: Record<TransactionType, string> = {
+  sale: "SALE",
+  purchase: "PURC",
+  income: "INC",
+  expense: "EXP",
+  customer_payment: "RCPT",
+  vendor_payment: "PYMT",
+  production: "PROD",
+  stock_adjustment: "ADJ",
+  sale_return: "SRET",
+  purchase_return: "PRET",
+  other: "JV",
+};
+
+export interface CreateTransactionResult {
+  transactionId: string;
+  voucherNo: string;
+  totals: PostingResult["totals"];
+  previousDue: Money;
+  newDue: Money;
+  warnings: PostingResult["warnings"];
+}
+
+/**
+ * Spec §24: the client sends what the user typed, and nothing else is trusted.
+ * Totals, due, cost of goods and average cost are all recomputed here from the
+ * raw inputs; any derived figure the browser happened to send is discarded by
+ * virtue of never being read.
+ */
+export async function createTransaction(
+  session: Session,
+  rawInput: unknown,
+): Promise<CreateTransactionResult> {
+  requirePermission(session, "transaction.create");
+
+  const input = transactionInputSchema.parse(rawInput);
+  const transactionId = randomUUID();
+
+  return withTenant(session, async (tx) => {
+    const context = await loadPostingContext(tx, {
+      companyId: session.companyId,
+      transactionId,
+      date: input.date,
+      input,
+    });
+
+    const result = postTransaction(input, context);
+
+    const partyId = "partyId" in input ? input.partyId : undefined;
+    const previousDue = partyId
+      ? await currentPartyDue(tx, session.companyId, partyId, input.type)
+      : ZERO;
+
+    const voucherNo = await nextVoucherNo(tx, session.companyId, VOUCHER_PREFIX[input.type]);
+
+    await persist(tx, {
+      session,
+      transactionId,
+      voucherNo,
+      input,
+      result,
+      previousDue,
+    });
+
+    await writeAudit(tx, session, {
+      action: "create",
+      entityType: "transaction",
+      entityId: transactionId,
+      summaryBn: `${bn.transactionType[input.type]} — ${voucherNo}`,
+      after: {
+        voucherNo,
+        total: moneyToDb(result.totals.total),
+        paid: moneyToDb(result.totals.paid),
+        due: moneyToDb(result.totals.due),
+      },
+    });
+
+    return {
+      transactionId,
+      voucherNo,
+      totals: result.totals,
+      previousDue,
+      newDue: (previousDue + result.totals.due) as Money,
+      warnings: result.warnings,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+
+interface PersistArgs {
+  session: Session;
+  transactionId: string;
+  voucherNo: string;
+  input: TransactionInput;
+  result: PostingResult;
+  previousDue: Money;
+  reversalOfId?: string;
+}
+
+async function persist(tx: Tx, args: PersistArgs): Promise<void> {
+  const { session, transactionId, voucherNo, input, result, previousDue } = args;
+  const companyId = session.companyId;
+
+  await tx.insert(transactions).values({
+    id: transactionId,
+    companyId,
+    voucherNo,
+    type: input.type,
+    status: "posted",
+    source: input.source,
+    date: input.date,
+    partyId: "partyId" in input ? (input.partyId ?? null) : null,
+    categoryAccountId:
+      "categoryAccountId" in input ? (input.categoryAccountId ?? null) : null,
+    memoNo: input.memoNo ?? null,
+    description: input.description ?? null,
+    subtotal: moneyToDb(result.totals.subtotal),
+    transportCost: "transportCost" in input ? moneyToDb(money(input.transportCost)) : "0",
+    laborCost: "laborCost" in input ? moneyToDb(money(input.laborCost)) : "0",
+    otherCost: "otherCost" in input ? moneyToDb(money(input.otherCost)) : "0",
+    discount: "discount" in input ? moneyToDb(money(input.discount)) : "0",
+    total: moneyToDb(result.totals.total),
+    paidAmount: moneyToDb(result.totals.paid),
+    dueAmount: moneyToDb(result.totals.due),
+    previousDue: moneyToDb(previousDue),
+    reversalOfId: args.reversalOfId ?? null,
+    createdBy: session.userId,
+  });
+
+  await insertLines(tx, companyId, transactionId, input, result);
+
+  if (result.payments.length > 0) {
+    await tx.insert(transactionPayments).values(
+      result.payments.map((payment) => ({
+        companyId,
+        transactionId,
+        financialAccountId: payment.financialAccountId,
+        amount: moneyToDb(payment.amount),
+        direction: payment.direction,
+        handledByUserId: payment.handledByUserId ?? session.userId,
+        handledByName: payment.handledByName ?? null,
+        reference: payment.reference ?? null,
+      })),
+    );
+  }
+
+  await insertJournal(tx, companyId, transactionId, input.date, result, voucherNo);
+  await applyStock(tx, companyId, transactionId, result.stockMovements);
+}
+
+async function insertLines(
+  tx: Tx,
+  companyId: string,
+  transactionId: string,
+  input: TransactionInput,
+  result: PostingResult,
+): Promise<void> {
+  const rows: (typeof transactionLines.$inferInsert)[] = [];
+  const push = (
+    row: Partial<typeof transactionLines.$inferInsert> & { role: string },
+    index: number,
+  ) => {
+    rows.push({
+      companyId,
+      transactionId,
+      sortOrder: index,
+      ...row,
+    } as typeof transactionLines.$inferInsert);
+  };
+
+  switch (input.type) {
+    case "sale":
+    case "purchase":
+    case "sale_return":
+    case "purchase_return": {
+      input.lines.forEach((line, index) => {
+        const amount = multiplyRate(qty(line.quantity), money(line.rate));
+        const movement = result.stockMovements[index];
+        push(
+          {
+            role: "item",
+            productId: line.productId,
+            unitId: line.unitId,
+            description: line.description ?? null,
+            quantity: line.quantity,
+            pieces: line.pieces ?? null,
+            rate: line.rate,
+            amount: moneyToDb(amount),
+            allocatedCost: movement ? moneyToDb(movement.value) : "0",
+          },
+          index,
+        );
+      });
+      break;
+    }
+    case "production": {
+      input.inputs.forEach((line, index) => {
+        push(
+          {
+            role: "input",
+            productId: line.productId,
+            unitId: line.unitId,
+            quantity: line.quantity,
+            description: line.description ?? null,
+          },
+          index,
+        );
+      });
+      input.outputs.forEach((line, index) => {
+        const movement = result.stockMovements.find(
+          (m) => m.productId === line.productId && m.direction === "in",
+        );
+        push(
+          {
+            role: "output",
+            productId: line.productId,
+            unitId: line.unitId,
+            quantity: line.quantity,
+            description: line.description ?? null,
+            allocatedCost: movement ? moneyToDb(movement.value) : "0",
+            rate: movement ? moneyToDb(movement.rate) : "0",
+          },
+          input.inputs.length + index,
+        );
+      });
+      input.wastage.forEach((line, index) => {
+        push(
+          {
+            role: "wastage",
+            productId: line.productId,
+            unitId: line.unitId,
+            quantity: line.quantity,
+            description: line.reason ?? null,
+          },
+          input.inputs.length + input.outputs.length + index,
+        );
+      });
+      break;
+    }
+    case "stock_adjustment": {
+      input.adjustments.forEach((line, index) => {
+        push(
+          {
+            role: "adjustment",
+            productId: line.productId,
+            unitId: line.unitId,
+            quantity: line.countedQuantity,
+            description: line.reason ?? null,
+          },
+          index,
+        );
+      });
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (rows.length > 0) await tx.insert(transactionLines).values(rows);
+}
+
+async function insertJournal(
+  tx: Tx,
+  companyId: string,
+  transactionId: string,
+  date: string,
+  result: PostingResult,
+  voucherNo: string,
+): Promise<void> {
+  const [entry] = await tx
+    .insert(journalEntries)
+    .values({
+      companyId,
+      transactionId,
+      date,
+      narration: `${bn.transactionType[result.type]} — ${voucherNo}`,
+    })
+    .returning({ id: journalEntries.id });
+
+  await tx.insert(journalLines).values(
+    result.journalLines.map((line) => ({
+      companyId,
+      journalEntryId: entry!.id,
+      transactionId,
+      accountId: line.accountId,
+      partyId: line.partyId ?? null,
+      debit: moneyToDb(line.debit),
+      credit: moneyToDb(line.credit),
+      narration: line.narration ?? null,
+      date,
+    })),
+  );
+}
+
+/**
+ * Stock movements are appended, and the cached `product_stock` row is set to
+ * the state the *last* movement for that product produced — the engine already
+ * chained them in order, so replaying its arithmetic here would only be a
+ * chance to disagree with it.
+ */
+async function applyStock(
+  tx: Tx,
+  companyId: string,
+  transactionId: string,
+  movements: readonly StockMovementDraft[],
+): Promise<void> {
+  if (movements.length === 0) return;
+
+  await tx.insert(stockMovements).values(
+    movements.map((movement) => ({
+      companyId,
+      productId: movement.productId,
+      transactionId,
+      direction: movement.direction,
+      movementType: movement.movementType,
+      quantity: qtyToDb(movement.quantity),
+      rate: moneyToDb(movement.rate),
+      value: moneyToDb(movement.value),
+      quantityAfter: qtyToDb(movement.quantityAfter),
+      avgCostAfter: moneyToDb(movement.avgCostAfter),
+      stockValueAfter: moneyToDb(movement.stockValueAfter),
+    })),
+  );
+
+  const finalState = new Map<string, StockMovementDraft>();
+  for (const movement of movements) finalState.set(movement.productId, movement);
+
+  for (const [productId, movement] of finalState) {
+    await tx
+      .insert(productStock)
+      .values({
+        companyId,
+        productId,
+        quantity: qtyToDb(movement.quantityAfter),
+        value: moneyToDb(movement.stockValueAfter),
+        avgCost: moneyToDb(movement.avgCostAfter),
+      })
+      .onConflictDoUpdate({
+        target: [productStock.companyId, productStock.productId],
+        set: {
+          quantity: qtyToDb(movement.quantityAfter),
+          value: moneyToDb(movement.stockValueAfter),
+          avgCost: moneyToDb(movement.avgCostAfter),
+          updatedAt: new Date(),
+        },
+      });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation
+// ---------------------------------------------------------------------------
+
+export interface CancelResult {
+  reversalId: string;
+  reversalVoucherNo: string;
+}
+
+/**
+ * Spec §18: nothing is deleted. The original stays exactly as it was, marked
+ * cancelled, and a mirror-image entry undoes its effect. Both remain in the
+ * ledger and in every report that covers their dates.
+ */
+export async function cancelTransaction(
+  session: Session,
+  transactionId: string,
+  reason: string,
+): Promise<CancelResult> {
+  requirePermission(session, "transaction.cancel");
+
+  return withTenant(session, async (tx) => {
+    const [original] = await tx
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.id, transactionId),
+          eq(transactions.companyId, session.companyId),
+        ),
+      )
+      .limit(1);
+
+    if (!original) {
+      throw new Error("Transaction not found");
+    }
+    if (original.status === "cancelled") {
+      throw new Error("Transaction is already cancelled");
+    }
+
+    const originalLines = await tx
+      .select()
+      .from(journalLines)
+      .where(eq(journalLines.transactionId, transactionId));
+
+    const originalMovements = await tx
+      .select()
+      .from(stockMovements)
+      .where(eq(stockMovements.transactionId, transactionId));
+
+    const originalPayments = await tx
+      .select()
+      .from(transactionPayments)
+      .where(eq(transactionPayments.transactionId, transactionId));
+
+    // The reversal only needs current stock for the products it touches; it
+    // unwinds each movement at the value that movement originally carried.
+    const productStates = await loadProductStates(
+      tx,
+      session.companyId,
+      [...new Set(originalMovements.map((m) => m.productId))],
+    );
+
+    const reversal = reverseTransaction(
+      {
+        journalLines: originalLines.map((line) => ({
+          accountId: line.accountId,
+          ...(line.partyId ? { partyId: line.partyId } : {}),
+          debit: moneyFromDb(line.debit),
+          credit: moneyFromDb(line.credit),
+          ...(line.narration ? { narration: line.narration } : {}),
+        })),
+        stockMovements: originalMovements.map((movement) => ({
+          productId: movement.productId,
+          direction: movement.direction as "in" | "out",
+          movementType: "reversal" as const,
+          quantity: qty(movement.quantity),
+          rate: moneyFromDb(movement.rate),
+          value: moneyFromDb(movement.value),
+          quantityAfter: qty(movement.quantityAfter),
+          avgCostAfter: moneyFromDb(movement.avgCostAfter),
+          stockValueAfter: moneyFromDb(movement.stockValueAfter),
+        })),
+        totals: {
+          subtotal: moneyFromDb(original.subtotal),
+          additionalCosts: ZERO,
+          discount: moneyFromDb(original.discount),
+          total: moneyFromDb(original.total),
+          paid: moneyFromDb(original.paidAmount),
+          due: moneyFromDb(original.dueAmount),
+        },
+        payments: originalPayments.map((payment) => ({
+          financialAccountId: payment.financialAccountId,
+          accountId: "",
+          amount: moneyFromDb(payment.amount),
+          direction: payment.direction as "in" | "out",
+        })),
+      },
+      { products: productStates, allowNegativeStock: true },
+    );
+
+    const reversalId = randomUUID();
+    const reversalVoucherNo = await nextVoucherNo(tx, session.companyId, "CNCL");
+
+    await tx.insert(transactions).values({
+      id: reversalId,
+      companyId: session.companyId,
+      voucherNo: reversalVoucherNo,
+      type: original.type,
+      status: "posted",
+      source: "manual",
+      date: original.date,
+      partyId: original.partyId,
+      categoryAccountId: original.categoryAccountId,
+      memoNo: original.memoNo,
+      description: `বাতিল: ${original.voucherNo} — ${reason}`,
+      subtotal: "0",
+      total: "0",
+      paidAmount: "0",
+      dueAmount: "0",
+      reversalOfId: transactionId,
+      createdBy: session.userId,
+    });
+
+    await insertJournal(
+      tx,
+      session.companyId,
+      reversalId,
+      original.date,
+      {
+        type: original.type,
+        journalLines: reversal.journalLines,
+        stockMovements: reversal.stockMovements,
+        payments: reversal.payments,
+        totals: {
+          subtotal: ZERO,
+          additionalCosts: ZERO,
+          discount: ZERO,
+          total: ZERO,
+          paid: ZERO,
+          due: ZERO,
+        },
+        warnings: [],
+      },
+      reversalVoucherNo,
+    );
+
+    await applyStock(tx, session.companyId, reversalId, reversal.stockMovements);
+
+    await tx
+      .update(transactions)
+      .set({
+        status: "cancelled",
+        cancelledBy: session.userId,
+        cancelledAt: new Date(),
+        cancelReason: reason,
+        reversedById: reversalId,
+        updatedBy: session.userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(transactions.id, transactionId));
+
+    await writeAudit(tx, session, {
+      action: "cancel",
+      entityType: "transaction",
+      entityId: transactionId,
+      summaryBn: `${original.voucherNo} বাতিল করা হয়েছে — ${reason}`,
+      before: { status: original.status },
+      after: { status: "cancelled", reversalVoucherNo },
+    });
+
+    return { reversalId, reversalVoucherNo };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function nextVoucherNo(tx: Tx, companyId: string, prefix: string): Promise<string> {
+  const rows = await tx.execute<{ voucher_no: string }>(
+    sql`select app.next_voucher_no(${companyId}::uuid, ${prefix}) as voucher_no`,
+  );
+  const value = (rows as unknown as { voucher_no: string }[])[0]?.voucher_no;
+  if (!value) throw new Error("Failed to allocate a voucher number");
+  return value;
+}
+
+/** The party's balance before this entry, frozen for the printed statement. */
+async function currentPartyDue(
+  tx: Tx,
+  companyId: string,
+  partyId: string,
+  type: TransactionType,
+): Promise<Money> {
+  const [row] = await tx
+    .select({
+      receivable: partyBalances.receivable,
+      payable: partyBalances.payable,
+    })
+    .from(partyBalances)
+    .where(and(eq(partyBalances.companyId, companyId), eq(partyBalances.partyId, partyId)))
+    .limit(1);
+
+  if (!row) return ZERO;
+  const vendorSide = type === "purchase" || type === "vendor_payment" || type === "purchase_return";
+  return moneyFromDb(vendorSide ? row.payable : row.receivable);
+}
+
+export async function writeAudit(
+  tx: Tx,
+  session: Session,
+  entry: {
+    action: "create" | "update" | "cancel" | "delete" | "login" | "export";
+    entityType: string;
+    entityId?: string;
+    summaryBn?: string;
+    before?: unknown;
+    after?: unknown;
+  },
+): Promise<void> {
+  await tx.insert(auditLogs).values({
+    companyId: session.companyId,
+    userId: session.userId,
+    action: entry.action,
+    entityType: entry.entityType,
+    entityId: entry.entityId ?? null,
+    summaryBn: entry.summaryBn ?? null,
+    before: entry.before ?? null,
+    after: entry.after ?? null,
+    ipAddress: session.ipAddress ?? null,
+    userAgent: session.userAgent ?? null,
+  });
+}
+
+/** Most recent entries, for the dashboard and the হিসাব list. */
+export async function recentTransactions(session: Session, limit = 10) {
+  return withTenant(session, async (tx) =>
+    tx
+      .select()
+      .from(transactions)
+      .where(eq(transactions.companyId, session.companyId))
+      .orderBy(desc(transactions.createdAt))
+      .limit(limit),
+  );
+}
+
+export interface TransactionFilter {
+  type?: TransactionType;
+  from?: string;
+  to?: string;
+  /** Matches voucher number, memo number or party name. */
+  search?: string;
+  includeCancelled?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** The হিসাব list: filterable, sorted newest first, paged. */
+export async function listTransactions(session: Session, filter: TransactionFilter = {}) {
+  return withTenant(session, async (tx) => {
+    const conditions = [eq(transactions.companyId, session.companyId)];
+    if (filter.type) conditions.push(eq(transactions.type, filter.type));
+    if (filter.from) conditions.push(gte(transactions.date, filter.from));
+    if (filter.to) conditions.push(lte(transactions.date, filter.to));
+    if (!filter.includeCancelled) conditions.push(eq(transactions.status, "posted"));
+    if (filter.search) {
+      const pattern = `%${filter.search}%`;
+      conditions.push(
+        or(
+          ilike(transactions.voucherNo, pattern),
+          ilike(transactions.memoNo, pattern),
+          ilike(parties.name, pattern),
+        )!,
+      );
+    }
+
+    return tx
+      .select({
+        id: transactions.id,
+        voucherNo: transactions.voucherNo,
+        type: transactions.type,
+        status: transactions.status,
+        date: transactions.date,
+        memoNo: transactions.memoNo,
+        total: transactions.total,
+        paidAmount: transactions.paidAmount,
+        dueAmount: transactions.dueAmount,
+        partyName: parties.name,
+        createdAt: transactions.createdAt,
+      })
+      .from(transactions)
+      .leftJoin(parties, eq(parties.id, transactions.partyId))
+      .where(and(...conditions))
+      .orderBy(desc(transactions.date), desc(transactions.createdAt))
+      .limit(filter.limit ?? 50)
+      .offset(filter.offset ?? 0);
+  });
+}
+
+/** One entry with everything it produced — the detail page and audit trail. */
+export async function getTransactionDetail(session: Session, transactionId: string) {
+  return withTenant(session, async (tx) => {
+    const [header] = await tx
+      .select({
+        transaction: transactions,
+        partyName: parties.name,
+        createdByName: profiles.fullName,
+      })
+      .from(transactions)
+      .leftJoin(parties, eq(parties.id, transactions.partyId))
+      .leftJoin(profiles, eq(profiles.id, transactions.createdBy))
+      .where(
+        and(
+          eq(transactions.id, transactionId),
+          eq(transactions.companyId, session.companyId),
+        ),
+      )
+      .limit(1);
+
+    if (!header) return null;
+
+    const [lines, payments, ledger, movements] = await Promise.all([
+      tx
+        .select({
+          id: transactionLines.id,
+          role: transactionLines.role,
+          quantity: transactionLines.quantity,
+          rate: transactionLines.rate,
+          amount: transactionLines.amount,
+          allocatedCost: transactionLines.allocatedCost,
+          productName: products.nameBn,
+          unitSymbol: units.symbol,
+        })
+        .from(transactionLines)
+        .leftJoin(products, eq(products.id, transactionLines.productId))
+        .leftJoin(units, eq(units.id, transactionLines.unitId))
+        .where(eq(transactionLines.transactionId, transactionId))
+        .orderBy(transactionLines.sortOrder),
+
+      tx
+        .select({
+          id: transactionPayments.id,
+          amount: transactionPayments.amount,
+          direction: transactionPayments.direction,
+          handledByName: transactionPayments.handledByName,
+          paidAt: transactionPayments.paidAt,
+          walletName: financialAccounts.nameBn,
+        })
+        .from(transactionPayments)
+        .leftJoin(
+          financialAccounts,
+          eq(financialAccounts.id, transactionPayments.financialAccountId),
+        )
+        .where(eq(transactionPayments.transactionId, transactionId)),
+
+      tx
+        .select({
+          id: journalLines.id,
+          debit: journalLines.debit,
+          credit: journalLines.credit,
+          narration: journalLines.narration,
+          accountName: accounts.nameBn,
+          accountCode: accounts.code,
+        })
+        .from(journalLines)
+        .leftJoin(accounts, eq(accounts.id, journalLines.accountId))
+        .where(eq(journalLines.transactionId, transactionId))
+        .orderBy(desc(journalLines.debit)),
+
+      tx
+        .select({
+          id: stockMovements.id,
+          direction: stockMovements.direction,
+          movementType: stockMovements.movementType,
+          quantity: stockMovements.quantity,
+          rate: stockMovements.rate,
+          value: stockMovements.value,
+          quantityAfter: stockMovements.quantityAfter,
+          productName: products.nameBn,
+        })
+        .from(stockMovements)
+        .leftJoin(products, eq(products.id, stockMovements.productId))
+        .where(eq(stockMovements.transactionId, transactionId)),
+    ]);
+
+    return { ...header, lines, payments, ledger, movements };
+  });
+}
