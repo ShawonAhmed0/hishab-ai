@@ -1,4 +1,6 @@
 import * as React from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { cn } from "@/lib/utils";
 
 /**
@@ -84,28 +86,36 @@ export function MobileCards({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-col divide-y divide-border md:hidden">{children}</div>;
 }
 
-export function MobileRow({
+export function MobileRow<T extends string>({
   title,
   subtitle,
   right,
   meta,
+  href,
   onClick,
 }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   right?: React.ReactNode;
   meta?: React.ReactNode;
+  /** A row that navigates. Preferred over onClick: it works from a server
+   *  component, and it is a real link — middle-click, copy, open in new tab.
+   *
+   *  Generic for the same reason Link is: `typedRoutes` checks an interpolated
+   *  path against the known routes by inferring the literal type, and a
+   *  non-generic prop collapses it to `unknown` and rejects every template
+   *  string. */
+  href?: Route<T>;
   onClick?: () => void;
 }) {
-  const Wrapper = onClick ? "button" : "div";
-  return (
-    <Wrapper
-      {...(onClick ? { onClick, type: "button" as const } : {})}
-      className={cn(
-        "flex w-full items-start justify-between gap-3 px-4 py-3 text-left",
-        onClick && "cursor-pointer transition-colors duration-150 hover:bg-surface-sunken",
-      )}
-    >
+  const interactive = Boolean(href || onClick);
+  const className = cn(
+    "flex w-full items-start justify-between gap-3 px-4 py-3 text-left",
+    interactive && "cursor-pointer transition-colors duration-150 hover:bg-surface-sunken",
+  );
+
+  const content = (
+    <>
       <div className="min-w-0">
         <p className="truncate font-medium text-foreground">{title}</p>
         {subtitle ? (
@@ -114,6 +124,27 @@ export function MobileRow({
         {meta ? <div className="mt-1 flex flex-wrap gap-2">{meta}</div> : null}
       </div>
       {right ? <div className="shrink-0 text-right">{right}</div> : null}
-    </Wrapper>
+    </>
   );
+
+  // Three explicit branches rather than one computed wrapper: a union of
+  // Link | "button" | "div" cannot be narrowed enough for `href` to typecheck,
+  // and spreading props conditionally hides which element actually renders.
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }

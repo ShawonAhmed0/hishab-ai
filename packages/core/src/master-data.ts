@@ -6,17 +6,23 @@ import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import {
   accounts,
   financialAccounts,
+  journalEntries,
+  journalLines,
   parties,
   partyBalances,
   productCategories,
   productStock,
   products,
+  stockMovements,
+  transactions,
   units,
   tenantQuery,
   tenantRead,
   withTenant,
+  type Transaction as Tx,
 } from "@hishabai/db";
 import {
+  ZERO,
   money,
   moneyToDb,
   multiplyRate,
@@ -24,9 +30,11 @@ import {
   productInputSchema,
   qty,
   qtyToDb,
+  type Money,
+  type Qty,
 } from "@hishabai/shared";
 import { requirePermission, type Session, type TenantScope } from "./session";
-import { writeAudit } from "./transactions";
+import { allocateVoucherNo, writeAudit } from "./transactions";
 
 // ---------------------------------------------------------------------------
 // Parties
@@ -228,13 +236,8 @@ export async function createProduct(session: Session, rawInput: unknown): Promis
 
     const openingQty = qty(input.openingQuantity);
     if (openingQty !== 0n) {
-      const openingRate = money(input.openingRate);
-      await tx.insert(productStock).values({
-        companyId: session.companyId,
-        productId: created!.id,
-        quantity: qtyToDb(openingQty),
-        value: moneyToDb(multiplyRate(openingQty, openingRate)),
-        avgCost: moneyToDb(openingRate),
+      await recordOpeningStock(tx, session, created!.id, input.nameBn, openingQty, {
+        rate: money(input.openingRate),
       });
     }
 
@@ -433,4 +436,153 @@ export async function listCategoryAccounts(
       )
       .orderBy(asc(accounts.code)),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Opening stock
+// ---------------------------------------------------------------------------
+
+/**
+ * Opening stock, recorded as a real event rather than a number written into a
+ * cache table.
+ *
+ * It used to insert `product_stock` and nothing else. The stock screens agreed
+ * with each other — they all read that table — but the ledger never learned the
+ * business owned the goods, so the inventory control account sat at minus the
+ * cost of everything ever sold. On the demo data: `product_stock` said
+ * ৳60,000 and the control account said −৳60,000, a ৳120,000 hole exactly equal
+ * to the opening balance. Nothing surfaced it until the inventory screen put
+ * the two numbers within reach of each other, and a balance sheet would have
+ * been wrong from the first day.
+ *
+ * So an opening balance now writes all three: the movement (so the audit trail
+ * starts at the beginning rather than mid-story), the journal entry, and the
+ * cache. Dr Inventory / Cr Opening Balance Equity is the textbook entry for it,
+ * and it is the one posting in the system with no user decision behind it —
+ * which is why it is expressed here rather than in the engine, whose job is
+ * deriving consequences from what somebody typed.
+ *
+ * The deferred balance trigger checks the entry as it commits, so an
+ * unbalanced version of this cannot land.
+ */
+async function recordOpeningStock(
+  tx: Tx,
+  session: Session,
+  productId: string,
+  productName: string,
+  quantity: Qty,
+  options: { rate: Money },
+): Promise<void> {
+  const value = multiplyRate(quantity, options.rate);
+  const companyId = session.companyId;
+
+  await tx.insert(productStock).values({
+    companyId,
+    productId,
+    quantity: qtyToDb(quantity),
+    value: moneyToDb(value),
+    avgCost: moneyToDb(options.rate),
+  });
+
+  // No value means no ledger movement — but the movement still belongs in the
+  // history, or the running balance would start from a quantity it cannot
+  // explain.
+  const [control] = await tx
+    .select({ id: accounts.id, subtype: accounts.subtype })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.companyId, companyId),
+        eq(accounts.isSystem, true),
+        eq(accounts.subtype, "inventory"),
+      ),
+    )
+    .limit(1);
+
+  const [equity] = await tx
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.companyId, companyId),
+        eq(accounts.isSystem, true),
+        eq(accounts.subtype, "opening_balance_equity"),
+      ),
+    )
+    .limit(1);
+
+  if (!control || !equity) {
+    throw new Error(
+      "Company is missing the inventory or opening-balance-equity account",
+    );
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const voucherNo = await allocateVoucherNo(tx, companyId, "OPEN");
+
+  const [transaction] = await tx
+    .insert(transactions)
+    .values({
+      companyId,
+      voucherNo,
+      type: "other",
+      status: "posted",
+      source: "manual",
+      date: today,
+      description: `${productName} — প্রারম্ভিক স্টক`,
+      subtotal: moneyToDb(value),
+      total: moneyToDb(value),
+      paidAmount: moneyToDb(ZERO),
+      dueAmount: moneyToDb(ZERO),
+      createdBy: session.userId,
+    })
+    .returning({ id: transactions.id });
+
+  await tx.insert(stockMovements).values({
+    companyId,
+    productId,
+    transactionId: transaction!.id,
+    direction: "in",
+    movementType: "opening",
+    quantity: qtyToDb(quantity),
+    rate: moneyToDb(options.rate),
+    value: moneyToDb(value),
+    quantityAfter: qtyToDb(quantity),
+    avgCostAfter: moneyToDb(options.rate),
+    stockValueAfter: moneyToDb(value),
+  });
+
+  if (value === ZERO) return;
+
+  const [entry] = await tx
+    .insert(journalEntries)
+    .values({
+      companyId,
+      transactionId: transaction!.id,
+      date: today,
+      narration: `প্রারম্ভিক স্টক — ${voucherNo}`,
+    })
+    .returning({ id: journalEntries.id });
+
+  await tx.insert(journalLines).values([
+    {
+      companyId,
+      journalEntryId: entry!.id,
+      transactionId: transaction!.id,
+      accountId: control.id,
+      debit: moneyToDb(value),
+      credit: moneyToDb(ZERO),
+      narration: `${productName} — প্রারম্ভিক স্টক`,
+      date: today,
+    },
+    {
+      companyId,
+      journalEntryId: entry!.id,
+      transactionId: transaction!.id,
+      accountId: equity.id,
+      debit: moneyToDb(ZERO),
+      credit: moneyToDb(value),
+      date: today,
+    },
+  ]);
 }

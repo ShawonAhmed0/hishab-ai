@@ -67,3 +67,65 @@ export function StatTileSkeleton() {
     </div>
   );
 }
+
+/**
+ * The same tile for a plain count rather than an amount.
+ *
+ * Counts are not money and must not be formatted as it — "৩ টি পণ্য" and
+ * "৳ ৩" are different claims, and a tile that blurs them on a finance screen
+ * is worse than no tile.
+ */
+export function CountTile({
+  label,
+  value,
+  suffix,
+  tone = "neutral",
+  icon: Icon,
+  footnote,
+  href,
+}: {
+  label: string;
+  /** A count, or an already-formatted quantity — anything that is not money. */
+  value: React.ReactNode;
+  suffix?: string;
+  tone?: "neutral" | "credit" | "debit" | "due";
+  icon?: React.ComponentType<{ className?: string }>;
+  footnote?: string;
+  href?: string;
+}) {
+  const toneClass =
+    tone === "due"
+      ? "text-due"
+      : tone === "debit"
+        ? "text-debit"
+        : tone === "credit"
+          ? "text-credit"
+          : "text-foreground";
+
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        {Icon ? <Icon className="size-4 shrink-0 text-subtle-foreground" aria-hidden /> : null}
+      </div>
+      <p className={cn("num-lg mt-2 text-2xl font-bold", toneClass)}>
+        {value}
+        {suffix ? <span className="ml-1 text-base font-medium">{suffix}</span> : null}
+      </p>
+      {footnote ? <p className="mt-1 text-xs text-subtle-foreground">{footnote}</p> : null}
+    </>
+  );
+
+  const base = cn(
+    "rounded-lg border border-border bg-surface p-4 shadow-card",
+    href && "cursor-pointer transition-colors duration-150 hover:border-border-strong",
+  );
+
+  return href ? (
+    <a href={href} className={base}>
+      {body}
+    </a>
+  ) : (
+    <div className={base}>{body}</div>
+  );
+}

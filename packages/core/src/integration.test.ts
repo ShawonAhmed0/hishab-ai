@@ -27,7 +27,8 @@ import {
 import { moneyToDb } from "@hishabai/shared";
 import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
 import { getDashboard } from "./dashboard";
-import { listParties, listProducts, loadEntryFormData } from "./master-data";
+import { getProductDetail } from "./inventory";
+import { createProduct, listParties, listProducts, loadEntryFormData } from "./master-data";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -356,6 +357,47 @@ describeDb("the ৳80,000 sale, end to end", () => {
     await expect(
       cancelTransaction(operator, transactionId, "চেষ্টা"),
     ).rejects.toThrow(/permission/i);
+  });
+
+  it("puts opening stock in the ledger, not just the stock table", async () => {
+    // Opening stock used to be written straight into product_stock, so the
+    // three places that describe inventory disagreed: the cache said the goods
+    // existed, the control account had never heard of them, and the movement
+    // history began mid-story. A balance sheet built on that would understate
+    // assets by the whole opening balance.
+    const productId = await createProduct(tenant.session, {
+      nameBn: "প্রারম্ভিক পরীক্ষা",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "70",
+      minStockLevel: "0",
+      openingQuantity: "200",
+      openingRate: "50",
+    });
+
+    const detail = await getProductDetail(tenant.session, productId);
+    expect(detail?.movements.map((m) => m.movementType)).toEqual(["opening"]);
+    expect(detail?.movements[0]?.quantityAfter).toBe("200.000000");
+
+    const [totals] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select
+          (select coalesce(sum(value), 0)::text from product_stock
+            where company_id = ${tenant.companyId}::uuid and product_id = ${productId}::uuid) as cached,
+          (select coalesce(sum(jl.debit - jl.credit), 0)::text from journal_lines jl
+             join accounts a on a.id = jl.account_id
+            where jl.company_id = ${tenant.companyId}::uuid
+              and a.subtype = 'inventory'
+              and jl.transaction_id in (
+                select transaction_id from stock_movements
+                 where company_id = ${tenant.companyId}::uuid and product_id = ${productId}::uuid)) as posted
+      `),
+    )) as unknown as { cached: string; posted: string }[];
+
+    // 200 × ৳50 — the same number in the cache and in the control account.
+    expect(totals!.cached).toBe("10000.0000");
+    expect(totals!.posted).toBe("10000.0000");
   });
 
 });

@@ -15,13 +15,12 @@ import {
   closeDb,
   getDb,
   parties,
-  products,
   units,
   withTenant,
   withUser,
   financialAccounts,
 } from "@hishabai/db";
-import { createTransaction, listCompanies } from "@hishabai/core";
+import { createProduct, createTransaction, listCompanies } from "@hishabai/core";
 import { moneyToDb } from "@hishabai/shared";
 import { eq, and } from "drizzle-orm";
 
@@ -161,37 +160,7 @@ async function main(): Promise<void> {
       phone: "01912345678",
     });
 
-    const [paper] = await tx
-      .insert(products)
-      .values({
-        companyId: company.id,
-        nameBn: "অফসেট পেপার",
-        kind: "finished_good",
-        unitId: kg!.id,
-        purchasePrice: "120",
-        salePrice: "160",
-        minStockLevel: "100",
-      })
-      .returning({ id: products.id });
-
-    await tx.insert(products).values({
-      companyId: company.id,
-      nameBn: "জাম্বু পেপার",
-      kind: "raw_material",
-      unitId: kg!.id,
-      purchasePrice: "100",
-      salePrice: "0",
-      minStockLevel: "200",
-    });
-
-    // Opening stock: 1,000 KG at ৳120.
-    await tx.execute(sql`
-      insert into product_stock (company_id, product_id, quantity, value, avg_cost)
-      values (${company.id}::uuid, ${paper!.id}::uuid, 1000, 120000, 120)
-      on conflict (company_id, product_id) do nothing
-    `);
-
-    return { customerId: customer!.id, productId: paper!.id, unitId: kg!.id, walletId: cash!.id };
+    return { customerId: customer!.id, unitId: kg!.id, walletId: cash!.id };
   });
 
   if (!seeded) {
@@ -199,6 +168,29 @@ async function main(): Promise<void> {
     await closeDb();
     return;
   }
+  // Through createProduct, not a direct insert: opening stock has to post its
+  // journal entry and its stock movement, and seeding around that is how the
+  // ledger ended up ৳120,000 short of the stock table in the first place.
+  const paperId = await createProduct(session, {
+    nameBn: "অফসেট পেপার",
+    kind: "finished_good",
+    unitId: seeded.unitId,
+    purchasePrice: "120",
+    salePrice: "160",
+    minStockLevel: "100",
+    openingQuantity: "1000",
+    openingRate: "120",
+  });
+
+  await createProduct(session, {
+    nameBn: "জাম্বু পেপার",
+    kind: "raw_material",
+    unitId: seeded.unitId,
+    purchasePrice: "100",
+    salePrice: "0",
+    minStockLevel: "200",
+  });
+
   console.log("✓ customer, vendor and products created (1,000 KG opening stock)");
 
   const sale = await createTransaction(session, {
@@ -208,7 +200,7 @@ async function main(): Promise<void> {
     partyId: seeded.customerId,
     memoNo: "125",
     lines: [
-      { productId: seeded.productId, unitId: seeded.unitId, quantity: "500", rate: "160" },
+      { productId: paperId, unitId: seeded.unitId, quantity: "500", rate: "160" },
     ],
     payments: [{ financialAccountId: seeded.walletId, amount: "50000" }],
   });

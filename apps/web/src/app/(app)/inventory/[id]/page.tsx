@@ -1,0 +1,236 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Boxes, Coins, Ruler } from "lucide-react";
+import { getProductDetail } from "@hishabai/core";
+import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { MoneyText } from "@/components/ui/money";
+import { CountTile, StatTile } from "@/components/ui/stat-tile";
+import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { sessionWithData } from "@/lib/session";
+import { formatDateShort } from "@/lib/utils";
+
+/** Movements that added stock, for colouring the quantity column. */
+const INBOUND = new Set(["in"]);
+
+export default async function ProductPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const { data } = await sessionWithData((scope) => getProductDetail(scope, id));
+
+  // Not found and not-yours are deliberately the same answer: RLS returns no
+  // row either way, and saying which it was would confirm the id exists.
+  if (!data) notFound();
+
+  const { product, movements } = data;
+  const quantity = qtyFromDb(product.quantity);
+  const minimum = qtyFromDb(product.minStockLevel);
+  const low = minimum > 0n && quantity <= minimum;
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <Link
+          href="/inventory"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          {bn.nav.inventory}
+        </Link>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">{product.nameBn}</h1>
+          <Badge tone="neutral">{bn.productKind[product.kind]}</Badge>
+          {low ? (
+            <Badge tone="due">{quantity <= 0n ? "স্টক শেষ" : bn.messages.lowStock}</Badge>
+          ) : null}
+        </div>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          {product.nameEn ? `${product.nameEn} · ` : ""}
+          একক {product.unitNameBn}
+          {product.sku ? ` · কোড ${product.sku}` : ""}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <CountTile
+          label="বর্তমান স্টক"
+          value={formatQty(quantity, { unit: product.unitSymbol })}
+          tone={low ? "due" : "neutral"}
+          icon={Boxes}
+        />
+        <StatTile
+          label={bn.fields.avgCost}
+          value={moneyFromDb(product.avgCost)}
+          icon={Coins}
+          footnote="ওজনভিত্তিক গড়"
+        />
+        <StatTile label="স্টক ভ্যালু" value={moneyFromDb(product.value)} icon={Boxes} />
+        <CountTile
+          label={bn.fields.minStock}
+          value={formatQty(minimum, { unit: product.unitSymbol })}
+          icon={Ruler}
+          footnote={
+            low ? "এই স্তরে নেমে গেছে" : minimum > 0n ? "এর নিচে নামলে সতর্কতা" : "নির্ধারিত নয়"
+          }
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>স্টকের গতিবিধি</CardTitle>
+          <span className="text-xs text-muted-foreground">
+            প্রতিটি লাইনে সেই সময়ের ব্যালেন্স ও গড় মূল্য
+          </span>
+        </CardHeader>
+
+        {movements.length === 0 ? (
+          <EmptyState
+            title="এখনো কোনো স্টক গতিবিধি নেই"
+            hint="ক্রয় বা বিক্রয় এন্ট্রি করলেই এখানে ইতিহাস জমা হবে"
+          />
+        ) : (
+          <>
+            <div className="hidden md:block">
+              <TableScroll>
+                <THead>
+                  <TR>
+                    <TH>{bn.fields.date}</TH>
+                    <TH>ধরন</TH>
+                    <TH>{bn.fields.voucherNo}</TH>
+                    <TH>{bn.fields.party}</TH>
+                    <TH numeric>পরিমাণ</TH>
+                    <TH numeric>দর</TH>
+                    <TH numeric>ব্যালেন্স</TH>
+                    <TH numeric>{bn.fields.avgCost}</TH>
+                    <TH numeric>স্টক ভ্যালু</TH>
+                  </TR>
+                </THead>
+                <tbody>
+                  {movements.map((movement) => {
+                    const inbound = INBOUND.has(movement.direction);
+                    return (
+                      <TR key={movement.id}>
+                        <TD className="whitespace-nowrap text-muted-foreground">
+                          {formatDateShort(movement.date)}
+                        </TD>
+                        <TD>
+                          <Badge tone={inbound ? "credit" : "debit"}>
+                            {bn.stockMovementType[movement.movementType]}
+                          </Badge>
+                        </TD>
+                        <TD>
+                          {movement.transactionId ? (
+                            <Link
+                              href={`/transactions/${movement.transactionId}`}
+                              className="num text-primary hover:underline"
+                            >
+                              {movement.voucherNo}
+                            </Link>
+                          ) : (
+                            <span className="text-subtle-foreground">—</span>
+                          )}
+                        </TD>
+                        <TD className="max-w-[12rem] truncate">{movement.partyName ?? "—"}</TD>
+                        <TD numeric>
+                          <span className={inbound ? "num text-credit" : "num text-debit"}>
+                            {inbound ? "+" : "−"}
+                            {formatQty(qtyFromDb(movement.quantity), {
+                              unit: product.unitSymbol,
+                            })}
+                          </span>
+                        </TD>
+                        <TD numeric>
+                          <MoneyText
+                            value={moneyFromDb(movement.rate)}
+                            size="sm"
+                            symbol={false}
+                          />
+                        </TD>
+                        <TD numeric className="font-medium">
+                          {formatQty(qtyFromDb(movement.quantityAfter), {
+                            unit: product.unitSymbol,
+                          })}
+                        </TD>
+                        <TD numeric>
+                          <MoneyText
+                            value={moneyFromDb(movement.avgCostAfter)}
+                            size="sm"
+                            symbol={false}
+                          />
+                        </TD>
+                        <TD numeric>
+                          <MoneyText
+                            value={moneyFromDb(movement.stockValueAfter)}
+                            size="sm"
+                            symbol={false}
+                          />
+                        </TD>
+                      </TR>
+                    );
+                  })}
+                </tbody>
+              </TableScroll>
+            </div>
+
+            <MobileCards>
+              {movements.map((movement) => {
+                const inbound = INBOUND.has(movement.direction);
+                return (
+                  <MobileRow
+                    key={movement.id}
+                    title={bn.stockMovementType[movement.movementType]}
+                    subtitle={`${formatDateShort(movement.date)}${
+                      movement.voucherNo ? ` · ${movement.voucherNo}` : ""
+                    }`}
+                    meta={
+                      <span className="text-xs text-muted-foreground">
+                        ব্যালেন্স{" "}
+                        {formatQty(qtyFromDb(movement.quantityAfter), {
+                          unit: product.unitSymbol,
+                        })}
+                      </span>
+                    }
+                    right={
+                      <>
+                        <span
+                          className={
+                            inbound
+                              ? "num inline-flex items-center gap-1 text-credit"
+                              : "num inline-flex items-center gap-1 text-debit"
+                          }
+                        >
+                          {inbound ? (
+                            <ArrowDownLeft className="size-3.5" aria-hidden />
+                          ) : (
+                            <ArrowUpRight className="size-3.5" aria-hidden />
+                          )}
+                          {formatQty(qtyFromDb(movement.quantity), {
+                            unit: product.unitSymbol,
+                          })}
+                        </span>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          গড়{" "}
+                          <MoneyText
+                            value={moneyFromDb(movement.avgCostAfter)}
+                            size="sm"
+                            symbol={false}
+                          />
+                        </p>
+                      </>
+                    }
+                  />
+                );
+              })}
+            </MobileCards>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}

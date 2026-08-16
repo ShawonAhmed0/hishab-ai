@@ -585,7 +585,9 @@ export async function cancelTransaction(
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function nextVoucherNo(tx: Tx, companyId: string, prefix: string): Promise<string> {
+/** Exported as `allocateVoucherNo` for the one caller outside this file:
+ *  opening stock, which is posted from master-data. */
+export async function nextVoucherNo(tx: Tx, companyId: string, prefix: string): Promise<string> {
   const rows = await tx.execute<{ voucher_no: string }>(
     sql`select app.next_voucher_no(${companyId}::uuid, ${prefix}) as voucher_no`,
   );
@@ -849,3 +851,5 @@ export async function getTransactionDetail(session: Session, transactionId: stri
     return { ...header, lines, payments, ledger, movements };
   });
 }
+
+export { nextVoucherNo as allocateVoucherNo };
