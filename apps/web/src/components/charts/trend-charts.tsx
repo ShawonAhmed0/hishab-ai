@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney, formatMoneyCompact, moneyRaw } from "@hishabai/shared";
+import { formatMoney, formatMoneyCompact, money } from "@hishabai/shared";
 
 /**
  * Charts are secondary to the tables, not a substitute for them.
@@ -22,12 +22,20 @@ import { formatMoney, formatMoneyCompact, moneyRaw } from "@hishabai/shared";
  * numbers appear as text in the tables below.
  */
 
+/**
+ * Chart values are plain taka, not the scaled bigint the ledger uses.
+ *
+ * A chart does not need sub-paisa precision, and handing recharts values in
+ * the hundreds of millions made it mis-scale the axis. Money crosses the
+ * server boundary as a number of taka; anything the user must reconcile
+ * against a memo is rendered from the exact value elsewhere on the page.
+ */
 export interface ChartPoint {
   period: string;
-  income: string;
-  expense: string;
-  sales: string;
-  profit: string;
+  income: number;
+  expense: number;
+  sales: number;
+  profit: number;
 }
 
 const BN_MONTHS_SHORT = [
@@ -40,7 +48,8 @@ function periodLabel(period: string): string {
   return BN_MONTHS_SHORT[month - 1] ?? period;
 }
 
-const axisMoney = (value: number) => formatMoneyCompact(moneyRaw(BigInt(Math.round(value))), { symbol: false });
+const axisMoney = (value: number) =>
+  formatMoneyCompact(money(Math.round(value)), { symbol: false });
 
 function MoneyTooltip({
   active,
@@ -67,7 +76,7 @@ function MoneyTooltip({
             />
             <span className="text-muted-foreground">{item.name}</span>
             <span className="num ml-auto font-medium">
-              {formatMoney(moneyRaw(BigInt(Math.round(item.value ?? 0))), { decimals: 0 })}
+              {formatMoney(money(Math.round(item.value ?? 0)), { decimals: 0 })}
             </span>
           </li>
         ))}
@@ -79,11 +88,21 @@ function MoneyTooltip({
 const GRID = "var(--color-border)";
 const AXIS = "var(--color-subtle-foreground)";
 
+/**
+ * Charts render at their final values immediately.
+ *
+ * The grow-in animation left bars stuck near zero height while the axis showed
+ * the correct scale — a chart that lies about its own numbers. It is also
+ * motion for its own sake, which this design direction (motion 3, subtle) does
+ * not want and reduced-motion users would drop anyway.
+ */
+const ANIMATE = false;
+
 export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
   const rows = data.map((d) => ({
     period: d.period,
-    আয়: Number(d.income),
-    ব্যয়: Number(d.expense),
+    আয়: d.income,
+    ব্যয়: d.expense,
   }));
 
   return (
@@ -106,8 +125,20 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
         />
         <Tooltip content={<MoneyTooltip />} cursor={{ fill: "var(--color-surface-sunken)" }} />
         <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
-        <Bar dataKey="আয়" fill="var(--color-credit)" radius={[3, 3, 0, 0]} maxBarSize={28} />
-        <Bar dataKey="ব্যয়" fill="var(--color-debit)" radius={[3, 3, 0, 0]} maxBarSize={28} />
+        <Bar
+          dataKey="আয়"
+          fill="var(--color-credit)"
+          radius={[3, 3, 0, 0]}
+          maxBarSize={28}
+          isAnimationActive={ANIMATE}
+        />
+        <Bar
+          dataKey="ব্যয়"
+          fill="var(--color-debit)"
+          radius={[3, 3, 0, 0]}
+          maxBarSize={28}
+          isAnimationActive={ANIMATE}
+        />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -116,8 +147,8 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
 export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
   const rows = data.map((d) => ({
     period: d.period,
-    বিক্রয়: Number(d.sales),
-    লাভ: Number(d.profit),
+    বিক্রয়: d.sales,
+    লাভ: d.profit,
   }));
 
   return (
@@ -152,6 +183,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           stroke="var(--color-primary)"
           strokeWidth={2}
           fill="url(#salesFill)"
+          isAnimationActive={ANIMATE}
         />
         {/* Dashed, not just a different hue — the two series stay apart in
             greyscale and for colour-blind readers. */}
@@ -162,6 +194,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           strokeWidth={2}
           strokeDasharray="5 4"
           fill="none"
+          isAnimationActive={ANIMATE}
         />
       </AreaChart>
     </ResponsiveContainer>

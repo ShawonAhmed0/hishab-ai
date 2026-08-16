@@ -7,9 +7,8 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import {
-  companies,
-  companyMembers,
   financialAccounts,
+  getDb,
   profiles,
   withTenant,
   withUser,
@@ -31,50 +30,49 @@ export interface CompanySummary {
   role: Role;
 }
 
+export interface ResolvedSession {
+  /** Role in the requested company, or null if they are not a member of it. */
+  role: Role | null;
+  /** Every company this user may switch between. */
+  companies: CompanySummary[];
+  /** Display name, so rendering the shell needs no second auth lookup. */
+  fullName: string | null;
+}
+
+/**
+ * Who this user is and what they may see — one round trip.
+ *
+ * The role is read from `company_members` on every request rather than trusted
+ * from a cookie or a token claim, so revoking access takes effect on the next
+ * click. It just no longer costs two transactions to find out.
+ */
+export async function resolveSession(
+  userId: string,
+  requestedCompanyId?: string,
+): Promise<ResolvedSession> {
+  const rows = (await getDb().execute(
+    sql`select app.resolve_session(${userId}::uuid, ${requestedCompanyId ?? null}) as data`,
+  )) as unknown as { data: ResolvedSession }[];
+
+  const data = rows[0]?.data;
+  return {
+    role: data?.role ?? null,
+    companies: data?.companies ?? [],
+    fullName: data?.fullName ?? null,
+  };
+}
+
 /** Everything this user may switch between. */
 export async function listCompanies(userId: string): Promise<CompanySummary[]> {
-  return withUser(userId, async (tx) => {
-    const rows = await tx
-      .select({
-        id: companies.id,
-        name: companies.name,
-        nameBn: companies.nameBn,
-        businessType: companies.businessType,
-        role: companyMembers.role,
-      })
-      .from(companyMembers)
-      .innerJoin(companies, eq(companies.id, companyMembers.companyId))
-      .where(
-        and(
-          eq(companyMembers.userId, userId),
-          eq(companyMembers.isActive, true),
-          eq(companies.isActive, true),
-        ),
-      )
-      .orderBy(companies.name);
-
-    return rows;
-  });
+  return (await resolveSession(userId)).companies;
 }
 
 export async function getMembership(
   userId: string,
   companyId: string,
 ): Promise<{ role: Role } | null> {
-  return withUser(userId, async (tx) => {
-    const [row] = await tx
-      .select({ role: companyMembers.role })
-      .from(companyMembers)
-      .where(
-        and(
-          eq(companyMembers.companyId, companyId),
-          eq(companyMembers.userId, userId),
-          eq(companyMembers.isActive, true),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  });
+  const { role } = await resolveSession(userId, companyId);
+  return role ? { role } : null;
 }
 
 /**

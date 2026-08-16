@@ -70,14 +70,21 @@ export interface TenantContext {
  * into the next borrower of a pooled connection. Every RLS policy in
  * 01_security.sql reads these two settings, which means a query that forgets
  * its `where company_id = …` returns nothing rather than someone else's rows.
+ *
+ * Both settings go in one statement on purpose. Every statement here is a
+ * network round trip, and against a database in another region that is ~120ms
+ * each — so this is a wrapper worth counting the statements in. The floor is
+ * three: BEGIN, this, COMMIT. The work itself should aim for one more.
  */
 export async function withTenant<T>(
   context: TenantContext,
   work: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   return getDb().transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.user_id', ${context.userId}, true)`);
-    await tx.execute(sql`select set_config('app.company_id', ${context.companyId}, true)`);
+    await tx.execute(
+      sql`select set_config('app.user_id', ${context.userId}, true),
+                 set_config('app.company_id', ${context.companyId}, true)`,
+    );
     return work(tx);
   });
 }

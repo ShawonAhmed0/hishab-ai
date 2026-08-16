@@ -1,15 +1,15 @@
-import { listCompanies, can } from "@hishabai/core";
+import { can } from "@hishabai/core";
 import { BottomNav, Sidebar } from "@/components/shell/sidebar";
 import { NAV_ITEMS } from "@/components/shell/nav-items";
 import { Topbar } from "@/components/shell/topbar";
-import { requireSession } from "@/lib/session";
-import { getAuthUser } from "@/lib/supabase/server";
+import { sessionContext } from "@/lib/session";
 import { switchCompanyAction } from "@/app/onboarding/actions";
 import { signOut } from "@/app/(auth)/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
-  const [companies, user] = await Promise.all([listCompanies(session.userId), getAuthUser()]);
+  // Session, company list and display name all arrive together in one round
+  // trip, and the page below re-uses the same memoised result.
+  const { session, companies, fullName } = await sessionContext();
 
   // Navigation is filtered by role rather than rendered-then-disabled: an
   // operator should not have to discover what they cannot do. Only the hrefs
@@ -19,10 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     (item) => !item.permission || can(session, item.permission),
   ).map((item) => item.href as string);
 
-  const userName =
-    (user?.user_metadata?.["full_name"] as string | undefined) ??
-    user?.email?.split("@")[0] ??
-    "ব্যবহারকারী";
+  const userName = fullName ?? "ব্যবহারকারী";
 
   return (
     <div className="flex min-h-dvh bg-background">

@@ -49,6 +49,49 @@ language sql stable security definer set search_path = public, pg_temp as $$
 $$;
 
 -- -----------------------------------------------------------------------------
+-- Session resolution, in one round trip.
+--
+-- Working out "who is this and what may they see" used to be two separate
+-- transactions — a membership lookup and a company list — which is eight
+-- network round trips before a page has read any of its own data. Against a
+-- database in another region that was most of a second, every navigation.
+--
+-- SECURITY DEFINER with an explicit user id, so it needs no session settings
+-- and therefore no transaction of its own.
+-- -----------------------------------------------------------------------------
+
+create or replace function app.resolve_session(
+  target_user uuid,
+  requested_company uuid default null
+) returns json
+language sql stable security definer set search_path = public, pg_temp as $$
+  select json_build_object(
+    -- Saves the page a second call to the auth service just to render a name.
+    'fullName', (select p.full_name from profiles p where p.id = target_user),
+    -- The role for the company the request asked for, or null when the user is
+    -- not a member of it — which is how a stale cookie gets rejected.
+    'role', (
+      select cm.role::text
+        from company_members cm
+       where cm.company_id = requested_company
+         and cm.user_id = target_user
+         and cm.is_active
+    ),
+    'companies', coalesce((
+      select json_agg(json_build_object(
+               'id', c.id, 'name', c.name, 'nameBn', c.name_bn,
+               'businessType', c.business_type, 'role', cm.role::text)
+             order by c.name)
+        from company_members cm
+        join companies c on c.id = cm.company_id
+       where cm.user_id = target_user
+         and cm.is_active
+         and c.is_active
+    ), '[]'::json)
+  );
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Policies
 --
 -- Every tenant table gets the same rule: the row's company must be the one the

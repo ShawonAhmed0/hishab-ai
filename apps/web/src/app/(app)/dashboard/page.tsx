@@ -12,7 +12,7 @@ import {
   PlusCircle,
   ReceiptText,
 } from "lucide-react";
-import { getDashboard, lowStockProducts } from "@hishabai/core";
+import { getDashboard } from "@hishabai/core";
 import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
@@ -41,20 +41,19 @@ const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
 
 export default async function DashboardPage() {
   const session = await requireSession();
-  const [data, lowStock] = await Promise.all([
-    getDashboard(session),
-    lowStockProducts(session),
-  ]);
+  // One round trip for the whole page — tiles, charts, lists and alerts.
+  const { tiles, trend, recent, topDueCustomers, lowStock } = await getDashboard(session);
 
-  const { tiles, trend, recent, topDueCustomers } = data;
-
-  // Money is a bigint; it has to cross into the client chart as a string.
+  // Money is a bigint and cannot cross to a client component. Charts get plain
+  // taka — exact figures are rendered from the real values in the tiles and
+  // tables below.
+  const toTaka = (value: bigint) => Number(value) / 10_000;
   const chartData: ChartPoint[] = trend.map((point) => ({
     period: point.period,
-    income: point.income.toString(),
-    expense: point.expense.toString(),
-    sales: point.sales.toString(),
-    profit: point.profit.toString(),
+    income: toTaka(point.income),
+    expense: toTaka(point.expense),
+    sales: toTaka(point.sales),
+    profit: toTaka(point.profit),
   }));
 
   const alerts = [

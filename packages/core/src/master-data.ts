@@ -310,110 +310,99 @@ export async function listCategories(session: Session) {
 }
 
 /**
- * Everything নতুন এন্ট্রি needs, in one transaction.
+ * Everything নতুন এন্ট্রি needs, in one round trip.
  *
- * Calling the six list functions in parallel opens six connections, and a
- * Supavisor pool in session mode runs out at fifteen — one page load from two
- * users was enough to exhaust it. They also belong on one snapshot: the form
- * should not show a product that a concurrent write removed halfway through
- * loading the units.
+ * Six separate list calls opened six connections and exhausted the pool; five
+ * sequential queries in one transaction then cost five round trips. A pooled
+ * connection serialises statements regardless, so the only real fix is to ask
+ * once. It also puts the whole form on a single snapshot — no showing a product
+ * that a concurrent write removed while the units were still loading.
  */
-export async function loadEntryFormData(session: Session) {
+export interface EntryFormData {
+  parties: { id: string; name: string; type: string; receivable: string; payable: string }[];
+  products: {
+    id: string; nameBn: string; kind: string; unitId: string; unitSymbol: string;
+    salePrice: string; purchasePrice: string; quantity: string;
+  }[];
+  units: { id: string; nameBn: string; symbol: string }[];
+  wallets: { id: string; nameBn: string; kind: string; isDefault: boolean }[];
+  incomeCategories: { id: string; nameBn: string; code: string }[];
+  expenseCategories: { id: string; nameBn: string; code: string }[];
+}
+
+export async function loadEntryFormData(session: Session): Promise<EntryFormData> {
+  const company = session.companyId;
+
   return withTenant(session, async (tx) => {
-    const partyRows = await tx
-      .select({
-        id: parties.id,
-        name: parties.name,
-        type: parties.type,
-        receivable: partyBalances.receivable,
-        payable: partyBalances.payable,
-      })
-      .from(parties)
-      .leftJoin(
-        partyBalances,
-        and(
-          eq(partyBalances.partyId, parties.id),
-          eq(partyBalances.companyId, parties.companyId),
-        ),
-      )
-      .where(and(eq(parties.companyId, session.companyId), eq(parties.isActive, true)))
-      .orderBy(asc(parties.name));
+    const rows = (await tx.execute(sql`
+      select
+        (select coalesce(json_agg(json_build_object(
+                  'id', t.id, 'name', t.name, 'type', t.type,
+                  'receivable', t.receivable, 'payable', t.payable) order by t.name), '[]'::json)
+           from (
+             select p.id, p.name, p.type::text,
+                    coalesce(pb.receivable, 0)::text as receivable,
+                    coalesce(pb.payable, 0)::text as payable
+               from parties p
+               left join party_balances pb
+                 on pb.party_id = p.id and pb.company_id = p.company_id
+              where p.company_id = ${company}::uuid and p.is_active
+           ) t) as parties,
 
-    const productRows = await tx
-      .select({
-        id: products.id,
-        nameBn: products.nameBn,
-        kind: products.kind,
-        unitId: products.unitId,
-        unitSymbol: units.symbol,
-        salePrice: products.salePrice,
-        purchasePrice: products.purchasePrice,
-        quantity: productStock.quantity,
-      })
-      .from(products)
-      .innerJoin(units, eq(units.id, products.unitId))
-      .leftJoin(
-        productStock,
-        and(
-          eq(productStock.productId, products.id),
-          eq(productStock.companyId, products.companyId),
-        ),
-      )
-      .where(and(eq(products.companyId, session.companyId), eq(products.isActive, true)))
-      .orderBy(asc(products.nameBn));
+        (select coalesce(json_agg(json_build_object(
+                  'id', t.id, 'nameBn', t.name_bn, 'kind', t.kind, 'unitId', t.unit_id,
+                  'unitSymbol', t.unit_symbol, 'salePrice', t.sale_price,
+                  'purchasePrice', t.purchase_price, 'quantity', t.quantity)
+                  order by t.name_bn), '[]'::json)
+           from (
+             select pr.id, pr.name_bn, pr.kind::text, pr.unit_id, u.symbol as unit_symbol,
+                    pr.sale_price::text, pr.purchase_price::text,
+                    coalesce(ps.quantity, 0)::text as quantity
+               from products pr
+               join units u on u.id = pr.unit_id
+               left join product_stock ps
+                 on ps.product_id = pr.id and ps.company_id = pr.company_id
+              where pr.company_id = ${company}::uuid and pr.is_active
+           ) t) as products,
 
-    const unitRows = await tx
-      .select({ id: units.id, nameBn: units.nameBn, symbol: units.symbol })
-      .from(units)
-      .where(and(eq(units.companyId, session.companyId), eq(units.isActive, true)))
-      .orderBy(asc(units.nameBn));
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn, 'symbol', symbol) order by name_bn), '[]'::json)
+           from units where company_id = ${company}::uuid and is_active) as units,
 
-    const walletRows = await tx
-      .select({
-        id: financialAccounts.id,
-        nameBn: financialAccounts.nameBn,
-        kind: financialAccounts.kind,
-        isDefault: financialAccounts.isDefault,
-      })
-      .from(financialAccounts)
-      .where(
-        and(
-          eq(financialAccounts.companyId, session.companyId),
-          eq(financialAccounts.isActive, true),
-        ),
-      )
-      .orderBy(asc(financialAccounts.kind), asc(financialAccounts.nameBn));
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn, 'kind', kind::text, 'isDefault', is_default)
+                  order by kind::text, name_bn), '[]'::json)
+           from financial_accounts
+          where company_id = ${company}::uuid and is_active) as wallets,
 
-    const categoryRows = await tx
-      .select({
-        id: accounts.id,
-        nameBn: accounts.nameBn,
-        code: accounts.code,
-        type: accounts.type,
-      })
-      .from(accounts)
-      .where(
-        and(
-          eq(accounts.companyId, session.companyId),
-          eq(accounts.isCategory, true),
-          eq(accounts.isActive, true),
-        ),
-      )
-      .orderBy(asc(accounts.code));
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn, 'code', code) order by code), '[]'::json)
+           from accounts
+          where company_id = ${company}::uuid and is_category and is_active
+            and type = 'income') as income_categories,
 
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn, 'code', code) order by code), '[]'::json)
+           from accounts
+          where company_id = ${company}::uuid and is_category and is_active
+            and type = 'expense') as expense_categories
+    `)) as unknown as {
+      parties: EntryFormData["parties"] | null;
+      products: EntryFormData["products"] | null;
+      units: EntryFormData["units"] | null;
+      wallets: EntryFormData["wallets"] | null;
+      income_categories: EntryFormData["incomeCategories"] | null;
+      expense_categories: EntryFormData["expenseCategories"] | null;
+    }[];
+
+    const raw = rows[0]!;
     return {
-      parties: partyRows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        type: row.type,
-        receivable: row.receivable ?? "0",
-        payable: row.payable ?? "0",
-      })),
-      products: productRows.map((row) => ({ ...row, quantity: row.quantity ?? "0" })),
-      units: unitRows,
-      wallets: walletRows,
-      incomeCategories: categoryRows.filter((row) => row.type === "income"),
-      expenseCategories: categoryRows.filter((row) => row.type === "expense"),
+      parties: raw.parties ?? [],
+      products: raw.products ?? [],
+      units: raw.units ?? [],
+      wallets: raw.wallets ?? [],
+      incomeCategories: raw.income_categories ?? [],
+      expenseCategories: raw.expense_categories ?? [],
     };
   });
 }
