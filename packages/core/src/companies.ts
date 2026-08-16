@@ -22,6 +22,7 @@ import {
 } from "@hishabai/shared";
 import { postOpeningBalance } from "./opening-balance";
 import { requirePermission, type Session } from "./session";
+import { writeAudit } from "./transactions";
 
 export interface CompanySummary {
   id: string;
@@ -192,6 +193,13 @@ export async function createFinancialAccount(
       debitAccountId: accountId,
       amount: opening,
       description: `${input.nameBn} — প্রারম্ভিক ব্যালেন্স`,
+    });
+
+    await writeAudit(tx, session, {
+      action: "create",
+      entityType: "financial_account",
+      entityId: created!.id,
+      summaryBn: `পেমেন্ট মাধ্যম যোগ করা হয়েছে — ${input.nameBn}`,
     });
 
     return created!.id;

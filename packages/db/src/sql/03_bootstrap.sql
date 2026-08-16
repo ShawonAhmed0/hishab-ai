@@ -143,3 +143,66 @@ begin
 
   return v_profile;
 end $$;
+
+-- -----------------------------------------------------------------------------
+-- Adding a colleague.
+--
+-- Under RLS a user can only see the profiles of people they already share a
+-- company with, which is correct and also means an admin cannot look up the
+-- person they are trying to add. So the lookup runs as SECURITY DEFINER, with
+-- the admin check done here rather than trusted from the caller.
+--
+-- It resolves a phone number, never an arbitrary id, and it tells the caller
+-- only whether that number has an account — which an admin adding a colleague
+-- has to learn anyway. It creates nothing: the person must have registered
+-- already, because a login is theirs to make, not their employer's.
+-- -----------------------------------------------------------------------------
+create or replace function app.add_member_by_phone(
+  p_company uuid,
+  p_phone text,
+  p_role role default 'operator'
+) returns uuid
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_actor uuid := app.current_user_id();
+  v_target uuid;
+  v_name text;
+begin
+  if v_actor is null then
+    raise exception 'লগইন প্রয়োজন' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1 from company_members
+     where company_id = p_company and user_id = v_actor
+       and role = 'admin' and is_active
+  ) then
+    raise exception 'ব্যবহারকারী যোগ করার অনুমতি আপনার নেই' using errcode = '42501';
+  end if;
+
+  select id, full_name into v_target, v_name
+    from profiles
+   where phone = regexp_replace(p_phone, '[^0-9+]', '', 'g')
+   limit 1;
+
+  if v_target is null then
+    raise exception 'এই নম্বরে কোনো HishabAI অ্যাকাউন্ট নেই। আগে রেজিস্টার করতে বলুন।'
+      using errcode = 'P0002';
+  end if;
+
+  -- Re-adding somebody who was removed restores them rather than failing on
+  -- the primary key, which is what "যোগ করুন" means to the person clicking it.
+  insert into company_members (company_id, user_id, role, invited_by, is_active)
+  values (p_company, v_target, p_role, v_actor, true)
+  on conflict (company_id, user_id) do update set
+    role = excluded.role,
+    is_active = true,
+    invited_by = excluded.invited_by,
+    updated_at = now();
+
+  insert into audit_logs (company_id, user_id, action, entity_type, entity_id, summary_bn)
+  values (p_company, v_actor, 'create', 'company_member', v_target,
+          format('%s কে %s হিসেবে যোগ করা হয়েছে', v_name, p_role));
+
+  return v_target;
+end $$;

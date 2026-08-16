@@ -30,6 +30,7 @@ import { createFinancialAccount } from "./companies";
 import { getDashboard } from "./dashboard";
 import { getProductDetail } from "./inventory";
 import { getParties, getPartyLedger } from "./party-ledger";
+import { search } from "./search";
 import {
   getCashBook,
   getDueAging,
@@ -226,6 +227,20 @@ describeDb("company isolation is enforced by the database", () => {
     const dashboard = await getDashboard(impostor);
     expect(dashboard.recent).toEqual([]);
     expect(dashboard.tiles.stockValue).toBe(0n);
+  });
+
+  it("keeps global search inside the company that asked", async () => {
+    // Search is the one read that takes arbitrary user text, so it runs through
+    // withTenant with bound parameters rather than the one-trip path. A second
+    // way into the data gets its own isolation test.
+    const alphaHits = await search(alpha.session, "কাস্টমার");
+    const betaHits = await search(beta.session, "কাস্টমার");
+
+    expect(alphaHits.parties.map((p) => p.name)).toEqual(["আলফা কাস্টমার"]);
+    expect(betaHits.parties.map((p) => p.name)).toEqual(["বিটা কাস্টমার"]);
+
+    const impostor: Session = { ...beta.session, companyId: alpha.companyId };
+    expect((await search(impostor, "কাস্টমার")).total).toBe(0);
   });
 
   it("leaves no tenant context behind on the pooled connection", async () => {
@@ -689,6 +704,20 @@ describeDb("the report suite", () => {
     // The bank's ledger account is shared with any other bank wallet, but this
     // company has only one, so the two figures are the same posting.
     expect(row!.ledger).toBe("25000.0000");
+  });
+
+  it("finds a voucher by the amount somebody half remembers", async () => {
+    // "80000" is how a shopkeeper looks for the ৳80,000 sale — not by voucher
+    // number, which they never read.
+    const byAmount = await search(tenant.session, "80000");
+    expect(byAmount.transactions.map((t) => t.voucherNo)).toContain("SALE-000001");
+
+    // And the same box has to answer a phone number and a name.
+    const byPhone = await search(tenant.session, "রহমান");
+    expect(byPhone.parties.map((p) => p.name)).toEqual(["রহমান পেপার মিলস"]);
+
+    // One character would match most of the database and help nobody.
+    expect((await search(tenant.session, "র")).total).toBe(0);
   });
 
   it("refuses a range that runs backwards", async () => {

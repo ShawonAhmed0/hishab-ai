@@ -91,9 +91,25 @@ export function TD({
   );
 }
 
-/** The 375px fallback: one card per row, label and value stacked. */
-export function MobileCards({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-col divide-y divide-border md:hidden">{children}</div>;
+/**
+ * The 375px fallback: one card per row, label and value stacked.
+ *
+ * `md:hidden` because it normally sits beside a table that takes over on wider
+ * screens. Search results have no table — the rows are of three different
+ * shapes — so that page passes `md:flex` to keep the list at every width.
+ */
+export function MobileCards({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("flex flex-col divide-y divide-border md:hidden", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function MobileRow<T extends string>({
