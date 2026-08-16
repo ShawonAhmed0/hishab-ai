@@ -20,6 +20,7 @@ import {
   money,
   type Role,
 } from "@hishabai/shared";
+import { postOpeningBalance } from "./opening-balance";
 import { requirePermission, type Session } from "./session";
 
 export interface CompanySummary {
@@ -139,9 +140,19 @@ export async function listFinancialAccounts(session: Session) {
 }
 
 /**
- * Adding a bank or bKash wallet. The opening balance is recorded on the wallet
- * itself and posted through the opening-balance equity account, so the ledger
- * still balances on day one.
+ * Adding a bank or bKash wallet, with whatever is already in it.
+ *
+ * The opening balance is posted, not assigned. This used to set
+ * `balance = openingBalance` on the row and stop there — and the comment above
+ * it claimed the entry went through opening-balance equity, which it did not.
+ * Two things then disagreed: `financial_accounts.balance` carried the opening
+ * amount plus every journal delta, while the account's own ledger balance
+ * carried only the deltas, so the ক্যাশ বই and the dashboard tile would drift
+ * apart by exactly the opening figure and neither would look wrong on its own.
+ *
+ * The same mistake, in the same shape, as opening stock. It is now the same
+ * fix: `postOpeningBalance` writes Dr wallet / Cr opening-balance equity, and
+ * the balance trigger derives the row from that.
  */
 export async function createFinancialAccount(
   session: Session,
@@ -149,6 +160,7 @@ export async function createFinancialAccount(
 ): Promise<string> {
   requirePermission(session, "settings.manage");
   const input = financialAccountInputSchema.parse(rawInput);
+  const opening = money(input.openingBalance);
 
   return withTenant(session, async (tx) => {
     const subtypeCode = { cash: "1000", bank: "1010", mfs: "1020" }[input.kind];
@@ -171,10 +183,16 @@ export async function createFinancialAccount(
         bankName: input.bankName ?? null,
         accountNumber: input.accountNumber ?? null,
         mfsProvider: input.mfsProvider ?? null,
-        openingBalance: moneyToDb(money(input.openingBalance)),
-        balance: moneyToDb(money(input.openingBalance)),
+        // Kept as a record of what was declared; `balance` is the trigger's.
+        openingBalance: moneyToDb(opening),
       })
       .returning({ id: financialAccounts.id });
+
+    await postOpeningBalance(tx, session, {
+      debitAccountId: accountId,
+      amount: opening,
+      description: `${input.nameBn} — প্রারম্ভিক ব্যালেন্স`,
+    });
 
     return created!.id;
   });

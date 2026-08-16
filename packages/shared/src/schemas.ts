@@ -305,3 +305,27 @@ export const financialAccountInputSchema = z.object({
   openingBalance: moneyString.default("0"),
 });
 export type FinancialAccountInput = z.infer<typeof financialAccountInputSchema>;
+
+export const unitInputSchema = z.object({
+  nameBn: z.string().trim().min(1, "এককের নাম দিন").max(60),
+  symbol: z.string().trim().min(1, "সংক্ষিপ্ত রূপ দিন").max(20),
+  /** 3 suits কেজি; পিস should be 0 or the entry form offers decimals nobody wants. */
+  decimalPlaces: z.coerce.number().int().min(0).max(6).default(3),
+});
+export type UnitInput = z.infer<typeof unitInputSchema>;
+
+/**
+ * A user-defined খাত. The subtype is fixed per side rather than offered:
+ * choosing where an expense sits in the chart of accounts is exactly the
+ * accounting knowledge spec §26 says nobody should need.
+ */
+export const categoryAccountInputSchema = z.object({
+  type: z.enum(["income", "expense"]),
+  nameBn: z.string().trim().min(1, "খাতের নাম দিন").max(160),
+});
+export type CategoryAccountInput = z.infer<typeof categoryAccountInputSchema>;
+
+export const productCategoryInputSchema = z.object({
+  nameBn: z.string().trim().min(1, "নাম দিন").max(120),
+});
+export type ProductCategoryInput = z.infer<typeof productCategoryInputSchema>;

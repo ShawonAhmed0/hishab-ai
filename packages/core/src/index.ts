@@ -7,3 +7,4 @@ export * from "./dashboard";
 export * from "./inventory";
 export * from "./party-ledger";
 export * from "./reports";
+export * from "./settings";

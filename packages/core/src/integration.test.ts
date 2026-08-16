@@ -26,6 +26,7 @@ import {
 } from "@hishabai/db";
 import { moneyToDb } from "@hishabai/shared";
 import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
+import { createFinancialAccount } from "./companies";
 import { getDashboard } from "./dashboard";
 import { getProductDetail } from "./inventory";
 import { getParties, getPartyLedger } from "./party-ledger";
@@ -659,6 +660,35 @@ describeDb("the report suite", () => {
     // those same lines. Two readings of one truth.
     const cash = book.wallets.find((w) => w.kind === "cash")!;
     expect(moneyToDb(cash.balance)).toBe(moneyToDb(book.closing));
+  });
+
+  it("posts a wallet's opening balance instead of assigning it", async () => {
+    // The old version set financial_accounts.balance directly, so the row
+    // carried the opening amount plus every journal delta while the account's
+    // ledger balance carried only the deltas. Both look plausible alone; they
+    // disagree by exactly the opening figure.
+    const bankId = await createFinancialAccount(tenant.session, {
+      kind: "bank",
+      nameBn: "ইসলামী ব্যাংক",
+      bankName: "Islami Bank",
+      accountNumber: "20501234567890",
+      openingBalance: "25000",
+    });
+
+    const [row] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select fa.balance::text as wallet, ab.balance::text as ledger
+          from financial_accounts fa
+          join account_balances ab on ab.account_id = fa.account_id
+                                  and ab.company_id = fa.company_id
+         where fa.id = ${bankId}::uuid
+      `),
+    )) as unknown as { wallet: string; ledger: string }[];
+
+    expect(row!.wallet).toBe("25000.0000");
+    // The bank's ledger account is shared with any other bank wallet, but this
+    // company has only one, so the two figures are the same posting.
+    expect(row!.ledger).toBe("25000.0000");
   });
 
   it("refuses a range that runs backwards", async () => {
