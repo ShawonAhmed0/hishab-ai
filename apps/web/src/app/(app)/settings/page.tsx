@@ -1,6 +1,6 @@
-import { Building2, Layers, Ruler, Tags, Wallet } from "lucide-react";
+import { Building2, Layers, Ruler, Tags, Wallet, Wrench } from "lucide-react";
 import { getSettings } from "@hishabai/core";
-import { bn, moneyFromDb } from "@hishabai/shared";
+import { bn, formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
@@ -8,9 +8,11 @@ import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { requireSession, sessionWithData } from "@/lib/session";
 import { can } from "@hishabai/core";
 import {
+  AddRecipePanel,
   CategoryForm,
   CompanyForm,
   DeactivateButton,
+  DeactivateRecipeButton,
   ProductCategoryForm,
   UnitForm,
   WalletForm,
@@ -295,6 +297,69 @@ export default async function SettingsPage() {
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <span className="inline-flex items-center gap-2">
+              <Wrench className="size-4 text-primary" aria-hidden />
+              {bn.fields.recipe}
+            </span>
+          </CardTitle>
+          <span className="text-xs text-muted-foreground">
+            উৎপাদন এন্ট্রিতে কাঁচামাল নিজে থেকেই বসাতে
+          </span>
+        </CardHeader>
+
+        <CardBody className="space-y-3">
+          {data.recipes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              কোনো রেসিপি নেই। রেসিপি ছাড়াও উৎপাদন এন্ট্রি করা যায় — এটি শুধু টাইপ করা কমায়।
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {data.recipes.map((recipe) => (
+                <li
+                  key={recipe.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {recipe.nameBn ?? recipe.outputProductNameBn}
+                      {recipe.expectedYieldPercent ? (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {bn.fields.yield}{" "}
+                          {formatPercent(moneyFromDb(recipe.expectedYieldPercent))}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {recipe.inputs
+                        .map(
+                          (line) =>
+                            `${line.productNameBn} ${formatQty(qtyFromDb(line.quantityPerUnit), {
+                              unit: line.unitSymbol,
+                            })}`,
+                        )
+                        .join(" + ")}
+                      {" → "}
+                      {recipe.outputProductNameBn}
+                    </p>
+                  </div>
+                  {editable ? (
+                    <DeactivateRecipeButton
+                      id={recipe.id}
+                      name={recipe.nameBn ?? recipe.outputProductNameBn}
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {editable ? <AddRecipePanel products={data.products} /> : null}
+        </CardBody>
+      </Card>
     </div>
   );
 }

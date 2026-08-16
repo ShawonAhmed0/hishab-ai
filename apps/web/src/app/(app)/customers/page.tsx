@@ -9,6 +9,7 @@ import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
+import { AddPartyPanel } from "@/components/master-data/create-forms";
 
 export const metadata = { title: bn.nav.customers };
 
@@ -107,11 +108,15 @@ export default async function CustomersPage({
           <CardTitle>{parties.length} জন কাস্টমার</CardTitle>
         </CardHeader>
 
+        <CardBody className="pt-0">
+          <AddPartyPanel type="customer" />
+        </CardBody>
+
         {parties.length === 0 ? (
           <EmptyState
             icon={Users}
             title={dueOnly ? "কারও বকেয়া নেই" : bn.emptyStates.noCustomers}
-            hint="বিক্রয় এন্ট্রি করার সময় নতুন কাস্টমার যোগ করা যায়"
+            hint="উপরে কাস্টমার যোগ করুন, বা বিক্রয় এন্ট্রির মধ্যেই যোগ করে নিন"
             action={
               <Button asChild size="sm">
                 <Link href="/entry">{bn.nav.newEntry}</Link>

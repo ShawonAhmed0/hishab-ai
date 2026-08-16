@@ -29,6 +29,7 @@ export const nav = {
   reports: "রিপোর্ট",
   users: "ব্যবহারকারী",
   settings: "সেটিংস",
+  notifications: "বিজ্ঞপ্তি",
 } as const;
 
 export const actions = {
@@ -119,6 +120,11 @@ export const fields = {
   wastage: "অপচয়",
   outputProduct: "উৎপাদিত পণ্য",
   inputProduct: "কাঁচামাল",
+  amount: "টাকার পরিমাণ",
+  countedQuantity: "গণনায় পাওয়া পরিমাণ",
+  recipe: "রেসিপি",
+  batchCount: "কত ব্যাচ",
+  yield: "প্রত্যাশিত উৎপাদন",
 } as const;
 
 export const dashboard = {

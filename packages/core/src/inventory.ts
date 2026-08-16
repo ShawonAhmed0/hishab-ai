@@ -40,6 +40,9 @@ export interface InventorySummary {
 export interface InventoryView {
   products: InventoryProduct[];
   summary: InventorySummary;
+  /** The create form's dropdowns, carried on the same trip as the list. */
+  units: { id: string; nameBn: string; symbol: string }[];
+  categories: { id: string; nameBn: string }[];
 }
 
 export interface InventoryFilter {
@@ -67,6 +70,18 @@ const SUMMARY = `
      left join product_stock ps
        on ps.product_id = pr.id and ps.company_id = pr.company_id
     where pr.company_id = app.current_company_id() and pr.is_active) as summary`;
+
+/**
+ * What the "নতুন পণ্য" form has to offer. Same fragment in both query paths,
+ * for the same reason `PRODUCT_COLUMNS` is: two copies drift.
+ */
+const CHOICES = `
+  (select coalesce(json_agg(t order by t."nameBn"), '[]'::json) from (
+     select id, name_bn as "nameBn", symbol from units
+      where company_id = app.current_company_id() and is_active) t) as units,
+  (select coalesce(json_agg(t order by t."nameBn"), '[]'::json) from (
+     select id, name_bn as "nameBn" from product_categories
+      where company_id = app.current_company_id() and is_active) t) as categories`;
 
 const PRODUCT_COLUMNS = `
   pr.id, pr.name_bn as "nameBn", pr.name_en as "nameEn", pr.sku,
@@ -98,6 +113,8 @@ export async function getInventory(
   const rows = await tenantRead<{
     products: InventoryProduct[] | null;
     summary: InventorySummary | null;
+    units: InventoryView["units"] | null;
+    categories: InventoryView["categories"] | null;
   }>(
     scope,
     tenantQuery`
@@ -110,13 +127,16 @@ export async function getInventory(
                on ps.product_id = pr.id and ps.company_id = pr.company_id
             where ${raw(where.join(" and "))}
          ) t) as products,
-        ${raw(SUMMARY)}
+        ${raw(SUMMARY)},
+        ${raw(CHOICES)}
     `,
   );
 
   return {
     products: rows[0]?.products ?? [],
     summary: rows[0]?.summary ?? emptySummary(),
+    units: rows[0]?.units ?? [],
+    categories: rows[0]?.categories ?? [],
   };
 }
 
@@ -158,12 +178,18 @@ async function searchInventory(
     `)) as unknown as InventoryProduct[];
 
     const summaryRows = (await tx.execute(
-      sql.raw(`select ${SUMMARY}`),
-    )) as unknown as { summary: InventorySummary | null }[];
+      sql.raw(`select ${SUMMARY}, ${CHOICES}`),
+    )) as unknown as {
+      summary: InventorySummary | null;
+      units: InventoryView["units"] | null;
+      categories: InventoryView["categories"] | null;
+    }[];
 
     return {
       products: rows,
       summary: summaryRows[0]?.summary ?? emptySummary(),
+      units: summaryRows[0]?.units ?? [],
+      categories: summaryRows[0]?.categories ?? [],
     };
   });
 }

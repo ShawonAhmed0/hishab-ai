@@ -20,15 +20,22 @@ import {
 } from "lucide-react";
 import {
   ZERO,
+  ZERO_QTY,
+  absMoney,
   addMoney,
   bn,
   formatMoney,
+  formatQty,
   money,
   moneyFromDb,
   multiplyRate,
   qty,
+  qtyFromDb,
+  scaleQty,
   subMoney,
+  subQty,
   type Money,
+  type Qty,
   type TransactionType,
 } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
@@ -37,6 +44,11 @@ import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/comp
 import { MoneyText } from "@/components/ui/money";
 import { useToast } from "@/components/ui/toast";
 import { cn, todayIso } from "@/lib/utils";
+import {
+  PartyFields,
+  ProductFields,
+  type CategoryChoice,
+} from "@/components/master-data/create-forms";
 import { createEntryAction, type EntryResult } from "./actions";
 import { VoiceScanPanel, type ParsedDraft } from "./voice-scan";
 
@@ -77,6 +89,19 @@ export interface CategoryOption {
   nameBn: string;
   code: string;
 }
+export interface AccountOption {
+  id: string;
+  nameBn: string;
+  code: string;
+  type: string;
+}
+export interface RecipeOption {
+  id: string;
+  nameBn: string | null;
+  outputProductId: string;
+  expectedYieldPercent: string | null;
+  inputs: { productId: string; unitId: string; quantityPerUnit: string }[];
+}
 
 interface Props {
   parties: PartyOption[];
@@ -85,6 +110,9 @@ interface Props {
   wallets: WalletOption[];
   incomeCategories: CategoryOption[];
   expenseCategories: CategoryOption[];
+  postingAccounts: AccountOption[];
+  recipes: RecipeOption[];
+  productCategories: CategoryChoice[];
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +170,22 @@ interface PaymentState {
   handledByName: string;
 }
 
+/** উৎপাদন and স্টক সমন্বয় never quote a rate — the engine costs them itself. */
+interface SimpleLineState {
+  key: string;
+  productId: string;
+  quantity: string;
+  note: string;
+}
+
+/** One side of an অন্যান্য entry. Which side it is comes from the list it is in. */
+interface JournalRowState {
+  key: string;
+  accountId: string;
+  amount: string;
+  narration: string;
+}
+
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = (): LineState => ({
   key: newKey(),
@@ -151,6 +195,28 @@ const emptyLine = (): LineState => ({
   rate: "",
   pieces: "",
 });
+const emptySimple = (): SimpleLineState => ({
+  key: newKey(),
+  productId: "",
+  quantity: "",
+  note: "",
+});
+const emptyJournalRow = (): JournalRowState => ({
+  key: newKey(),
+  accountId: "",
+  amount: "",
+  narration: "",
+});
+
+/** The database hands quantities over at full 6dp; nobody wants to read that. */
+const stockHint = (product: ProductOption) =>
+  `স্টক ${formatQty(qtyFromDb(product.quantity), { unit: product.unitSymbol })}`;
+
+/** First one wins, so a locally added row loses to the server's copy of it. */
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)));
+}
 
 /** Lines and adjustments only appear for the types that actually use them. */
 const NEEDS_LINES: TransactionType[] = [
@@ -171,18 +237,256 @@ const NEEDS_CATEGORY: TransactionType[] = ["income", "expense"];
 const NEEDS_TRADE_COSTS: TransactionType[] = ["sale", "purchase"];
 const VENDOR_SIDE: TransactionType[] = ["purchase", "vendor_payment", "purchase_return"];
 
-export function EntryForm({
-  parties,
+/** These three settle within themselves — there is no party and no bill. */
+const NO_PARTY_TOTALS: TransactionType[] = ["production", "stock_adjustment", "other"];
+
+// ---------------------------------------------------------------------------
+// Row lists
+// ---------------------------------------------------------------------------
+
+interface StockRowsProps {
+  title: string;
+  hint?: string;
+  rows: SimpleLineState[];
+  setRows: React.Dispatch<React.SetStateAction<SimpleLineState[]>>;
+  products: ProductOption[];
+  quantityLabel: string;
+  notePlaceholder?: string;
+  /** Field path prefix the server uses, so inline errors land on the right row. */
+  errorPrefix: string;
+  fieldErrors: Record<string, string>;
+  /** Rendered under the quantity box — stock on hand, or the counted delta. */
+  quantityHint?: (row: SimpleLineState, product: ProductOption | undefined) => string | undefined;
+  minRows?: number;
+}
+
+function StockRows({
+  title,
+  hint,
+  rows,
+  setRows,
   products,
+  quantityLabel,
+  notePlaceholder,
+  errorPrefix,
+  fieldErrors,
+  quantityHint,
+  minRows = 1,
+}: StockRowsProps) {
+  const update = (key: string, patch: Partial<SimpleLineState>) =>
+    setRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+    );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="font-medium">{title}</h3>
+          {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setRows((c) => [...c, emptySimple()])}>
+          <Plus className="size-4" aria-hidden />
+          {bn.actions.addNew}
+        </Button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+          কিছু যোগ করা হয়নি।
+        </p>
+      ) : null}
+
+      {rows.map((row, index) => {
+        const product = products.find((p) => p.id === row.productId);
+        return (
+          <div
+            key={row.key}
+            className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1.4fr_auto]"
+          >
+            <Field error={fieldErrors[`${errorPrefix}.${index}.productId`]}>
+              <FieldLabel required>{bn.fields.product}</FieldLabel>
+              <Select
+                value={row.productId}
+                onChange={(e) => update(row.key, { productId: e.target.value })}
+              >
+                <option value="">— নির্বাচন করুন —</option>
+                {products.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.nameBn}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field
+              error={
+                fieldErrors[`${errorPrefix}.${index}.quantity`] ??
+                fieldErrors[`${errorPrefix}.${index}.countedQuantity`]
+              }
+              hint={quantityHint?.(row, product)}
+            >
+              <FieldLabel required>
+                {quantityLabel}
+                {product ? ` (${product.unitSymbol})` : ""}
+              </FieldLabel>
+              <Input
+                numeric
+                value={row.quantity}
+                onChange={(e) => update(row.key, { quantity: e.target.value })}
+                placeholder="0"
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>{bn.fields.description}</FieldLabel>
+              <Input
+                value={row.note}
+                onChange={(e) => update(row.key, { note: e.target.value })}
+                placeholder={notePlaceholder ?? ""}
+              />
+            </Field>
+
+            <div className="flex items-end pb-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`${title} — লাইন ${index + 1} মুছুন`}
+                disabled={rows.length <= minRows}
+                onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface JournalRowsProps {
+  title: string;
+  hint: string;
+  rows: JournalRowState[];
+  setRows: React.Dispatch<React.SetStateAction<JournalRowState[]>>;
+  accounts: AccountOption[];
+  total: Money;
+}
+
+function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRowsProps) {
+  const update = (key: string, patch: Partial<JournalRowState>) =>
+    setRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+    );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="font-medium">{title}</h3>
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setRows((c) => [...c, emptyJournalRow()])}>
+          <Plus className="size-4" aria-hidden />
+          {bn.actions.addNew}
+        </Button>
+      </div>
+
+      {rows.map((row, index) => (
+        <div
+          key={row.key}
+          className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1.4fr_auto]"
+        >
+          <Field>
+            <FieldLabel required>হিসাব</FieldLabel>
+            <Select
+              value={row.accountId}
+              onChange={(e) => update(row.key, { accountId: e.target.value })}
+            >
+              <option value="">— নির্বাচন করুন —</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.code} — {account.nameBn}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field>
+            <FieldLabel required>{bn.fields.amount}</FieldLabel>
+            <Input
+              numeric
+              value={row.amount}
+              onChange={(e) => update(row.key, { amount: e.target.value })}
+              placeholder="0"
+            />
+          </Field>
+
+          <Field>
+            <FieldLabel>{bn.fields.description}</FieldLabel>
+            <Input
+              value={row.narration}
+              onChange={(e) => update(row.key, { narration: e.target.value })}
+            />
+          </Field>
+
+          <div className="flex items-end pb-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`${title} — লাইন ${index + 1} মুছুন`}
+              disabled={rows.length === 1}
+              onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
+            >
+              <Trash2 className="size-4" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      <p className="text-right text-sm text-muted-foreground">
+        মোট <MoneyText value={total} size="sm" />
+      </p>
+    </div>
+  );
+}
+
+export function EntryForm({
+  parties: loadedParties,
+  products: loadedProducts,
   units,
   wallets,
   incomeCategories,
   expenseCategories,
+  postingAccounts,
+  recipes,
+  productCategories,
 }: Props) {
   const router = useRouter();
   const toast = useToast();
 
   const defaultWallet = wallets.find((w) => w.isDefault) ?? wallets[0];
+
+  // Master data created without leaving the form.
+  const [extraParties, setExtraParties] = React.useState<PartyOption[]>([]);
+  const [extraProducts, setExtraProducts] = React.useState<ProductOption[]>([]);
+  const [addingParty, setAddingParty] = React.useState(false);
+  const [addingProduct, setAddingProduct] = React.useState(false);
+
+  // A row created mid-entry is in the dropdown before the server round trip
+  // that will eventually deliver it in `loadedParties` anyway; deduped by id so
+  // the refresh landing underneath does not double it.
+  const parties = React.useMemo(
+    () => dedupeById([...loadedParties, ...extraParties]),
+    [loadedParties, extraParties],
+  );
+  const products = React.useMemo(
+    () => dedupeById([...loadedProducts, ...extraProducts]),
+    [loadedProducts, extraProducts],
+  );
 
   const [type, setType] = React.useState<TransactionType>("sale");
   const [showMore, setShowMore] = React.useState(false);
@@ -205,6 +509,22 @@ export function EntryForm({
   const [memoNo, setMemoNo] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [source, setSource] = React.useState<"manual" | "voice" | "scan">("manual");
+
+  // উৎপাদন
+  const [recipeId, setRecipeId] = React.useState("");
+  const [batchCount, setBatchCount] = React.useState("1");
+  const [prodInputs, setProdInputs] = React.useState<SimpleLineState[]>([emptySimple()]);
+  const [prodOutputs, setProdOutputs] = React.useState<SimpleLineState[]>([emptySimple()]);
+  const [wastage, setWastage] = React.useState<SimpleLineState[]>([]);
+
+  // স্টক সমন্বয়
+  const [adjustments, setAdjustments] = React.useState<SimpleLineState[]>([emptySimple()]);
+
+  // অন্যান্য — two plain lists instead of a Dr/Cr grid.
+  const [sources, setSources] = React.useState<JournalRowState[]>([emptyJournalRow()]);
+  const [destinations, setDestinations] = React.useState<JournalRowState[]>([
+    emptyJournalRow(),
+  ]);
 
   const [pending, startTransition] = React.useTransition();
   const [result, setResult] = React.useState<EntryResult | null>(null);
@@ -243,6 +563,37 @@ export function EntryForm({
 
   const due = subMoney(total, paidTotal);
 
+  const productOf = React.useCallback(
+    (id: string) => products.find((p) => p.id === id),
+    [products],
+  );
+
+  /** Conversion cost the engine insists is matched by real payments. */
+  const conversionCost = React.useMemo<Money>(
+    () => addMoney(money(laborCost || "0"), money(otherCost || "0")),
+    [laborCost, otherCost],
+  );
+
+  const sourceTotal = React.useMemo<Money>(
+    () => sources.reduce<Money>((sum, row) => addMoney(sum, money(row.amount || "0")), ZERO),
+    [sources],
+  );
+  const destinationTotal = React.useMemo<Money>(
+    () =>
+      destinations.reduce<Money>((sum, row) => addMoney(sum, money(row.amount || "0")), ZERO),
+    [destinations],
+  );
+  const journalDifference = subMoney(destinationTotal, sourceTotal);
+
+  /** অপচয় is only meaningful for something the batch actually consumed. */
+  const inputProducts = React.useMemo(
+    () =>
+      prodInputs
+        .map((row) => productOf(row.productId))
+        .filter((product): product is ProductOption => product !== undefined),
+    [prodInputs, productOf],
+  );
+
   const selectedParty = parties.find((p) => p.id === partyId);
   const previousDue = selectedParty
     ? moneyFromDb(VENDOR_SIDE.includes(type) ? selectedParty.payable : selectedParty.receivable)
@@ -264,6 +615,44 @@ export function EntryForm({
     setOtherCost("");
     setDiscount("");
     setSource("manual");
+    setRecipeId("");
+    setBatchCount("1");
+    setProdInputs([emptySimple()]);
+    setProdOutputs([emptySimple()]);
+    setWastage([]);
+    setAdjustments([emptySimple()]);
+    setSources([emptyJournalRow()]);
+    setDestinations([emptyJournalRow()]);
+  }
+
+  /**
+   * A recipe is a starting point, not a lock: it fills the raw materials for
+   * the batch size asked for and then gets out of the way, so an operator who
+   * used a little more of something can still say so.
+   */
+  function applyRecipe(nextRecipeId: string, batches: string) {
+    setRecipeId(nextRecipeId);
+    const recipe = recipes.find((r) => r.id === nextRecipeId);
+    if (!recipe) return;
+
+    const multiplier = qty(batches || "0");
+    setProdInputs(
+      recipe.inputs.map((line) => ({
+        key: newKey(),
+        productId: line.productId,
+        quantity: formatQty(scaleQty(qty(line.quantityPerUnit), multiplier)),
+        note: "",
+      })),
+    );
+    setProdOutputs([
+      {
+        key: newKey(),
+        productId: recipe.outputProductId,
+        quantity: batches || "",
+        note: "",
+      },
+    ]);
+    setWastage([]);
   }
 
   function updateLine(key: string, patch: Partial<LineState>) {
@@ -350,6 +739,27 @@ export function EntryForm({
         ...(line.pieces ? { pieces: line.pieces } : {}),
       }));
 
+    // The unit is never asked for: it is whatever the product is measured in.
+    const stockRows = (rows: SimpleLineState[], noteKey: "description" | "reason") =>
+      rows
+        .filter((row) => row.productId && row.quantity)
+        .map((row) => ({
+          productId: row.productId,
+          unitId: productOf(row.productId)?.unitId ?? "",
+          quantity: row.quantity,
+          ...(row.note ? { [noteKey]: row.note } : {}),
+        }));
+
+    const journalRows = (rows: JournalRowState[], side: "debit" | "credit") =>
+      rows
+        .filter((row) => row.accountId && money(row.amount || "0") > 0n)
+        .map((row) => ({
+          accountId: row.accountId,
+          debit: side === "debit" ? row.amount : "0",
+          credit: side === "credit" ? row.amount : "0",
+          ...(row.narration ? { narration: row.narration } : {}),
+        }));
+
     switch (type) {
       case "sale":
       case "purchase":
@@ -373,8 +783,41 @@ export function EntryForm({
       case "customer_payment":
       case "vendor_payment":
         return { ...base, type, partyId, payments: activePayments };
-      default:
-        return { ...base, type };
+      case "production":
+        return {
+          ...base,
+          type,
+          inputs: stockRows(prodInputs, "description"),
+          outputs: stockRows(prodOutputs, "description"),
+          wastage: stockRows(wastage, "reason"),
+          laborCost: laborCost || "0",
+          otherCost: otherCost || "0",
+          payments: activePayments,
+        };
+      case "stock_adjustment":
+        return {
+          ...base,
+          type,
+          // A counted zero is a real answer — "none left" — so unlike every
+          // other row type these are filtered on the product alone.
+          adjustments: adjustments
+            .filter((row) => row.productId)
+            .map((row) => ({
+              productId: row.productId,
+              unitId: productOf(row.productId)?.unitId ?? "",
+              countedQuantity: row.quantity || "0",
+              ...(row.note ? { reason: row.note } : {}),
+            })),
+        };
+      case "other":
+        return {
+          ...base,
+          type,
+          entries: [
+            ...journalRows(destinations, "debit"),
+            ...journalRows(sources, "credit"),
+          ],
+        };
     }
   }
 
@@ -405,6 +848,27 @@ export function EntryForm({
           message,
         }))
       : [];
+
+  /**
+   * One panel, wherever products are picked.
+   *
+   * উৎপাদন and স্টক সমন্বয় pick products too, and a finished good that has
+   * never been sold before is exactly the thing a first production run needs to
+   * name. Declared once and rendered from each card.
+   */
+  function NewProductPanel() {
+    return (
+      <div className="rounded-md border border-border bg-surface-sunken p-4">
+        <p className="mb-3 font-medium">নতুন পণ্য</p>
+        <ProductFields
+          units={units}
+          categories={productCategories}
+          onCreated={(product) => setExtraProducts((current) => [...current, product])}
+          onCancel={() => setAddingProduct(false)}
+        />
+      </div>
+    );
+  }
 
   const partyOptions = parties.filter((party) =>
     VENDOR_SIDE.includes(type)
@@ -515,14 +979,34 @@ export function EntryForm({
                 <FieldLabel required>
                   {VENDOR_SIDE.includes(type) ? bn.fields.vendor : bn.fields.customer}
                 </FieldLabel>
-                <Select value={partyId} onChange={(e) => setPartyId(e.target.value)} required>
-                  <option value="">— নির্বাচন করুন —</option>
-                  {partyOptions.map((party) => (
-                    <option key={party.id} value={party.id}>
-                      {party.name}
-                    </option>
-                  ))}
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={partyId}
+                    onChange={(e) => setPartyId(e.target.value)}
+                    className="flex-1"
+                    required
+                  >
+                    <option value="">— নির্বাচন করুন —</option>
+                    {partyOptions.map((party) => (
+                      <option key={party.id} value={party.id}>
+                        {party.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {/* A customer who turns out not to exist yet should not cost
+                      you the half-typed invoice you are standing in. */}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="icon"
+                    aria-label={
+                      VENDOR_SIDE.includes(type) ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"
+                    }
+                    onClick={() => setAddingParty((open) => !open)}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                  </Button>
+                </div>
               </Field>
             ) : null}
 
@@ -553,6 +1037,22 @@ export function EntryForm({
               />
             </Field>
           </div>
+
+          {addingParty && NEEDS_PARTY.includes(type) ? (
+            <div className="rounded-md border border-border bg-surface-sunken p-4">
+              <p className="mb-3 font-medium">
+                {VENDOR_SIDE.includes(type) ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"}
+              </p>
+              <PartyFields
+                defaultType={VENDOR_SIDE.includes(type) ? "vendor" : "customer"}
+                onCreated={(party) => {
+                  setExtraParties((current) => [...current, party]);
+                  setPartyId(party.id);
+                }}
+                onCancel={() => setAddingParty(false)}
+              />
+            </div>
+          ) : null}
         </CardBody>
       </Card>
 
@@ -561,17 +1061,29 @@ export function EntryForm({
         <Card>
           <CardHeader>
             <CardTitle>পণ্য</CardTitle>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setLines((c) => [...c, emptyLine()])}
-            >
-              <Plus className="size-4" aria-hidden />
-              {bn.actions.addNew}
-            </Button>
+            <span className="flex gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setAddingProduct((open) => !open)}
+              >
+                <Plus className="size-4" aria-hidden />
+                নতুন পণ্য
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setLines((c) => [...c, emptyLine()])}
+              >
+                <Plus className="size-4" aria-hidden />
+                লাইন
+              </Button>
+            </span>
           </CardHeader>
           <CardBody className="space-y-3">
+            {addingProduct ? <NewProductPanel /> : null}
             {lines.map((line, index) => {
               const product = products.find((p) => p.id === line.productId);
               const amount = multiplyRate(qty(line.quantity || "0"), money(line.rate || "0"));
@@ -597,7 +1109,7 @@ export function EntryForm({
 
                   <Field
                     error={fieldErrors[`lines.${index}.quantity`]}
-                    hint={product ? `স্টক ${product.quantity} ${product.unitSymbol}` : undefined}
+                    hint={product ? stockHint(product) : undefined}
                   >
                     <FieldLabel required>
                       {bn.fields.quantity}
@@ -666,11 +1178,211 @@ export function EntryForm({
         </Card>
       ) : null}
 
-      {/* ---- 4. money ---- */}
+      {/* ---- 3b. উৎপাদন ---- */}
+      {type === "production" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{bn.transactionType.production}</CardTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddingProduct((open) => !open)}
+            >
+              <Plus className="size-4" aria-hidden />
+              নতুন পণ্য
+            </Button>
+          </CardHeader>
+          <CardBody className="space-y-5">
+            {addingProduct ? <NewProductPanel /> : null}
+            {recipes.length > 0 ? (
+              <div className="grid gap-3 rounded-lg bg-surface-sunken p-3 sm:grid-cols-[2fr_1fr]">
+                <Field hint="রেসিপি বেছে নিলে কাঁচামাল নিজে থেকেই বসে যাবে — পরে বদলানো যাবে">
+                  <FieldLabel>{bn.fields.recipe}</FieldLabel>
+                  <Select
+                    value={recipeId}
+                    onChange={(e) => applyRecipe(e.target.value, batchCount)}
+                  >
+                    <option value="">— রেসিপি ছাড়া —</option>
+                    {recipes.map((recipe) => (
+                      <option key={recipe.id} value={recipe.id}>
+                        {recipe.nameBn ??
+                          products.find((p) => p.id === recipe.outputProductId)?.nameBn ??
+                          "রেসিপি"}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel>{bn.fields.batchCount}</FieldLabel>
+                  <Input
+                    numeric
+                    value={batchCount}
+                    onChange={(e) => {
+                      setBatchCount(e.target.value);
+                      if (recipeId) applyRecipe(recipeId, e.target.value);
+                    }}
+                    placeholder="1"
+                  />
+                </Field>
+              </div>
+            ) : null}
+
+            <StockRows
+              title={bn.fields.inputProduct}
+              hint="যা ব্যবহার করা হয়েছে — দর লাগবে না, চলতি গড় মূল্যেই ধরা হবে"
+              rows={prodInputs}
+              setRows={setProdInputs}
+              products={products}
+              quantityLabel={bn.fields.quantity}
+              errorPrefix="inputs"
+              fieldErrors={fieldErrors}
+              quantityHint={(_row, product) => (product ? stockHint(product) : undefined)}
+            />
+
+            <div className="border-t border-border pt-4">
+              <StockRows
+                title={bn.fields.outputProduct}
+                hint="যা তৈরি হয়েছে — কাঁচামালের খরচ পরিমাণ অনুপাতে ভাগ হয়ে যাবে"
+                rows={prodOutputs}
+                setRows={setProdOutputs}
+                products={products}
+                quantityLabel={bn.fields.quantity}
+                errorPrefix="outputs"
+                fieldErrors={fieldErrors}
+              />
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <StockRows
+                title={bn.fields.wastage}
+                hint="নষ্ট হওয়া কাঁচামাল — উপরের কাঁচামালের তালিকা থেকেই হতে হবে"
+                rows={wastage}
+                setRows={setWastage}
+                products={inputProducts}
+                quantityLabel={bn.fields.quantity}
+                notePlaceholder="কারণ"
+                errorPrefix="wastage"
+                fieldErrors={fieldErrors}
+                minRows={0}
+              />
+            </div>
+
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>{bn.fields.laborCost}</FieldLabel>
+                <Input numeric value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" />
+              </Field>
+              <Field>
+                <FieldLabel>{bn.fields.otherCost}</FieldLabel>
+                <Input numeric value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" />
+              </Field>
+            </div>
+
+            {/* The engine refuses conversion cost that no wallet paid for —
+                say so here rather than letting the save fail. */}
+            {conversionCost !== paidTotal ? (
+              <p
+                role="status"
+                className="rounded-md border border-due bg-due-soft p-3 text-sm text-due"
+              >
+                লেবার ও অন্যান্য খরচ {formatMoney(conversionCost)} — নিচে ঠিক এই পরিমাণ
+                পেমেন্ট মাধ্যম থেকে দিতে হবে। এখন দেওয়া আছে {formatMoney(paidTotal)}।
+              </p>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* ---- 3c. স্টক সমন্বয় ---- */}
+      {type === "stock_adjustment" ? (
+        <Card>
+          <CardBody className="space-y-4">
+            {addingProduct ? <NewProductPanel /> : null}
+            <StockRows
+              title={bn.transactionType.stock_adjustment}
+              hint="গুদামে গুনে যা পাওয়া গেল সেটাই লিখুন — কমবেশি হিসাব নিজে করে নেবে"
+              rows={adjustments}
+              setRows={setAdjustments}
+              products={products}
+              quantityLabel={bn.fields.countedQuantity}
+              notePlaceholder="কারণ"
+              errorPrefix="adjustments"
+              fieldErrors={fieldErrors}
+              quantityHint={(row, product) => {
+                if (!product) return undefined;
+                const onHand = qtyFromDb(product.quantity);
+                if (row.quantity === "") return stockHint(product);
+                const delta = subQty(qty(row.quantity), onHand);
+                if (delta === ZERO_QTY) return "স্টকের সঙ্গে মিলে গেছে";
+                return delta > 0n
+                  ? `${formatQty(delta)} ${product.unitSymbol} বেশি পাওয়া গেছে`
+                  : `${formatQty((-delta) as Qty)} ${product.unitSymbol} কম পাওয়া গেছে`;
+              }}
+            />
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* ---- 3d. অন্যান্য ---- */}
+      {type === "other" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{bn.transactionType.other}</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-5">
+            <JournalRows
+              title="কোথা থেকে"
+              hint="টাকাটা যেখান থেকে এসেছে"
+              rows={sources}
+              setRows={setSources}
+              accounts={postingAccounts}
+              total={sourceTotal}
+            />
+            <div className="border-t border-border pt-4">
+              <JournalRows
+                title="কোথায়"
+                hint="টাকাটা যেখানে গেছে"
+                rows={destinations}
+                setRows={setDestinations}
+                accounts={postingAccounts}
+                total={destinationTotal}
+              />
+            </div>
+
+            {journalDifference !== ZERO ? (
+              <p
+                role="status"
+                className="rounded-md border border-due bg-due-soft p-3 text-sm text-due"
+              >
+                দুই দিকের অঙ্ক মিলছে না — পার্থক্য {formatMoney(absMoney(journalDifference))}।
+              </p>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* ---- 4. money ----
+           স্টক সমন্বয় and অন্যান্য never move cash, so they never ask for a
+           wallet. উৎপাদন does, but only to pay the conversion cost. */}
+      {type === "stock_adjustment" || type === "other" ? (
+        <Card>
+          <CardBody>
+            <Field>
+              <FieldLabel>{bn.fields.description}</FieldLabel>
+              <Textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </Field>
+          </CardBody>
+        </Card>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle>{bn.fields.paymentMethod}</CardTitle>
-          {NEEDS_LINES.includes(type) ? (
+          {NEEDS_LINES.includes(type) || type === "production" ? (
             <Button
               type="button"
               variant="ghost"
@@ -769,41 +1481,54 @@ export function EntryForm({
           </Field>
         </CardBody>
       </Card>
+      )}
 
       {/* ---- 5. what it comes to ----
            Spec §13's arithmetic, shown before saving rather than after. */}
       <Card className="sticky bottom-20 z-20 md:bottom-4">
         <CardBody className="space-y-3">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-muted-foreground">{bn.due.previousDue}</dt>
-              <dd>
-                <MoneyText value={previousDue} size="sm" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{bn.due.currentBill}</dt>
-              <dd>
-                <MoneyText value={total} size="sm" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{bn.due.payment}</dt>
-              <dd>
-                <MoneyText value={paidTotal} size="sm" tone="credit" />
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">{bn.due.newDue}</dt>
-              <dd>
-                <MoneyText
-                  value={addMoney(previousDue, due)}
-                  size="lg"
-                  tone={addMoney(previousDue, due) > 0n ? "due" : "neutral"}
-                />
-              </dd>
-            </div>
-          </dl>
+          {/* No party, no bill, no due — showing four zeroes would only
+              suggest the entry had failed to register. */}
+          {NO_PARTY_TOTALS.includes(type) ? (
+            <p className="text-sm text-muted-foreground">
+              {type === "production"
+                ? "কাঁচামালের খরচ উৎপাদিত পণ্যে চলে যাবে — কোনো বকেয়া তৈরি হবে না।"
+                : type === "stock_adjustment"
+                  ? "স্টকের কমবেশি সমন্বয় খাতে যাবে — কোনো বকেয়া তৈরি হবে না।"
+                  : "দুই দিক সমান হলেই এন্ট্রি সংরক্ষণ হবে।"}
+            </p>
+          ) : (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-muted-foreground">{bn.due.previousDue}</dt>
+                <dd>
+                  <MoneyText value={previousDue} size="sm" />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{bn.due.currentBill}</dt>
+                <dd>
+                  <MoneyText value={total} size="sm" />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{bn.due.payment}</dt>
+                <dd>
+                  <MoneyText value={paidTotal} size="sm" tone="credit" />
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium">{bn.due.newDue}</dt>
+                <dd>
+                  <MoneyText
+                    value={addMoney(previousDue, due)}
+                    size="lg"
+                    tone={addMoney(previousDue, due) > 0n ? "due" : "neutral"}
+                  />
+                </dd>
+              </div>
+            </dl>
+          )}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => changeType(type)}>

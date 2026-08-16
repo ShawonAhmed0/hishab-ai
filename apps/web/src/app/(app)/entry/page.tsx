@@ -19,6 +19,9 @@ export default async function EntryPage() {
       wallets={data.wallets}
       incomeCategories={data.incomeCategories}
       expenseCategories={data.expenseCategories}
+      postingAccounts={data.postingAccounts}
+      recipes={data.recipes}
+      productCategories={data.productCategories}
     />
   );
 }

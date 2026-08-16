@@ -27,6 +27,7 @@ import {
 } from "@hishabai/shared";
 import { requirePermission, type Session, type TenantScope } from "./session";
 import { writeAudit } from "./transactions";
+import type { RecipeRow } from "./recipes";
 
 export interface CompanyProfile {
   id: string;
@@ -75,6 +76,9 @@ export interface SettingsView {
   units: UnitRow[];
   categories: CategoryRow[];
   productCategories: { id: string; nameBn: string; productCount: number }[];
+  recipes: RecipeRow[];
+  /** The recipe form's two dropdowns; nothing else on the page needs them. */
+  products: { id: string; nameBn: string; kind: string; unitSymbol: string }[];
 }
 
 export async function getSettings(scope: TenantScope): Promise<SettingsView> {
@@ -84,6 +88,8 @@ export async function getSettings(scope: TenantScope): Promise<SettingsView> {
     units: UnitRow[] | null;
     categories: CategoryRow[] | null;
     product_categories: { id: string; nameBn: string; productCount: number }[] | null;
+    recipes: RecipeRow[] | null;
+    products: SettingsView["products"] | null;
     [key: string]: unknown;
   }>(
     scope,
@@ -133,7 +139,39 @@ export async function getSettings(scope: TenantScope): Promise<SettingsView> {
             left join products p on p.category_id = c.id and p.is_active
            where c.company_id = app.current_company_id() and c.is_active
            group by c.id
-        ) t) as product_categories
+        ) t) as product_categories,
+
+        (select coalesce(json_agg(t order by t."outputProductNameBn"), '[]'::json) from (
+          select r.id, r.name_bn as "nameBn",
+                 r.output_product_id as "outputProductId",
+                 op.name_bn as "outputProductNameBn",
+                 ou.symbol as "outputUnitSymbol",
+                 r.expected_yield_percent::text as "expectedYieldPercent",
+                 r.notes, r.is_active as "isActive",
+                 coalesce((
+                   select json_agg(json_build_object(
+                            'productId', ri.product_id,
+                            'productNameBn', ip.name_bn,
+                            'unitSymbol', iu.symbol,
+                            'quantityPerUnit', ri.quantity_per_unit::text)
+                          order by ip.name_bn)
+                     from production_recipe_inputs ri
+                     join products ip on ip.id = ri.product_id
+                     join units iu on iu.id = ip.unit_id
+                    where ri.recipe_id = r.id
+                 ), '[]'::json) as inputs
+            from production_recipes r
+            join products op on op.id = r.output_product_id
+            join units ou on ou.id = op.unit_id
+           where r.company_id = app.current_company_id() and r.is_active
+        ) t) as recipes,
+
+        (select coalesce(json_agg(t order by t."nameBn"), '[]'::json) from (
+          select p.id, p.name_bn as "nameBn", p.kind::text as kind, u.symbol as "unitSymbol"
+            from products p
+            join units u on u.id = p.unit_id
+           where p.company_id = app.current_company_id() and p.is_active
+        ) t) as products
     `,
   );
 
@@ -146,6 +184,8 @@ export async function getSettings(scope: TenantScope): Promise<SettingsView> {
     units: view.units ?? [],
     categories: view.categories ?? [],
     productCategories: view.product_categories ?? [],
+    recipes: view.recipes ?? [],
+    products: view.products ?? [],
   };
 }
 

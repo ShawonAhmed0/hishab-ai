@@ -77,6 +77,17 @@ export function multiplyRate(quantity: Qty, rate: Money): Money {
 }
 
 /**
+ * Quantity × a dimensionless count, e.g. a recipe's per-batch input scaled to
+ * the number of batches being run.
+ *
+ * Both operands are `Qty` so both carry the 1e6 scale; multiplying them
+ * directly would square it. The count is the one that gets divided back out.
+ */
+export function scaleQty(quantity: Qty, count: Qty): Qty {
+  return mulDivRound(quantity, count, QTY_UNIT) as Qty;
+}
+
+/**
  * Unit rate implied by a total and a quantity — used to derive weighted
  * average cost and landed cost per unit.
  */

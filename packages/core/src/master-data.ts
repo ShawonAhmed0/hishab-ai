@@ -19,6 +19,8 @@ import {
   type Transaction as Tx,
 } from "@hishabai/db";
 import {
+  ZERO,
+  absMoney,
   money,
   moneyToDb,
   multiplyRate,
@@ -26,6 +28,7 @@ import {
   productInputSchema,
   qty,
   qtyToDb,
+  type AccountSubtype,
   type Money,
   type Qty,
 } from "@hishabai/shared";
@@ -107,14 +110,25 @@ export async function createParty(session: Session, rawInput: unknown): Promise<
       })
       .returning({ id: parties.id });
 
-    // An opening balance is a real balance, so it seeds the party ledger.
+    // A party who already owes you — or whom you already owe — is an opening
+    // balance like any other, and it goes through the journal. Writing
+    // `party_balances` here instead is how the customer list came to show
+    // ৳50,000 outstanding while the aging report, which reads the journal,
+    // showed nothing.
     const opening = money(input.openingBalance);
-    if (opening !== 0n) {
-      await tx.insert(partyBalances).values({
-        companyId: session.companyId,
+    if (opening !== ZERO) {
+      // A vendor balance is normally money you owe; a negative one is an
+      // advance you have already paid, which sits on the other side. Same for
+      // a customer in reverse, so the two questions collapse into one.
+      const isPayable = (input.type === "vendor") === (opening > ZERO);
+      const subtype: AccountSubtype = isPayable ? "payable" : "receivable";
+
+      await postOpeningBalance(tx, session, {
+        accountId: await systemAccountId(tx, session.companyId, subtype),
+        side: isPayable ? "credit" : "debit",
+        amount: absMoney(opening),
         partyId: created!.id,
-        receivable: input.type === "vendor" ? "0" : moneyToDb(opening),
-        payable: input.type === "vendor" ? moneyToDb(opening) : "0",
+        description: `${input.name} — প্রারম্ভিক বকেয়া`,
       });
     }
 
@@ -330,6 +344,17 @@ export interface EntryFormData {
   wallets: { id: string; nameBn: string; kind: string; isDefault: boolean }[];
   incomeCategories: { id: string; nameBn: string; code: string }[];
   expenseCategories: { id: string; nameBn: string; code: string }[];
+  /** অন্যান্য picks freely from the chart, so it needs the whole chart. */
+  postingAccounts: { id: string; nameBn: string; code: string; type: string }[];
+  /** For the "নতুন পণ্য" panel the form can open without navigating away. */
+  productCategories: { id: string; nameBn: string }[];
+  recipes: {
+    id: string;
+    nameBn: string | null;
+    outputProductId: string;
+    expectedYieldPercent: string | null;
+    inputs: { productId: string; unitId: string; quantityPerUnit: string }[];
+  }[];
 }
 
 export async function loadEntryFormData(session: TenantScope): Promise<EntryFormData> {
@@ -342,6 +367,9 @@ export async function loadEntryFormData(session: TenantScope): Promise<EntryForm
     wallets: EntryFormData["wallets"] | null;
     income_categories: EntryFormData["incomeCategories"] | null;
     expense_categories: EntryFormData["expenseCategories"] | null;
+    posting_accounts: EntryFormData["postingAccounts"] | null;
+    product_categories: EntryFormData["productCategories"] | null;
+    recipes: EntryFormData["recipes"] | null;
   }>(
     session,
     tenantQuery`
@@ -395,7 +423,38 @@ export async function loadEntryFormData(session: TenantScope): Promise<EntryForm
                   'id', id, 'nameBn', name_bn, 'code', code) order by code), '[]'::json)
            from accounts
           where company_id = app.current_company_id() and is_category and is_active
-            and type = 'expense') as expense_categories
+            and type = 'expense') as expense_categories,
+
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn, 'code', code, 'type', type::text)
+                  order by code), '[]'::json)
+           from accounts
+          where company_id = app.current_company_id() and is_active) as posting_accounts,
+
+        (select coalesce(json_agg(json_build_object(
+                  'id', id, 'nameBn', name_bn) order by name_bn), '[]'::json)
+           from product_categories
+          where company_id = app.current_company_id() and is_active) as product_categories,
+
+        (select coalesce(json_agg(json_build_object(
+                  'id', t.id, 'nameBn', t.name_bn, 'outputProductId', t.output_product_id,
+                  'expectedYieldPercent', t.expected_yield_percent,
+                  'inputs', t.inputs) order by t.name_bn), '[]'::json)
+           from (
+             select r.id, r.name_bn, r.output_product_id,
+                    r.expected_yield_percent::text,
+                    coalesce((
+                      select json_agg(json_build_object(
+                               'productId', ri.product_id,
+                               'unitId', p.unit_id,
+                               'quantityPerUnit', ri.quantity_per_unit::text))
+                        from production_recipe_inputs ri
+                        join products p on p.id = ri.product_id
+                       where ri.recipe_id = r.id
+                    ), '[]'::json) as inputs
+               from production_recipes r
+              where r.company_id = app.current_company_id() and r.is_active
+           ) t) as recipes
     `,
   );
 
@@ -407,6 +466,9 @@ export async function loadEntryFormData(session: TenantScope): Promise<EntryForm
     wallets: raw.wallets ?? [],
     incomeCategories: raw.income_categories ?? [],
     expenseCategories: raw.expense_categories ?? [],
+    postingAccounts: raw.posting_accounts ?? [],
+    productCategories: raw.product_categories ?? [],
+    recipes: raw.recipes ?? [],
   };
 }
 
@@ -477,7 +539,7 @@ async function recordOpeningStock(
 
   const description = `${productName} — প্রারম্ভিক স্টক`;
   const entry = await postOpeningBalance(tx, session, {
-    debitAccountId: await systemAccountId(tx, companyId, "inventory"),
+    accountId: await systemAccountId(tx, companyId, "inventory"),
     amount: value,
     description,
   });

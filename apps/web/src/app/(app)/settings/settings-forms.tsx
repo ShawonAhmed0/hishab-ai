@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useActionState, useState, useTransition } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { bn, type FinancialAccountKind } from "@hishabai/shared";
@@ -11,6 +12,8 @@ import {
   createUnitAction,
   createWalletAction,
   deactivateAction,
+  deactivateRecipeAction,
+  saveRecipeAction,
   updateCompanyAction,
   type SettingsState,
 } from "./actions";
@@ -312,6 +315,240 @@ export function ProductCategoryForm() {
         </form>
       )}
     </AddPanel>
+  );
+}
+
+interface RecipeProduct {
+  id: string;
+  nameBn: string;
+  kind: string;
+  unitSymbol: string;
+}
+
+interface RecipeRowState {
+  key: string;
+  productId: string;
+  quantityPerUnit: string;
+}
+
+const recipeRowKey = () => Math.random().toString(36).slice(2);
+
+/**
+ * রেসিপি — one batch, written down.
+ *
+ * The row count is variable, so this posts a payload instead of a FormData:
+ * flattening `inputs.0.productId` into form fields and reassembling them on the
+ * server would be two extra places to get the indexing wrong.
+ */
+export function RecipeForm({
+  products,
+  recipe,
+  onDone,
+}: {
+  products: RecipeProduct[];
+  recipe?: {
+    id: string;
+    nameBn: string | null;
+    outputProductId: string;
+    expectedYieldPercent: string | null;
+    notes: string | null;
+    inputs: { productId: string; quantityPerUnit: string }[];
+  };
+  onDone?: () => void;
+}) {
+  const [state, setState] = useState<SettingsState>({});
+  const [pending, start] = useTransition();
+
+  const [outputProductId, setOutputProductId] = useState(recipe?.outputProductId ?? "");
+  const [nameBn, setNameBn] = useState(recipe?.nameBn ?? "");
+  const [yieldPercent, setYieldPercent] = useState(recipe?.expectedYieldPercent ?? "");
+  const [notes, setNotes] = useState(recipe?.notes ?? "");
+  const [rows, setRows] = useState<RecipeRowState[]>(
+    recipe?.inputs.length
+      ? recipe.inputs.map((line) => ({
+          key: recipeRowKey(),
+          productId: line.productId,
+          quantityPerUnit: line.quantityPerUnit,
+        }))
+      : [{ key: recipeRowKey(), productId: "", quantityPerUnit: "" }],
+  );
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setState({});
+    start(async () => {
+      const result = await saveRecipeAction(recipe?.id ?? null, {
+        outputProductId,
+        ...(nameBn ? { nameBn } : {}),
+        ...(yieldPercent ? { expectedYieldPercent: yieldPercent } : {}),
+        ...(notes ? { notes } : {}),
+        inputs: rows
+          .filter((row) => row.productId && row.quantityPerUnit)
+          .map((row) => ({
+            productId: row.productId,
+            quantityPerUnit: row.quantityPerUnit,
+          })),
+      });
+      setState(result);
+      if (result.ok) onDone?.();
+    });
+  }
+
+  const update = (key: string, patch: Partial<RecipeRowState>) =>
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+
+  const unitOf = (productId: string) =>
+    products.find((product) => product.id === productId)?.unitSymbol ?? "";
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <Feedback state={state} done="রেসিপি সংরক্ষিত হয়েছে" />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field>
+          <FieldLabel required>{bn.fields.outputProduct}</FieldLabel>
+          <Select
+            value={outputProductId}
+            onChange={(event) => setOutputProductId(event.target.value)}
+            required
+          >
+            <option value="">— নির্বাচন করুন —</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.nameBn}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field hint="খালি রাখলে উৎপাদিত পণ্যের নামেই চিনবেন">
+          <FieldLabel>{bn.fields.recipe} নাম</FieldLabel>
+          <Input value={nameBn} onChange={(event) => setNameBn(event.target.value)} />
+        </Field>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="font-medium">{bn.fields.inputProduct}</p>
+            <p className="text-xs text-muted-foreground">
+              এক ব্যাচে যত লাগে — দাম নয়, শুধু পরিমাণ
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              setRows((current) => [
+                ...current,
+                { key: recipeRowKey(), productId: "", quantityPerUnit: "" },
+              ])
+            }
+          >
+            <Plus className="size-4" aria-hidden />
+            {bn.actions.addNew}
+          </Button>
+        </div>
+
+        {rows.map((row, index) => (
+          <div key={row.key} className="grid gap-3 sm:grid-cols-[2fr_1fr_auto]">
+            <Field>
+              <FieldLabel required>{bn.fields.product}</FieldLabel>
+              <Select
+                value={row.productId}
+                onChange={(event) => update(row.key, { productId: event.target.value })}
+              >
+                <option value="">— নির্বাচন করুন —</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.nameBn}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field>
+              <FieldLabel required>
+                {bn.fields.quantity}
+                {row.productId ? ` (${unitOf(row.productId)})` : ""}
+              </FieldLabel>
+              <Input
+                inputMode="decimal"
+                value={row.quantityPerUnit}
+                onChange={(event) => update(row.key, { quantityPerUnit: event.target.value })}
+                placeholder="0"
+              />
+            </Field>
+
+            <div className="flex items-end pb-1">
+              <button
+                type="button"
+                aria-label={`কাঁচামাল ${index + 1} মুছুন`}
+                disabled={rows.length === 1}
+                onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
+                className="p-2 text-muted-foreground hover:text-debit disabled:opacity-40"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field hint="৫০০ কেজি থেকে ৪৫০ কেজি পেলে ৯০">
+          <FieldLabel>{bn.fields.yield} (%)</FieldLabel>
+          <Input
+            inputMode="decimal"
+            value={yieldPercent}
+            onChange={(event) => setYieldPercent(event.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel>{bn.fields.description}</FieldLabel>
+          <Textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </Field>
+      </div>
+
+      <Button type="submit" disabled={pending}>
+        {pending ? "সংরক্ষণ হচ্ছে…" : bn.actions.saveShort}
+      </Button>
+    </form>
+  );
+}
+
+/** The add-panel wrapper, so a new recipe starts from a button like the rest. */
+export function AddRecipePanel({ products }: { products: RecipeProduct[] }) {
+  return (
+    <AddPanel label="রেসিপি যোগ করুন">
+      {(close) => <RecipeForm products={products} onDone={close} />}
+    </AddPanel>
+  );
+}
+
+export function DeactivateRecipeButton({ id, name }: { id: string; name: string }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string>();
+
+  return (
+    <span className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          if (!window.confirm(`${name} বন্ধ করবেন? নতুন এন্ট্রিতে আর দেখাবে না।`)) return;
+          start(async () => {
+            const result = await deactivateRecipeAction(id);
+            if (result.error) setError(result.error);
+          });
+        }}
+        className="text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
+      >
+        {pending ? "…" : "বন্ধ করুন"}
+      </button>
+      {error ? <span className="text-xs text-debit">{error}</span> : null}
+    </span>
   );
 }
 

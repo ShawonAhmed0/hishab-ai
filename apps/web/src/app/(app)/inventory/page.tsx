@@ -16,6 +16,7 @@ import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { sessionWithData } from "@/lib/session";
+import { AddProductPanel } from "@/components/master-data/create-forms";
 
 export const metadata = { title: bn.nav.inventory };
 
@@ -37,7 +38,7 @@ export default async function InventoryPage({
   const lowOnly = params.low === "1";
 
   const {
-    data: { products, summary },
+    data: { products, summary, units, categories },
   } = await sessionWithData((scope) =>
     getInventory(scope, {
       ...(kind ? { kind } : {}),
@@ -143,11 +144,15 @@ export default async function InventoryPage({
           <CardTitle>{products.length} টি পণ্য</CardTitle>
         </CardHeader>
 
+        <CardBody className="pt-0">
+          <AddProductPanel units={units} categories={categories} />
+        </CardBody>
+
         {products.length === 0 ? (
           <EmptyState
             icon={Boxes}
             title={bn.emptyStates.noProducts}
-            hint="প্রথম ক্রয় এন্ট্রি করলেই পণ্য আর স্টক দুটোই এখানে দেখা যাবে"
+            hint="উপরে পণ্য যোগ করুন, বা ক্রয় এন্ট্রির মধ্যেই যোগ করে নিন"
             action={
               <Button asChild size="sm">
                 <Link href="/entry">{bn.nav.newEntry}</Link>

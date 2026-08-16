@@ -1,11 +1,13 @@
 import { Suspense } from "react";
-import { can } from "@hishabai/core";
+import { can, getNotifications } from "@hishabai/core";
 import { BottomNav, Sidebar, SidebarFrame } from "@/components/shell/sidebar";
 import { NAV_ITEMS } from "@/components/shell/nav-items";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { Topbar, TopbarFrame } from "@/components/shell/topbar";
 import { sessionContext } from "@/lib/session";
 import { switchCompanyAction } from "@/app/onboarding/actions";
 import { signOut } from "@/app/(auth)/actions";
+import { markAllNotificationsReadAction } from "./notification-actions";
 
 /**
  * The shell does not block the page.
@@ -69,11 +71,23 @@ async function BottomNavSlot() {
 async function TopbarSlot() {
   const { session, companies, fullName } = await sessionContext();
 
+  // The alerts are a second read, but they are the shell's own and already
+  // behind the same Suspense boundary — the page below is not waiting on them.
+  const alerts = await getNotifications(session);
+
   return (
     <Topbar
       companies={companies}
       activeCompanyId={session.companyId}
       userName={fullName ?? "ব্যবহারকারী"}
+      notifications={
+        <NotificationBell
+          alerts={alerts.alerts}
+          notifications={alerts.notifications}
+          badgeCount={alerts.badgeCount}
+          onMarkAllRead={markAllNotificationsReadAction}
+        />
+      }
       onSwitch={switchCompanyAction}
       onSignOut={signOut}
     />

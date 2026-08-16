@@ -7,9 +7,12 @@ import {
   createCategoryAccount,
   createFinancialAccount,
   createProductCategory,
+  createRecipe,
   createUnit,
+  setRecipeActive,
   setSettingActive,
   updateCompany,
+  updateRecipe,
 } from "@hishabai/core";
 import { requireSession } from "@/lib/session";
 
@@ -136,4 +139,32 @@ export async function deactivateAction(
   id: string,
 ): Promise<SettingsState> {
   return run(target, (session) => setSettingActive(session, target, id, false));
+}
+
+export interface RecipePayload {
+  outputProductId: string;
+  nameBn?: string;
+  expectedYieldPercent?: string;
+  notes?: string;
+  inputs: { productId: string; quantityPerUnit: string }[];
+}
+
+/**
+ * A recipe has a variable number of rows, so it arrives as a payload rather
+ * than as a FormData the browser flattened — the same shape the entry form
+ * sends, and validated the same way on arrival.
+ */
+export async function saveRecipeAction(
+  recipeId: string | null,
+  payload: RecipePayload,
+): Promise<SettingsState> {
+  return run("recipe", (session) =>
+    recipeId
+      ? updateRecipe(session, recipeId, payload)
+      : createRecipe(session, payload),
+  );
+}
+
+export async function deactivateRecipeAction(recipeId: string): Promise<SettingsState> {
+  return run("recipe", (session) => setRecipeActive(session, recipeId, false));
 }

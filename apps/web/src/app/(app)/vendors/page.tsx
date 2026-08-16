@@ -8,6 +8,7 @@ import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { sessionWithData } from "@/lib/session";
+import { AddPartyPanel } from "@/components/master-data/create-forms";
 import { formatDateShort } from "@/lib/utils";
 
 export const metadata = { title: bn.nav.vendors };
@@ -107,11 +108,15 @@ export default async function VendorsPage({
           <CardTitle>{parties.length} জন ভেন্ডর</CardTitle>
         </CardHeader>
 
+        <CardBody className="pt-0">
+          <AddPartyPanel type="vendor" />
+        </CardBody>
+
         {parties.length === 0 ? (
           <EmptyState
             icon={Truck}
             title={dueOnly ? "কারও পাওনা নেই" : bn.emptyStates.noVendors}
-            hint="ক্রয় এন্ট্রি করার সময় নতুন ভেন্ডর যোগ করা যায়"
+            hint="উপরে ভেন্ডর যোগ করুন, বা ক্রয় এন্ট্রির মধ্যেই যোগ করে নিন"
             action={
               <Button asChild size="sm">
                 <Link href="/entry">{bn.nav.newEntry}</Link>

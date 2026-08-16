@@ -24,7 +24,7 @@ import {
   withTenant,
   withUser,
 } from "@hishabai/db";
-import { moneyToDb } from "@hishabai/shared";
+import { money, moneyToDb, subMoney } from "@hishabai/shared";
 import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
 import { createFinancialAccount } from "./companies";
 import { getDashboard } from "./dashboard";
@@ -38,7 +38,16 @@ import {
   getRegister,
   getStockReport,
 } from "./reports";
-import { createProduct, listParties, listProducts, loadEntryFormData } from "./master-data";
+import {
+  createParty,
+  createProduct,
+  listParties,
+  listProducts,
+  loadEntryFormData,
+} from "./master-data";
+import { createRecipe } from "./recipes";
+import { getNotifications, markAllNotificationsRead } from "./notifications";
+import { getSettings } from "./settings";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -739,3 +748,403 @@ async function otherIncomeAccount(tenant: Tenant): Promise<string> {
   )) as unknown as { id: string }[];
   return rows[0]!.id;
 }
+
+/** Any account in the company's chart, chosen by what it is for. */
+async function accountBySubtype(tenant: Tenant, subtype: string): Promise<string> {
+  const rows = (await withTenant(tenant.session, async (tx) =>
+    tx.execute(sql`
+      select id from accounts
+       where company_id = ${tenant.companyId}::uuid
+         and subtype = ${subtype}
+       limit 1
+    `),
+  )) as unknown as { id: string }[];
+  return rows[0]!.id;
+}
+
+/**
+ * The three entries the picker offered but the form could never send.
+ *
+ * উৎপাদন, স্টক সমন্বয় and অন্যান্য were posted by the engine and named in the
+ * schema from the beginning, but `buildPayload` had no case for them, so every
+ * one of them left the browser as `{ date, type }` and died in validation. The
+ * shapes below are what the form now sends.
+ */
+describeDb("উৎপাদন, স্টক সমন্বয় and অন্যান্য", () => {
+  let tenant: Tenant;
+  let rival: Tenant;
+  let flourId: string;
+  let breadId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Bakery");
+    rival = await makeTenant("Rival Bakery");
+
+    // Opening stock through the posting path, so the ledger and the cache
+    // start out agreeing and can be compared again at the end.
+    flourId = await createProduct(tenant.session, {
+      nameBn: "ময়দা",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "100",
+      salePrice: "0",
+      minStockLevel: "0",
+      openingQuantity: "500",
+      openingRate: "100",
+    });
+    breadId = await createProduct(tenant.session, {
+      nameBn: "পাউরুটি",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "0",
+      salePrice: "200",
+      minStockLevel: "0",
+      openingQuantity: "0",
+      openingRate: "0",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await dropTenant(rival);
+    await closeDb();
+  }, 60_000);
+
+  it("turns 500 KG of ময়দা into 450 KG of পাউরুটি", async () => {
+    const result = await createTransaction(tenant.session, {
+      type: "production",
+      date: "2026-08-16",
+      source: "manual",
+      inputs: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "500" }],
+      outputs: [{ productId: breadId, unitId: tenant.unitKgId, quantity: "450" }],
+      wastage: [
+        {
+          productId: flourId,
+          unitId: tenant.unitKgId,
+          quantity: "50",
+          reason: "পুড়ে গেছে",
+        },
+      ],
+      laborCost: "0",
+      otherCost: "0",
+      payments: [],
+    });
+
+    expect(result.voucherNo).toMatch(/^PROD-\d{6}$/);
+    // ৳50,000 of flour in, ৳5,000 of it wasted, so ৳45,000 follows the bread.
+    const detail = await getProductDetail(tenant.session, breadId);
+    expect(detail?.product.quantity).toBe("450.000000");
+    expect(detail?.product.value).toBe("45000.0000");
+    expect(detail?.product.avgCost).toBe("100.0000");
+
+    const flour = await getProductDetail(tenant.session, flourId);
+    expect(flour?.product.quantity).toBe("0.000000");
+  });
+
+  it("refuses conversion cost that no wallet actually paid", async () => {
+    // Accruing labour against nobody would invent a liability the vendor
+    // report has never heard of, so the engine insists on a real payment.
+    await expect(
+      createTransaction(tenant.session, {
+        type: "production",
+        date: "2026-08-16",
+        source: "manual",
+        inputs: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "1" }],
+        outputs: [{ productId: breadId, unitId: tenant.unitKgId, quantity: "1" }],
+        wastage: [],
+        laborCost: "5000",
+        otherCost: "0",
+        payments: [],
+      }),
+      // `message` carries the English for the log; the shopkeeper reads
+      // `messageBn`, so that is the one worth asserting on.
+    ).rejects.toMatchObject({ messageBn: expect.stringContaining("লেবার") });
+  });
+
+  it("writes down what the physical count could not find", async () => {
+    const result = await createTransaction(tenant.session, {
+      type: "stock_adjustment",
+      date: "2026-08-17",
+      source: "manual",
+      adjustments: [
+        {
+          productId: breadId,
+          unitId: tenant.unitKgId,
+          countedQuantity: "440",
+          reason: "গুনে কম পাওয়া গেছে",
+        },
+      ],
+    });
+
+    expect(result.voucherNo).toMatch(/^ADJ-\d{6}$/);
+    // The user said 440; nobody typed the 10 that went missing, or its value.
+    const detail = await getProductDetail(tenant.session, breadId);
+    expect(detail?.product.quantity).toBe("440.000000");
+    expect(detail?.product.value).toBe("44000.0000");
+  });
+
+  it("posts অন্যান্য from two plain lists rather than Dr and Cr", async () => {
+    const expenseAccountId = await accountBySubtype(tenant, "operating_expense");
+    const cashAccountId = await withTenant(tenant.session, async (tx) => {
+      const rows = (await tx.execute(sql`
+        select account_id from financial_accounts
+         where id = ${tenant.cashWalletId}::uuid
+      `)) as unknown as { account_id: string }[];
+      return rows[0]!.account_id;
+    });
+
+    const before = await getDashboard(tenant.session);
+
+    const result = await createTransaction(tenant.session, {
+      type: "other",
+      date: "2026-08-18",
+      source: "manual",
+      description: "দোকানের সাইনবোর্ড",
+      entries: [
+        { accountId: expenseAccountId, debit: "2000", credit: "0" },
+        { accountId: cashAccountId, debit: "0", credit: "2000" },
+      ],
+    });
+
+    expect(result.voucherNo).toMatch(/^JV-\d{6}$/);
+
+    const after = await getDashboard(tenant.session);
+    expect(moneyToDb(after.tiles.cash)).toBe(
+      moneyToDb(subMoney(before.tiles.cash, money("2000"))),
+    );
+  });
+
+  it("refuses an অন্যান্য entry that names another company's account", async () => {
+    // The foreign key is enforced by a trigger running as the table owner, and
+    // that bypasses RLS — so nothing in the database stops a crafted account_id
+    // from another company landing in this company's journal. The check has to
+    // happen before the engine sees it.
+    const strayAccountId = await accountBySubtype(rival, "operating_expense");
+    const cashAccountId = await withTenant(tenant.session, async (tx) => {
+      const rows = (await tx.execute(sql`
+        select account_id from financial_accounts
+         where id = ${tenant.cashWalletId}::uuid
+      `)) as unknown as { account_id: string }[];
+      return rows[0]!.account_id;
+    });
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "other",
+        date: "2026-08-18",
+        source: "manual",
+        entries: [
+          { accountId: strayAccountId, debit: "100", credit: "0" },
+          { accountId: cashAccountId, debit: "0", credit: "100" },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      messageBn: expect.stringContaining("এই কোম্পানির নয়"),
+    });
+  });
+
+  it("refuses a sale billed to another company's party", async () => {
+    const strayPartyId = await seedParty(rival, "অন্য কোম্পানির কাস্টমার");
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "customer_payment",
+        date: "2026-08-18",
+        source: "manual",
+        partyId: strayPartyId,
+        payments: [{ financialAccountId: tenant.cashWalletId, amount: "100" }],
+      }),
+    ).rejects.toMatchObject({
+      messageBn: expect.stringContaining("এই কোম্পানির নয়"),
+    });
+  });
+
+  it("fills a batch in from a recipe without costing it", async () => {
+    // A recipe carries quantities and no prices: what the batch is worth is
+    // whatever the flour happens to have cost, which only the ledger knows.
+    const recipeId = await createRecipe(tenant.session, {
+      outputProductId: breadId,
+      nameBn: "পাউরুটি — এক ব্যাচ",
+      expectedYieldPercent: "90",
+      inputs: [{ productId: flourId, quantityPerUnit: "1.111111" }],
+    });
+
+    const settings = await getSettings(tenant.session);
+    const recipe = settings.recipes.find((r) => r.id === recipeId);
+    expect(recipe?.outputProductNameBn).toBe("পাউরুটি");
+    expect(recipe?.inputs).toHaveLength(1);
+    expect(recipe?.inputs[0]?.productNameBn).toBe("ময়দা");
+
+    // And নতুন এন্ট্রি gets it in the same round trip as everything else.
+    const formData = await loadEntryFormData(tenant.session);
+    expect(formData.recipes.map((r) => r.id)).toContain(recipeId);
+  });
+
+  it("refuses a recipe built from another company's product", async () => {
+    const strayProductId = await createProduct(rival.session, {
+      nameBn: "অন্য কোম্পানির ময়দা",
+      kind: "raw_material",
+      unitId: rival.unitKgId,
+      purchasePrice: "0",
+      salePrice: "0",
+      minStockLevel: "0",
+      openingQuantity: "0",
+      openingRate: "0",
+    });
+
+    await expect(
+      createRecipe(tenant.session, {
+        outputProductId: breadId,
+        inputs: [{ productId: strayProductId, quantityPerUnit: "1" }],
+      }),
+    ).rejects.toThrow(/এই কোম্পানির নয়/);
+  });
+
+  it("keeps the engine's warning instead of showing it once and losing it", async () => {
+    // A product with no cost history: issuing it is costed at zero, which the
+    // engine flags. That flag is the only record that this voucher's cost of
+    // goods is a guess, so it outlives the toast that showed it.
+    const ghostId = await createProduct(tenant.session, {
+      nameBn: "বিনা দামের পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "0",
+      salePrice: "0",
+      minStockLevel: "0",
+      openingQuantity: "0",
+      openingRate: "0",
+    });
+
+    // Counted alongside a product that does have a cost — an adjustment of
+    // nothing but zero-valued rows moves no money and the engine rejects it
+    // outright, which is a different lesson.
+    const result = await createTransaction(tenant.session, {
+      type: "stock_adjustment",
+      date: "2026-08-19",
+      source: "manual",
+      adjustments: [
+        { productId: breadId, unitId: tenant.unitKgId, countedQuantity: "445" },
+        { productId: ghostId, unitId: tenant.unitKgId, countedQuantity: "5" },
+      ],
+    });
+    expect(result.warnings.map((w) => w.code)).toContain("ZERO_COST_ISSUE");
+
+    const view = await getNotifications(tenant.session);
+    const kept = view.notifications.find((n) => n.entityId === result.transactionId);
+    expect(kept?.type).toBe("ZERO_COST_ISSUE");
+    expect(kept?.isRead).toBe(false);
+
+    await markAllNotificationsRead(tenant.session);
+    const after = await getNotifications(tenant.session);
+    expect(after.notifications.find((n) => n.id === kept!.id)?.isRead).toBe(true);
+  });
+
+  it("derives the low-stock alert rather than storing one that goes stale", async () => {
+    // Nothing writes this row: it is true while the stock is low and stops
+    // being true when a purchase lands, with no record to go out of date.
+    const scarceId = await createProduct(tenant.session, {
+      nameBn: "চিনি",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "80",
+      salePrice: "0",
+      minStockLevel: "50",
+      openingQuantity: "10",
+      openingRate: "80",
+    });
+
+    const low = await getNotifications(tenant.session);
+    expect(low.alerts.some((a) => a.kind === "low_stock" && a.titleBn.includes("চিনি"))).toBe(
+      true,
+    );
+
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-08-20",
+      source: "manual",
+      partyId: await seedParty(tenant, "চিনির ভেন্ডর", "vendor"),
+      lines: [
+        { productId: scarceId, unitId: tenant.unitKgId, quantity: "200", rate: "80" },
+      ],
+      payments: [],
+    });
+
+    const restocked = await getNotifications(tenant.session);
+    expect(
+      restocked.alerts.some((a) => a.kind === "low_stock" && a.titleBn.includes("চিনি")),
+    ).toBe(false);
+  });
+
+  it("posts a party's opening due instead of assigning it", async () => {
+    // The third time this shape of bug appeared. `createParty` wrote
+    // `party_balances` straight, so the customer list showed the balance and
+    // the aging report — which reads the journal — showed nothing at all. The
+    // two now have to be the same number because only one of them is written.
+    const openingCustomerId = await createParty(tenant.session, {
+      name: "পুরোনো খাতার কাস্টমার",
+      type: "customer",
+      openingBalance: "50000",
+    });
+
+    const [row] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select
+          (select coalesce(receivable, 0)::text from party_balances
+            where company_id = ${tenant.companyId}::uuid
+              and party_id = ${openingCustomerId}::uuid) as cached,
+          (select coalesce(sum(jl.debit - jl.credit), 0)::text from journal_lines jl
+             join accounts a on a.id = jl.account_id
+            where jl.company_id = ${tenant.companyId}::uuid
+              and jl.party_id = ${openingCustomerId}::uuid
+              and a.subtype = 'receivable') as posted
+      `),
+    )) as unknown as { cached: string; posted: string }[];
+
+    expect(row!.cached).toBe("50000.0000");
+    expect(row!.posted).toBe("50000.0000");
+
+    // And it reaches the report that reads the journal.
+    const aging = await getDueAging(tenant.session, { asOf: "2026-12-31" });
+    const aged = aging.rows.find((r) => r.name === "পুরোনো খাতার কাস্টমার");
+    expect(aged).toBeDefined();
+    expect(moneyToDb(aged!.total)).toBe("50000.0000");
+  });
+
+  it("puts a vendor's opening balance on the other side", async () => {
+    const vendorId = await createParty(tenant.session, {
+      name: "পুরোনো খাতার ভেন্ডর",
+      type: "vendor",
+      openingBalance: "12000",
+    });
+
+    const [row] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select coalesce(payable, 0)::text as payable from party_balances
+         where company_id = ${tenant.companyId}::uuid
+           and party_id = ${vendorId}::uuid
+      `),
+    )) as unknown as { payable: string }[];
+
+    expect(row!.payable).toBe("12000.0000");
+  });
+
+  it("still agrees with the ledger after everything above", async () => {
+    // The cache and the control account are two descriptions of the same
+    // goods. What matters is that they say the same thing — not what that
+    // thing is, which every test above this one moves.
+    const [row] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select
+          (select coalesce(sum(value), 0)::text from product_stock
+            where company_id = ${tenant.companyId}::uuid) as cached,
+          (select coalesce(sum(jl.debit - jl.credit), 0)::text from journal_lines jl
+             join accounts a on a.id = jl.account_id
+            where jl.company_id = ${tenant.companyId}::uuid
+              and a.subtype = 'inventory') as posted
+      `),
+    )) as unknown as { cached: string; posted: string }[];
+
+    expect(row!.cached).toBe(row!.posted);
+    expect(Number(row!.cached)).toBeGreaterThan(0);
+  });
+});

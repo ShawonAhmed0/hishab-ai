@@ -9,6 +9,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   accounts,
   financialAccounts,
+  parties,
   productStock,
   products,
   type Transaction as Tx,
@@ -75,6 +76,91 @@ export function collectProductIds(input: TransactionInput): string[] {
 export function collectFinancialAccountIds(input: TransactionInput): string[] {
   if (!("payments" in input)) return [];
   return [...new Set(input.payments.map((p) => p.financialAccountId))];
+}
+
+/**
+ * Chart-of-accounts ids the input names directly.
+ *
+ * Every other account the engine touches is a control account it looked up
+ * itself; these two are chosen by the client, so they are the two that have to
+ * be proved to belong here.
+ */
+export function collectAccountIds(input: TransactionInput): string[] {
+  const ids = new Set<string>();
+  if ("categoryAccountId" in input && input.categoryAccountId) {
+    ids.add(input.categoryAccountId);
+  }
+  if (input.type === "other") for (const entry of input.entries) ids.add(entry.accountId);
+  return [...ids];
+}
+
+export function collectPartyIds(input: TransactionInput): string[] {
+  const ids = new Set<string>();
+  if ("partyId" in input && input.partyId) ids.add(input.partyId);
+  if (input.type === "other") {
+    for (const entry of input.entries) if (entry.partyId) ids.add(entry.partyId);
+  }
+  return [...ids];
+}
+
+/**
+ * A foreign id would otherwise post.
+ *
+ * RLS stops the *rows* leaving the company, but a foreign key is enforced by a
+ * trigger that runs as the table owner, and that bypasses RLS entirely — so
+ * `journal_lines.account_id` pointing at another company's account satisfies
+ * both the constraint and the insert policy, since the policy only checks the
+ * new row's own `company_id`. The reference has to be checked here, against a
+ * company-scoped read, before the engine ever sees it.
+ */
+async function assertReferencesAreOurs(
+  tx: Tx,
+  companyId: string,
+  input: TransactionInput,
+): Promise<void> {
+  const accountIds = collectAccountIds(input);
+  const partyIds = collectPartyIds(input);
+
+  const [ourAccounts, ourParties] = await Promise.all([
+    accountIds.length === 0
+      ? Promise.resolve([])
+      : tx
+          .select({ id: accounts.id, isActive: accounts.isActive })
+          .from(accounts)
+          .where(and(eq(accounts.companyId, companyId), inArray(accounts.id, accountIds))),
+    partyIds.length === 0
+      ? Promise.resolve([])
+      : tx
+          .select({ id: parties.id })
+          .from(parties)
+          .where(and(eq(parties.companyId, companyId), inArray(parties.id, partyIds))),
+  ]);
+
+  const found = new Set(ourAccounts.map((row) => row.id));
+  const strayAccount = accountIds.find((id) => !found.has(id));
+  if (strayAccount) {
+    throw new MissingSetupError(
+      "নির্বাচিত হিসাবের খাতটি এই কোম্পানির নয়।",
+      `Account ${strayAccount} does not belong to company ${companyId}`,
+    );
+  }
+
+  const inactive = ourAccounts.find((row) => !row.isActive);
+  if (inactive) {
+    throw new MissingSetupError(
+      "নির্বাচিত হিসাবের খাতটি বন্ধ করা আছে।",
+      `Account ${inactive.id} is inactive`,
+    );
+  }
+
+  const knownParties = new Set(ourParties.map((row) => row.id));
+  const strayParty = partyIds.find((id) => !knownParties.has(id));
+  if (strayParty) {
+    throw new MissingSetupError(
+      "নির্বাচিত পক্ষটি এই কোম্পানির নয়।",
+      `Party ${strayParty} does not belong to company ${companyId}`,
+    );
+  }
 }
 
 async function loadControlAccounts(tx: Tx, companyId: string): Promise<ControlAccounts> {
@@ -201,6 +287,7 @@ export async function loadPostingContext(
     loadControlAccounts(tx, options.companyId),
     loadWallets(tx, options.companyId, collectFinancialAccountIds(options.input)),
     loadProductStates(tx, options.companyId, collectProductIds(options.input)),
+    assertReferencesAreOurs(tx, options.companyId, options.input),
   ]);
 
   return {

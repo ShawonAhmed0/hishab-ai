@@ -148,6 +148,20 @@ export function formatMoney(a: Money, options: MoneyFormatOptions = {}): string 
   return symbol ? `${sign}${TAKA_SIGN} ${body}` : `${sign}${body}`;
 }
 
+/**
+ * A percentage stored at money scale — an expected yield, a margin.
+ *
+ * Trailing zeros are trimmed, because `90.0000%` is a column heading's idea of
+ * ninety percent and nobody else's.
+ */
+export function formatPercent(a: Money, options: { decimals?: number } = {}): string {
+  const { decimals = 2 } = options;
+  const text = formatFixed(a, MONEY_SCALE, decimals)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
+  return `${text}%`;
+}
+
 const CRORE = 10_000_000n * MONEY_UNIT;
 const LAKH = 100_000n * MONEY_UNIT;
 const THOUSAND = 1_000n * MONEY_UNIT;

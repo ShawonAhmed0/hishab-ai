@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
-import { createTransaction, PermissionError } from "@hishabai/core";
+import { createTransaction, MissingSetupError, PermissionError } from "@hishabai/core";
 import { PostingError } from "@hishabai/accounting";
 import { addMoney, moneyToDb } from "@hishabai/shared";
 import { requireSession } from "@/lib/session";
@@ -73,6 +73,11 @@ export async function createEntryAction(rawInput: unknown): Promise<EntryResult>
     }
 
     if (error instanceof PermissionError) {
+      return { ok: false, error: error.messageBn };
+    }
+
+    // Setup that is incomplete, or a reference that is not this company's.
+    if (error instanceof MissingSetupError) {
       return { ok: false, error: error.messageBn };
     }
 

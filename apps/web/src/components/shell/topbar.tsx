@@ -19,12 +19,15 @@ export function Topbar({
   companies,
   activeCompanyId,
   userName,
+  notifications,
   onSwitch,
   onSignOut,
 }: {
   companies: CompanyOption[];
   activeCompanyId: string;
   userName: string;
+  /** The bell, already loaded on the server. */
+  notifications?: React.ReactNode;
   onSwitch: (companyId: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 }) {
@@ -126,10 +129,13 @@ export function Topbar({
         </div>
       </form>
 
+      {/* ---- alerts ---- */}
+      <div className="ml-auto md:ml-0">{notifications}</div>
+
       {/* ---- account ---- */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <Button variant="ghost" size="icon" aria-label={userName} className="ml-auto md:ml-0">
+          <Button variant="ghost" size="icon" aria-label={userName}>
             <span className="flex size-8 items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold">
               {userName.slice(0, 1)}
             </span>

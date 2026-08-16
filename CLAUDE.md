@@ -66,16 +66,23 @@ derived by the engine.
 
 ### Never write a cache table without posting the journal
 
-This has bitten twice, in the same shape both times:
+This has bitten three times, in the same shape every time:
 
 - opening stock written straight into `product_stock`
 - a wallet's opening balance written straight into `financial_accounts.balance`
+- a party's opening due written straight into `party_balances`
 
-Both times every screen agreed, because they all read the cache — and the
-ledger had never heard of the asset. A balance sheet would have been wrong from
-day one. `product_stock`, `party_balances`, `account_balances` and
+Every time, every screen agreed — because they all read the cache — and the
+ledger had never heard of the balance. A balance sheet would have been wrong
+from day one. The party one was the loudest: the customer list showed ৳50,000
+outstanding and the aging report, which reads the journal, showed nothing.
+
+`product_stock`, `party_balances`, `account_balances` and
 `financial_accounts.balance` are **derived**: maintained by trigger from
-`journal_lines`. If you find yourself assigning one, post the entry instead.
+`journal_lines`. If you find yourself assigning one, post the entry instead —
+`postOpeningBalance` in `packages/core/src/opening-balance.ts` is where all
+three of these now go, and a journal line needs `party_id` set for the party
+half of that trigger to fire at all.
 
 Corollaries that follow from the same rule:
 
@@ -105,6 +112,21 @@ only and must never be set in Vercel.
 
 Any new read path is a second way into the data and gets its own isolation
 test rather than inheriting trust from the one beside it.
+
+### RLS does not check the ids you *write*
+
+A policy is `company_id = app.current_company_id()` — it checks the new row's
+own company, and nothing else. A **foreign key is enforced by a trigger that
+runs as the table owner, and that bypasses RLS entirely**, so a crafted
+`account_id` or `party_id` belonging to another company satisfies both the
+constraint and the insert policy and lands in this company's journal.
+
+Every client-supplied id therefore gets proved against a company-scoped read
+before it is used. `posting-context.ts` does this for the two the client
+chooses — `categoryAccountId` and `other.entries[].accountId` — plus
+`partyId`; products and wallets were already covered because the engine throws
+when an id is missing from its context map. `recipes.ts` does the same for the
+products a recipe names. A new user-chosen id is a new place to do it.
 
 ### One round trip, and what it costs
 
@@ -139,10 +161,20 @@ port; Drizzle routes everything through `client.unsafe()`, which hard-codes
 ## Still open
 
 Vercel env (points at a deleted Supabase project; needs port 6543 and `bom1`),
-the `/api/v1` Android surface (not started), production recipes and
-notifications (schema exists, no service), and real voice/OCR (the parser in
+the `/api/v1` Android surface (not started), and real voice/OCR (the parser in
 `entry/voice-scan.tsx` is a heuristic stub — the review-and-confirm flow
 around it is not).
+
+## Alerts are states; notifications are events
+
+`notifications` holds events — the engine's own `PostingWarning`s, written
+inside the posting transaction so a rolled-back entry leaves none behind.
+"স্টক কমে গেছে" is not one of those: it is true exactly while the stock is
+low and stops being true when a purchase lands. Storing it would be the cache
+mistake again, in a new table. So low stock, aged receivables and negative
+wallets are **derived on read** in `notifications.ts` and there is nothing to
+go stale. Aged receivables come from `journal_lines`, not
+`transactions.due_amount`, for the reason above.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

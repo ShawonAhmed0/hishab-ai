@@ -9,12 +9,14 @@
  * rather than in the engine, whose job is deriving consequences from something
  * a person typed.
  *
- * It exists as its own module because it has now been got wrong twice in the
- * same way. Opening stock was written straight into `product_stock`, and a
- * wallet's opening balance straight into `financial_accounts.balance` — in both
- * cases the cache said the asset existed while the ledger had never heard of
- * it, and in both cases every screen agreed because they all read the cache.
- * A balance sheet would have been wrong from the first day.
+ * It exists as its own module because it has now been got wrong three times in
+ * the same way. Opening stock was written straight into `product_stock`, a
+ * wallet's opening balance straight into `financial_accounts.balance`, and a
+ * party's opening due straight into `party_balances` — every time, the cache
+ * said the balance existed while the ledger had never heard of it, and every
+ * time every screen agreed because they all read the cache. The party one was
+ * the loudest: the customer list showed ৳50,000 owing and the aging report,
+ * which reads the journal, showed nothing at all.
  */
 import { and, eq } from "drizzle-orm";
 import {
@@ -57,8 +59,13 @@ export interface OpeningEntry {
 }
 
 /**
- * Books an opening balance: a voucher, and Dr asset / Cr opening-balance-equity
- * against it.
+ * Books an opening balance: a voucher, and the opened account against
+ * opening-balance equity.
+ *
+ * An asset is debited and equity credited; a liability — a party you already
+ * owe — is the mirror of that, which is what `side` selects. `amount` is always
+ * positive: the caller decides which side it lands on rather than passing a
+ * negative number and hoping the arithmetic works out.
  *
  * The voucher row is created even when the amount is zero, because the caller
  * may still have history to hang off it — an opening stock movement of 1,000 kg
@@ -72,11 +79,15 @@ export async function postOpeningBalance(
   tx: Tx,
   session: Session,
   options: {
-    /** The asset being opened: inventory, cash, bank, MFS. */
-    debitAccountId: string;
+    /** What is being opened: inventory, cash, bank, MFS, receivable, payable. */
+    accountId: string;
     amount: Money;
     /** Shown on the voucher and on the journal line. */
     description: string;
+    /** "debit" for an asset, "credit" for something already owed. */
+    side?: "debit" | "credit";
+    /** Set for a party's opening due, so the trigger maintains their ledger. */
+    partyId?: string;
   },
 ): Promise<OpeningEntry> {
   const companyId = session.companyId;
@@ -116,14 +127,21 @@ export async function postOpeningBalance(
     })
     .returning({ id: journalEntries.id });
 
+  const opened = options.side ?? "debit";
+  const zero = moneyToDb(ZERO);
+  const total = moneyToDb(options.amount);
+
   await tx.insert(journalLines).values([
     {
       companyId,
       journalEntryId: journal!.id,
       transactionId: entry.transactionId,
-      accountId: options.debitAccountId,
-      debit: moneyToDb(options.amount),
-      credit: moneyToDb(ZERO),
+      accountId: options.accountId,
+      // The party id is what makes the trigger maintain `party_balances`;
+      // without it the control account moves and the party ledger does not.
+      partyId: options.partyId ?? null,
+      debit: opened === "debit" ? total : zero,
+      credit: opened === "debit" ? zero : total,
       narration: options.description,
       date,
     },
@@ -132,8 +150,8 @@ export async function postOpeningBalance(
       journalEntryId: journal!.id,
       transactionId: entry.transactionId,
       accountId: equityId,
-      debit: moneyToDb(ZERO),
-      credit: moneyToDb(options.amount),
+      debit: opened === "debit" ? zero : total,
+      credit: opened === "debit" ? total : zero,
       date,
     },
   ]);

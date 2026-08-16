@@ -53,6 +53,7 @@ import {
   type TransactionType,
 } from "@hishabai/shared";
 import { loadPostingContext, loadProductStates } from "./posting-context";
+import { recordPostingWarnings } from "./notifications";
 import { requirePermission, type Session, type TenantScope } from "./session";
 
 /** Voucher prefixes, so a number tells you what it is at a glance. */
@@ -118,6 +119,14 @@ export async function createTransaction(
       input,
       result,
       previousDue,
+    });
+
+    // Inside the same transaction: an entry that rolls back leaves no warning
+    // behind about a voucher that does not exist.
+    await recordPostingWarnings(tx, session, {
+      transactionId,
+      voucherNo,
+      warnings: result.warnings,
     });
 
     await writeAudit(tx, session, {

@@ -329,3 +329,27 @@ export const productCategoryInputSchema = z.object({
   nameBn: z.string().trim().min(1, "নাম দিন").max(120),
 });
 export type ProductCategoryInput = z.infer<typeof productCategoryInputSchema>;
+
+/**
+ * A standing recipe: what one batch of a product takes to make.
+ *
+ * It carries no prices. Cost is whatever the raw materials happen to be worth
+ * on the day the batch runs, which only the ledger knows — a recipe that
+ * remembered a rate would be quoting a stale one within a week.
+ */
+export const recipeInputSchema = z.object({
+  outputProductId: uuid,
+  nameBn: z.string().trim().max(160).optional(),
+  /** 90 for the 450-out-of-500 case. Advisory: nothing enforces the yield. */
+  expectedYieldPercent: moneyString.optional(),
+  notes: z.string().trim().max(1000).optional(),
+  inputs: z
+    .array(
+      z.object({
+        productId: uuid,
+        quantityPerUnit: positiveQtyString,
+      }),
+    )
+    .min(1, "অন্তত একটি কাঁচামাল যোগ করুন"),
+});
+export type RecipeInput = z.infer<typeof recipeInputSchema>;

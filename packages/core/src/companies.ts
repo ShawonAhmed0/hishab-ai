@@ -190,7 +190,7 @@ export async function createFinancialAccount(
       .returning({ id: financialAccounts.id });
 
     await postOpeningBalance(tx, session, {
-      debitAccountId: accountId,
+      accountId,
       amount: opening,
       description: `${input.nameBn} — প্রারম্ভিক ব্যালেন্স`,
     });
