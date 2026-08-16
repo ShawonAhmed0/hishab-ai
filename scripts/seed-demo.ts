@@ -94,7 +94,13 @@ async function ensureAuthUser(): Promise<string> {
   `);
 
   await closeDb();
-  if (previous) process.env["DATABASE_URL"] = previous;
+  // Restore unconditionally. Guarding on `previous` meant that when
+  // DATABASE_URL was unset — a fresh .env.local — the owner connection stayed
+  // in place and the rest of the seed ran as `postgres`, which has BYPASSRLS.
+  // The data lands either way, so nothing looks wrong; what is lost is the
+  // check that the runtime role can actually do the work.
+  if (previous === undefined) delete process.env["DATABASE_URL"];
+  else process.env["DATABASE_URL"] = previous;
   return userId;
 }
 

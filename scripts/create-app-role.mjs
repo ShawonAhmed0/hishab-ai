@@ -80,19 +80,52 @@ const appUrl = `postgresql://${ROLE}.${projectRef}:${encodeURIComponent(password
 
 let text = readFileSync(ENV_PATH, "utf8");
 
-if (/^SUPABASE_DB_ADMIN_URL=/m.test(text)) {
-  text = text.replace(/^SUPABASE_DB_ADMIN_URL=.*$/m, `SUPABASE_DB_ADMIN_URL=${adminUrl}`);
-} else {
-  text = text.replace(
-    /^DATABASE_URL=.*$/m,
-    `# Owner connection — migrations only. Has BYPASSRLS, so never used at runtime.\nSUPABASE_DB_ADMIN_URL=${adminUrl}\n\n# Runtime connection — NOBYPASSRLS, so row-level security actually applies.\nDATABASE_URL=${appUrl}`,
-  );
-}
-if (!text.includes(`${ROLE}.${projectRef}`)) {
-  text = text.replace(/^DATABASE_URL=.*$/m, `DATABASE_URL=${appUrl}`);
+/**
+ * Set a key whether or not it is already in the file.
+ *
+ * The earlier version only ever *replaced* an existing line, so a fresh
+ * .env.local — which is exactly what you have when setting up a new project,
+ * and what the setup instructions tell you to write — came out with no
+ * DATABASE_URL at all, while this script still reported success. The app then
+ * failed at the first query and the integration tests quietly skipped
+ * themselves.
+ */
+function setKey(source, key, value, comment) {
+  const line = `${key}=${value}`;
+  if (new RegExp(`^${key}=`, "m").test(source)) {
+    return source.replace(new RegExp(`^${key}=.*$`, "m"), line);
+  }
+  const prefix = source.endsWith("\n") || source === "" ? "" : "\n";
+  return `${source}${prefix}\n${comment ? `# ${comment}\n` : ""}${line}\n`;
 }
 
+text = setKey(
+  text,
+  "SUPABASE_DB_ADMIN_URL",
+  adminUrl,
+  "Owner connection — migrations only. Has BYPASSRLS, so never used at runtime.",
+);
+text = setKey(
+  text,
+  "DATABASE_URL",
+  appUrl,
+  "Runtime connection — NOBYPASSRLS, so row-level security actually applies.",
+);
+
 writeFileSync(ENV_PATH, text);
+
+// Read it back rather than trusting the edit: reporting success for a file we
+// did not actually change is how this went wrong before.
+const written = readFileSync(ENV_PATH, "utf8");
+for (const [key, expected] of [
+  ["DATABASE_URL", appUrl],
+  ["SUPABASE_DB_ADMIN_URL", adminUrl],
+]) {
+  if (!written.includes(`${key}=${expected}`)) {
+    console.error(`✗ ${key} was not written to ${ENV_PATH}. Set it by hand.`);
+    process.exit(1);
+  }
+}
 
 console.log(`✓ ${ENV_PATH} updated (backup at ${ENV_PATH}.bak)`);
 console.log(`  DATABASE_URL          → ${ROLE}@${admin.host}`);
