@@ -28,6 +28,7 @@ import { moneyToDb } from "@hishabai/shared";
 import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
 import { getDashboard } from "./dashboard";
 import { getProductDetail } from "./inventory";
+import { getParties, getPartyLedger } from "./party-ledger";
 import { createProduct, listParties, listProducts, loadEntryFormData } from "./master-data";
 import type { Session } from "./session";
 
@@ -85,11 +86,15 @@ async function dropTenant(tenant: Tenant | undefined): Promise<void> {
   });
 }
 
-async function seedParty(tenant: Tenant, name: string): Promise<string> {
+async function seedParty(
+  tenant: Tenant,
+  name: string,
+  type: "customer" | "vendor" = "customer",
+): Promise<string> {
   return withTenant(tenant.session, async (tx) => {
     const [row] = await tx
       .insert(parties)
-      .values({ companyId: tenant.companyId, name, type: "customer" })
+      .values({ companyId: tenant.companyId, name, type })
       .returning({ id: parties.id });
     return row!.id;
   });
@@ -400,4 +405,105 @@ describeDb("the ৳80,000 sale, end to end", () => {
     expect(totals!.posted).toBe("10000.0000");
   });
 
+});
+
+describeDb("the party statement", () => {
+  let tenant: Tenant;
+  let customerId: string;
+  let vendorId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Statement Co");
+    customerId = await seedParty(tenant, "মায়ের দোয়া ট্রেডার্স");
+    vendorId = await seedParty(tenant, "রহমান পেপার মিলস", "vendor");
+    const productId = await seedProduct(tenant, "অফসেট পেপার", "1000", "120");
+
+    // Both sides on the same date, each half paid — which is exactly the case
+    // where the ordering and the sign have to be right.
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "500", rate: "160" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "50000" }],
+    });
+
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: vendorId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "100" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "4000" }],
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  it("lists the bill before the payment that settles it", async () => {
+    // Both lines carry the same date and the same created_at, so before the
+    // sort key learned about subtype the fall-through was jl.id — a random
+    // uuid, which put the receipt first about half the time and opened the
+    // statement at −৳50,000 against a bill that had not appeared yet.
+    const view = await getPartyLedger(tenant.session, customerId, "receivable");
+
+    expect(view!.entries.map((e) => Number(e.debit))).toEqual([80000, 0]);
+    expect(view!.entries.map((e) => Number(e.credit))).toEqual([0, 50000]);
+    expect(view!.entries.map((e) => Number(e.balance))).toEqual([80000, 30000]);
+  });
+
+  it("closes at the balance the ledger maintains separately", async () => {
+    const view = await getPartyLedger(tenant.session, customerId, "receivable");
+    const last = view!.entries.at(-1)!;
+
+    // The statement adds the journal up itself; party_balances is maintained by
+    // trigger. They are two readings of the same postings and must agree.
+    expect(Number(last.balance)).toBe(Number(view!.party.receivable));
+  });
+
+  it("counts a vendor's bill up, not down", async () => {
+    // A vendor's bill is a credit to payable, so the raw debit − credit running
+    // total would descend into negative numbers and print as ৳-6,000 owed.
+    const view = await getPartyLedger(tenant.session, vendorId, "payable");
+
+    expect(view!.entries.map((e) => Number(e.credit))).toEqual([10000, 0]);
+    expect(view!.entries.map((e) => Number(e.debit))).toEqual([0, 4000]);
+    expect(view!.entries.map((e) => Number(e.balance))).toEqual([10000, 6000]);
+    expect(Number(view!.party.payable)).toBe(6000);
+  });
+
+  it("keeps the two sides on their own lists", async () => {
+    const customers = await getParties(tenant.session, { type: "customer" });
+    const vendors = await getParties(tenant.session, { type: "vendor" });
+
+    expect(customers.parties.map((p) => p.name)).toEqual(["মায়ের দোয়া ট্রেডার্স"]);
+    expect(vendors.parties.map((p) => p.name)).toEqual(["রহমান পেপার মিলস"]);
+    expect(Number(customers.summary.totalReceivable)).toBe(30000);
+    expect(Number(vendors.summary.totalPayable)).toBe(6000);
+  });
+
+  it("derives lifetime totals from the journal, not the unwritten columns", async () => {
+    // party_balances has total_sales / total_purchases / total_received /
+    // total_paid, and apply_journal_line never writes any of them. Reading them
+    // would show a permanent ৳0 next to মোট বিক্রয় on every profile.
+    const { parties: list } = await getParties(tenant.session, { type: "vendor" });
+    const vendor = list[0]!;
+
+    expect(Number(vendor.totalPurchases)).toBe(10000);
+    expect(Number(vendor.totalPaid)).toBe(4000);
+  });
+
+  it("finds the same numbers through search as through the list", async () => {
+    // Two query paths — one interpolated, one bound — and a profile that
+    // disagrees with itself depending on how you got there is the failure.
+    const listed = await getParties(tenant.session, { type: "vendor" });
+    const found = await getParties(tenant.session, { type: "vendor", search: "রহমান" });
+
+    expect(found.parties).toEqual(listed.parties);
+    expect(found.summary).toEqual(listed.summary);
+  });
 });

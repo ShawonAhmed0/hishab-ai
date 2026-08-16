@@ -255,6 +255,7 @@ export const emptyStates = {
   noTransactions: "এখনো কোনো লেনদেন নেই",
   noTransactionsHint: "প্রথম এন্ট্রি যোগ করে শুরু করুন",
   noCustomers: "এখনো কোনো কাস্টমার যোগ করা হয়নি",
+  noVendors: "এখনো কোনো ভেন্ডর যোগ করা হয়নি",
   noProducts: "এখনো কোনো পণ্য যোগ করা হয়নি",
   noAlerts: "কোনো সতর্কতা নেই",
 } as const;

@@ -237,11 +237,13 @@ export interface LedgerEntry {
   transactionType: TransactionType | null;
   status: string | null;
   narration: string | null;
-  /** What increased their debt to us (a bill). Money scale. */
+  /** Raw ledger sides. On a customer the bill is the debit and the receipt is
+   *  the credit; on a vendor it is the other way round. Kept unflipped so the
+   *  printed statement reads the same as the journal it came from. */
   debit: string;
-  /** What reduced it (a receipt). */
   credit: string;
-  /** Balance after this line, oldest to newest. */
+  /** Balance after this line, oldest to newest, in the direction `side` asked
+   *  for — positive is outstanding. */
   balance: string;
 }
 
@@ -249,6 +251,19 @@ export interface PartyLedgerView {
   party: PartyRow;
   entries: LedgerEntry[];
 }
+
+/**
+ * Which half of a party's ledger to read.
+ *
+ * Most parties only have one, but a party marked 'both' has two control
+ * accounts running at once, and netting them is not what either screen is
+ * asking for: opening a vendor profile means "what do we owe them", not "what
+ * is our net position after subtracting the sacks of paper they bought back".
+ * Passing a side filters to that account and orients the running balance so a
+ * positive number means outstanding — a debit balance for a customer, a credit
+ * balance for a vendor.
+ */
+export type PartySide = "receivable" | "payable";
 
 /**
  * The বকেয়া বিবরণী: every movement against this party's control account, with
@@ -261,7 +276,17 @@ export interface PartyLedgerView {
 export async function getPartyLedger(
   scope: TenantScope,
   partyId: string,
+  side?: PartySide,
 ): Promise<PartyLedgerView | null> {
+  const subtype = side
+    ? tenantQuery`a.subtype = ${token(side)}`
+    : tenantQuery`a.subtype in ('receivable', 'payable')`;
+
+  // Positive means outstanding, whichever side is being read. Without a side
+  // the two halves net against each other, which is the honest answer for a
+  // party that is genuinely both.
+  const movement = side === "payable" ? "jl.credit - jl.debit" : "jl.debit - jl.credit";
+
   const rows = await tenantRead<{
     party: PartyRow | null;
     entries: LedgerEntry[] | null;
@@ -289,7 +314,7 @@ export async function getPartyLedger(
                   coalesce(jl.narration, tr.description) as narration,
                   jl.debit::text  as debit,
                   jl.credit::text as credit,
-                  sum(jl.debit - jl.credit) over (
+                  sum(${raw(movement)}) over (
                     order by jl.date, tr.created_at, ${raw(BILL_BEFORE_PAYMENT)}, jl.id
                     rows between unbounded preceding and current row
                   )::text as balance,
@@ -301,7 +326,7 @@ export async function getPartyLedger(
              left join transactions tr on tr.id = jl.transaction_id
             where jl.company_id = app.current_company_id()
               and jl.party_id = ${partyId}::uuid
-              and a.subtype in ('receivable', 'payable')
+              and ${raw(subtype)}
          ) t) as entries
     `,
   );

@@ -3,24 +3,31 @@
  *
  *   npm run db:seed:demo
  *
- * Creates a confirmed login, a company, a customer, two products and the
- * spec's ৳80,000 sale. Everything except the auth row goes through the same
- * services the UI uses, so what you see on screen is what the engine produced —
- * not fixtures painted on top.
+ * Creates a confirmed login, a company, a customer, a vendor, two products,
+ * the spec's ৳80,000 sale and a ৳50,000 purchase against it. Everything except
+ * the auth row goes through the same services the UI uses, so what you see on
+ * screen is what the engine produced — not fixtures painted on top.
  *
- * Idempotent: re-running reuses the existing user and company.
+ * Idempotent per fixture, not just overall: re-running reuses whatever is
+ * already there and adds only what is missing.
  */
 import { sql } from "drizzle-orm";
 import {
   closeDb,
   getDb,
   parties,
+  transactions,
   units,
   withTenant,
   withUser,
   financialAccounts,
 } from "@hishabai/db";
-import { createProduct, createTransaction, listCompanies } from "@hishabai/core";
+import {
+  createProduct,
+  createTransaction,
+  listCompanies,
+  listProducts,
+} from "@hishabai/core";
 import { moneyToDb } from "@hishabai/shared";
 import { eq, and } from "drizzle-orm";
 
@@ -122,14 +129,10 @@ async function main(): Promise<void> {
   const company = companies[0]!;
   const session = { userId, companyId: company.id, role: company.role };
 
-  const seeded = await withTenant(session, async (tx) => {
-    const existing = await tx
-      .select({ id: parties.id })
-      .from(parties)
-      .where(eq(parties.companyId, company.id))
-      .limit(1);
-    if (existing.length > 0) return null;
-
+  // Resolved piece by piece rather than all-or-nothing. The old guard bailed
+  // the moment any party existed, so a company seeded before a new fixture was
+  // added could never pick it up — the demo just silently lacked it.
+  const refs = await withTenant(session, async (tx) => {
     const [kg] = await tx
       .select({ id: units.id })
       .from(units)
@@ -142,39 +145,55 @@ async function main(): Promise<void> {
       .where(eq(financialAccounts.companyId, company.id))
       .limit(1);
 
-    const [customer] = await tx
-      .insert(parties)
-      .values({
-        companyId: company.id,
-        name: "মায়ের দোয়া ট্রেডার্স",
+    async function ensureParty(
+      name: string,
+      values: { type: "customer" | "vendor"; phone: string; address?: string },
+    ): Promise<string> {
+      const [found] = await tx
+        .select({ id: parties.id })
+        .from(parties)
+        .where(and(eq(parties.companyId, company.id), eq(parties.name, name)))
+        .limit(1);
+      if (found) return found.id;
+
+      const [row] = await tx
+        .insert(parties)
+        .values({ companyId: company.id, name, ...values })
+        .returning({ id: parties.id });
+      return row!.id;
+    }
+
+    return {
+      unitId: kg!.id,
+      walletId: cash!.id,
+      customerId: await ensureParty("মায়ের দোয়া ট্রেডার্স", {
         type: "customer",
         phone: "01812345678",
         address: "চকবাজার, ঢাকা",
-      })
-      .returning({ id: parties.id });
-
-    await tx.insert(parties).values({
-      companyId: company.id,
-      name: "রহমান পেপার মিলস",
-      type: "vendor",
-      phone: "01912345678",
-    });
-
-    return { customerId: customer!.id, unitId: kg!.id, walletId: cash!.id };
+      }),
+      vendorId: await ensureParty("রহমান পেপার মিলস", {
+        type: "vendor",
+        phone: "01912345678",
+        address: "টঙ্গী, গাজীপুর",
+      }),
+    };
   });
 
-  if (!seeded) {
-    console.log("· company already has data — leaving it alone");
-    await closeDb();
-    return;
-  }
   // Through createProduct, not a direct insert: opening stock has to post its
   // journal entry and its stock movement, and seeding around that is how the
   // ledger ended up ৳120,000 short of the stock table in the first place.
-  const paperId = await createProduct(session, {
-    nameBn: "অফসেট পেপার",
+  const catalogue = await listProducts(session);
+  async function ensureProduct(
+    nameBn: string,
+    input: Omit<Parameters<typeof createProduct>[1], "nameBn" | "unitId">,
+  ): Promise<string> {
+    const found = catalogue.find((p) => p.nameBn === nameBn);
+    if (found) return found.id;
+    return createProduct(session, { nameBn, unitId: refs.unitId, ...input });
+  }
+
+  const paperId = await ensureProduct("অফসেট পেপার", {
     kind: "finished_good",
-    unitId: seeded.unitId,
     purchasePrice: "120",
     salePrice: "160",
     minStockLevel: "100",
@@ -182,33 +201,58 @@ async function main(): Promise<void> {
     openingRate: "120",
   });
 
-  await createProduct(session, {
-    nameBn: "জাম্বু পেপার",
+  await ensureProduct("জাম্বু পেপার", {
     kind: "raw_material",
-    unitId: seeded.unitId,
     purchasePrice: "100",
     salePrice: "0",
     minStockLevel: "200",
   });
 
-  console.log("✓ customer, vendor and products created (1,000 KG opening stock)");
-
-  const sale = await createTransaction(session, {
-    type: "sale",
-    date: new Date().toISOString().slice(0, 10),
-    source: "manual",
-    partyId: seeded.customerId,
-    memoNo: "125",
-    lines: [
-      { productId: paperId, unitId: seeded.unitId, quantity: "500", rate: "160" },
-    ],
-    payments: [{ financialAccountId: seeded.walletId, amount: "50000" }],
-  });
-
-  console.log(
-    `✓ sale posted ${sale.voucherNo} — মোট ${moneyToDb(sale.totals.total)}, ` +
-      `পরিশোধ ${moneyToDb(sale.totals.paid)}, বকেয়া ${moneyToDb(sale.totals.due)}`,
+  const today = new Date().toISOString().slice(0, 10);
+  const posted = await withTenant(session, async (tx) =>
+    tx
+      .select({ type: transactions.type })
+      .from(transactions)
+      .where(eq(transactions.companyId, company.id)),
   );
+  const already = new Set(posted.map((row) => row.type));
+
+  // The spec's worked example: ৳80,000 billed, ৳50,000 taken, ৳30,000 left.
+  if (!already.has("sale")) {
+    const sale = await createTransaction(session, {
+      type: "sale",
+      date: today,
+      source: "manual",
+      partyId: refs.customerId,
+      memoNo: "125",
+      lines: [{ productId: paperId, unitId: refs.unitId, quantity: "500", rate: "160" }],
+      payments: [{ financialAccountId: refs.walletId, amount: "50000" }],
+    });
+
+    console.log(
+      `✓ sale posted ${sale.voucherNo} — মোট ${moneyToDb(sale.totals.total)}, ` +
+        `পরিশোধ ${moneyToDb(sale.totals.paid)}, বকেয়া ${moneyToDb(sale.totals.due)}`,
+    );
+  }
+
+  // The mirror of it, so ভেন্ডর has a statement to show rather than an empty
+  // profile: ৳50,000 of paper bought, ৳20,000 paid, ৳30,000 still owed.
+  if (!already.has("purchase")) {
+    const purchase = await createTransaction(session, {
+      type: "purchase",
+      date: today,
+      source: "manual",
+      partyId: refs.vendorId,
+      memoNo: "RPM-4471",
+      lines: [{ productId: paperId, unitId: refs.unitId, quantity: "400", rate: "125" }],
+      payments: [{ financialAccountId: refs.walletId, amount: "20000" }],
+    });
+
+    console.log(
+      `✓ purchase posted ${purchase.voucherNo} — মোট ${moneyToDb(purchase.totals.total)}, ` +
+        `পরিশোধ ${moneyToDb(purchase.totals.paid)}, পাওনা ${moneyToDb(purchase.totals.due)}`,
+    );
+  }
 
   await closeDb();
 }

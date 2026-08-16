@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Phone, Receipt, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Receipt, ShoppingCart, Wallet } from "lucide-react";
 import { getPartyLedger } from "@hishabai/core";
 import { bn, moneyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
@@ -13,29 +13,31 @@ import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/compon
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
-export default async function CustomerPage({
+export default async function VendorPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { data } = await sessionWithData((scope) => getPartyLedger(scope, id, "receivable"));
+  // The payable half: what we owe them, not the net of both directions — a
+  // party marked 'both' has a customer profile for the other side.
+  const { data } = await sessionWithData((scope) => getPartyLedger(scope, id, "payable"));
 
   // Missing and not-yours give the same answer — RLS returns no row either way.
   if (!data) notFound();
 
   const { party, entries } = data;
-  const due = moneyFromDb(party.receivable);
+  const payable = moneyFromDb(party.payable);
 
   return (
     <div className="space-y-5">
       <div className="no-print">
         <Link
-          href="/customers"
+          href="/vendors"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          {bn.nav.customers}
+          {bn.nav.vendors}
         </Link>
       </div>
 
@@ -62,41 +64,41 @@ export default async function CustomerPage({
         </div>
 
         <div className="flex gap-2">
-          <PrintButton label={`${bn.due.statement} প্রিন্ট`} />
+          <PrintButton label="পাওনা বিবরণী প্রিন্ট" />
           <Button asChild size="sm" className="no-print">
             <Link href="/entry">{bn.nav.newEntry}</Link>
           </Button>
         </div>
       </div>
 
-      {/* Spec §13: total billed, total received, and what is still owed. */}
+      {/* Spec §13, mirrored: total billed by them, total paid, still owed. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label="মোট বিক্রয়"
-          value={moneyFromDb(party.totalSales)}
-          icon={TrendingUp}
-          footnote="এই কাস্টমারের কাছে মোট বিল"
+          label="মোট ক্রয়"
+          value={moneyFromDb(party.totalPurchases)}
+          icon={ShoppingCart}
+          footnote="এই ভেন্ডরের কাছ থেকে মোট কেনা"
         />
         <StatTile
           label="মোট পরিশোধ"
-          value={moneyFromDb(party.totalReceived)}
-          tone="credit"
+          value={moneyFromDb(party.totalPaid)}
+          tone="debit"
           icon={Receipt}
-          footnote="যত টাকা পাওয়া গেছে"
+          footnote="যত টাকা দেওয়া হয়েছে"
         />
         <StatTile
-          label={bn.fields.dueAmount}
-          value={due}
-          tone={due > 0n ? "due" : "neutral"}
+          label="পাওনা"
+          value={payable}
+          tone={payable > 0n ? "due" : "neutral"}
           icon={Wallet}
-          footnote={due > 0n ? "এখনো বাকি" : "সব পরিশোধ হয়েছে"}
+          footnote={payable > 0n ? "এখনো দিতে হবে" : "সব পরিশোধ হয়েছে"}
         />
       </div>
 
       <Card className="card">
         <CardHeader>
           <div>
-            <CardTitle>{bn.due.statement}</CardTitle>
+            <CardTitle>পাওনা বিবরণী</CardTitle>
             {/* Only meaningful on paper, where the reader has no company switcher. */}
             <p className="hidden text-xs text-muted-foreground print:block">
               {party.name} · {new Date().toLocaleDateString("en-GB")}
@@ -110,7 +112,7 @@ export default async function CustomerPage({
         {entries.length === 0 ? (
           <EmptyState
             title="এখনো কোনো লেনদেন নেই"
-            hint="এই কাস্টমারের প্রথম বিক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে"
+            hint="এই ভেন্ডরের প্রথম ক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে"
           />
         ) : (
           <>
@@ -128,8 +130,10 @@ export default async function CustomerPage({
                 </THead>
                 <tbody>
                   {entries.map((entry) => {
-                    const debit = moneyFromDb(entry.debit);
-                    const credit = moneyFromDb(entry.credit);
+                    // Flipped against the customer statement: a vendor's bill
+                    // credits payable, and paying it debits the account down.
+                    const bill = moneyFromDb(entry.credit);
+                    const paid = moneyFromDb(entry.debit);
                     const balance = moneyFromDb(entry.balance);
 
                     return (
@@ -164,15 +168,15 @@ export default async function CustomerPage({
                           ) : null}
                         </TD>
                         <TD numeric>
-                          {debit > 0n ? (
-                            <MoneyText value={debit} size="sm" symbol={false} />
+                          {bill > 0n ? (
+                            <MoneyText value={bill} size="sm" symbol={false} />
                           ) : (
                             <span className="text-subtle-foreground">—</span>
                           )}
                         </TD>
                         <TD numeric>
-                          {credit > 0n ? (
-                            <MoneyText value={credit} size="sm" symbol={false} tone="credit" />
+                          {paid > 0n ? (
+                            <MoneyText value={paid} size="sm" symbol={false} tone="debit" />
                           ) : (
                             <span className="text-subtle-foreground">—</span>
                           )}
@@ -193,14 +197,14 @@ export default async function CustomerPage({
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
                     <TD className="font-semibold" />
                     <TD />
-                    <TD className="font-semibold">বর্তমান বকেয়া</TD>
+                    <TD className="font-semibold">বর্তমান পাওনা</TD>
                     <TD />
                     <TD />
                     <TD numeric>
                       <MoneyText
-                        value={due}
+                        value={payable}
                         size="sm"
-                        tone={due > 0n ? "due" : "neutral"}
+                        tone={payable > 0n ? "due" : "neutral"}
                         className="font-bold"
                       />
                     </TD>
@@ -211,10 +215,10 @@ export default async function CustomerPage({
 
             <MobileCards>
               {entries.map((entry) => {
-                const debit = moneyFromDb(entry.debit);
-                const credit = moneyFromDb(entry.credit);
+                const bill = moneyFromDb(entry.credit);
+                const paid = moneyFromDb(entry.debit);
                 const balance = moneyFromDb(entry.balance);
-                const isBill = debit > 0n;
+                const isBill = bill > 0n;
 
                 return (
                   <MobileRow
@@ -232,9 +236,9 @@ export default async function CustomerPage({
                     right={
                       <>
                         <MoneyText
-                          value={isBill ? debit : credit}
+                          value={isBill ? bill : paid}
                           size="sm"
-                          tone={isBill ? "neutral" : "credit"}
+                          tone={isBill ? "neutral" : "debit"}
                           signed={false}
                         />
                         <p className="mt-0.5 text-xs text-muted-foreground">
