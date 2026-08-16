@@ -29,6 +29,13 @@ import { cancelTransaction, createTransaction, listTransactions } from "./transa
 import { getDashboard } from "./dashboard";
 import { getProductDetail } from "./inventory";
 import { getParties, getPartyLedger } from "./party-ledger";
+import {
+  getCashBook,
+  getDueAging,
+  getProfitLoss,
+  getRegister,
+  getStockReport,
+} from "./reports";
 import { createProduct, listParties, listProducts, loadEntryFormData } from "./master-data";
 import type { Session } from "./session";
 
@@ -507,3 +514,169 @@ describeDb("the party statement", () => {
     expect(found.summary).toEqual(listed.summary);
   });
 });
+
+describeDb("the report suite", () => {
+  let tenant: Tenant;
+  let customerId: string;
+  let vendorId: string;
+  const period = { from: "2026-08-01", to: "2026-08-31" };
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Report Co");
+    customerId = await seedParty(tenant, "মায়ের দোয়া ট্রেডার্স");
+    vendorId = await seedParty(tenant, "রহমান পেপার মিলস", "vendor");
+
+    // 1,000 kg opening at ৳120 through createProduct, so the opening entry is
+    // in the ledger and the reports have a starting balance to disagree about.
+    const productId = await createProduct(tenant.session, {
+      nameBn: "অফসেট পেপার",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "120",
+      salePrice: "160",
+      minStockLevel: "100",
+      openingQuantity: "1000",
+      openingRate: "120",
+    });
+
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "500", rate: "160" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "50000" }],
+    });
+
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: vendorId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "400", rate: "125" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "20000" }],
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  it("reports the profit the sale actually made", async () => {
+    const pl = await getProfitLoss(tenant.session, period);
+
+    // 500 kg out at ৳160 against ৳120 average cost.
+    expect(moneyToDb(pl.totals.sales)).toBe("80000.0000");
+    expect(moneyToDb(pl.totals.cogs)).toBe("60000.0000");
+    expect(moneyToDb(pl.totals.grossProfit)).toBe("20000.0000");
+    expect(moneyToDb(pl.totals.netProfit)).toBe("20000.0000");
+  });
+
+  it("leaves a cancelled voucher out of the profit", async () => {
+    // Posted into its own month so the ledger the other tests assert on stays
+    // untouched — the reversal carries the original's date, so both halves land
+    // together here rather than smearing across two periods.
+    const september = { from: "2026-09-01", to: "2026-09-30" };
+    const extra = await createTransaction(tenant.session, {
+      type: "income",
+      date: "2026-09-05",
+      source: "manual",
+      categoryAccountId: await otherIncomeAccount(tenant),
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "5000" }],
+    });
+
+    const before = await getProfitLoss(tenant.session, september);
+    expect(moneyToDb(before.totals.income)).toBe("5000.0000");
+
+    await cancelTransaction(tenant.session, extra.transactionId, "ভুল এন্ট্রি");
+
+    // Cancellation posts a mirror entry rather than deleting anything, so the
+    // two lines net to zero and the `having` clause drops the account entirely
+    // — no phantom ৳0 row on a report nobody wants explained.
+    const after = await getProfitLoss(tenant.session, september);
+    expect(moneyToDb(after.totals.income)).toBe("0.0000");
+    expect(after.income).toEqual([]);
+  });
+
+  it("ages the outstanding money by the bill it belongs to", async () => {
+    const aging = await getDueAging(tenant.session, { asOf: "2026-08-31", side: "receivable" });
+
+    expect(aging.rows).toHaveLength(1);
+    expect(moneyToDb(aging.rows[0]!.total)).toBe("30000.0000");
+    // The bill is 15 days old on the as-of date, so all of it is in the first
+    // bucket — and none of it anywhere else.
+    expect(moneyToDb(aging.totals["0-30"])).toBe("30000.0000");
+    expect(moneyToDb(aging.totals["31-60"])).toBe("0.0000");
+    expect(aging.rows[0]!.oldestDays).toBe(15);
+  });
+
+  it("does not age money that has already been paid", async () => {
+    // ৳50,000 of the ৳80,000 bill was settled on the spot. Reading
+    // transactions.due_amount would age the whole bill for ever, because that
+    // column is written once at posting and never revisited.
+    const aging = await getDueAging(tenant.session, { asOf: "2026-08-31", side: "receivable" });
+    expect(moneyToDb(aging.totals.all)).toBe("30000.0000");
+  });
+
+  it("registers the sale and the purchase on their own sides", async () => {
+    const sales = await getRegister(tenant.session, { ...period, type: "sale" });
+    const purchases = await getRegister(tenant.session, { ...period, type: "purchase" });
+
+    expect(sales.totals.count).toBe(1);
+    expect(moneyToDb(sales.totals.total)).toBe("80000.0000");
+    expect(moneyToDb(sales.totals.due)).toBe("30000.0000");
+    expect(sales.byProduct[0]?.quantity).toBe("500.000000");
+
+    expect(purchases.totals.count).toBe(1);
+    expect(moneyToDb(purchases.totals.total)).toBe("50000.0000");
+    expect(purchases.byProduct[0]?.quantity).toBe("400.000000");
+  });
+
+  it("moves stock from opening to closing without losing any", async () => {
+    const stock = await getStockReport(tenant.session, period);
+    const paper = stock.rows.find((row) => row.name === "অফসেট পেপার")!;
+
+    // Nothing existed before this month, so opening is zero and the 1,000 kg
+    // of opening stock arrives as a movement inside the period.
+    expect(Number(paper.openingQty)).toBe(0);
+    expect(Number(paper.inQty)).toBe(1400);
+    expect(Number(paper.outQty)).toBe(500);
+    expect(Number(paper.closingQty)).toBe(900);
+    // 1,000 at ৳120 plus 400 at ৳125, weighted.
+    expect(moneyToDb(stock.totals.closingValue)).toBe("110000.0000");
+  });
+
+  it("ties the cash book to the wallet balance the trigger maintains", async () => {
+    const book = await getCashBook(tenant.session, period);
+
+    expect(moneyToDb(book.opening)).toBe("0.0000");
+    expect(moneyToDb(book.totals.received)).toBe("50000.0000");
+    expect(moneyToDb(book.totals.paid)).toBe("20000.0000");
+    expect(moneyToDb(book.closing)).toBe("30000.0000");
+
+    // The report adds the journal up; the wallet is maintained by trigger from
+    // those same lines. Two readings of one truth.
+    const cash = book.wallets.find((w) => w.kind === "cash")!;
+    expect(moneyToDb(cash.balance)).toBe(moneyToDb(book.closing));
+  });
+
+  it("refuses a range that runs backwards", async () => {
+    await expect(
+      getProfitLoss(tenant.session, { from: "2026-08-31", to: "2026-08-01" }),
+    ).rejects.toThrow(/শুরুর তারিখ/);
+  });
+});
+
+/** The seeded chart of accounts always has one; the income entry needs a খাত. */
+async function otherIncomeAccount(tenant: Tenant): Promise<string> {
+  const rows = (await withTenant(tenant.session, async (tx) =>
+    tx.execute(sql`
+      select id from accounts
+       where company_id = ${tenant.companyId}::uuid
+         and subtype = 'other_income'
+       limit 1
+    `),
+  )) as unknown as { id: string }[];
+  return rows[0]!.id;
+}

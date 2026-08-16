@@ -12,14 +12,24 @@ import { cn } from "@/lib/utils";
  */
 export function TableScroll({
   className,
+  narrow,
   children,
 }: {
   className?: string;
+  /** Two or three columns that fit anywhere — a P&L section, a totals block.
+   *  The 42rem floor exists to stop a wide ledger from squeezing itself into
+   *  something unreadable, and applying it here would force a scrollbar onto a
+   *  table that was already narrower than the card holding it. */
+  narrow?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className={cn("table-scroll -mx-px", className)}>
-      <table className="w-full min-w-[42rem] border-collapse text-sm">{children}</table>
+      <table
+        className={cn("w-full border-collapse text-sm", !narrow && "min-w-[42rem]")}
+      >
+        {children}
+      </table>
     </div>
   );
 }
