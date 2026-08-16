@@ -1075,6 +1075,21 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
     ).toBe(false);
   });
 
+  it("finds a voucher by the taka, without the poisha", async () => {
+    // Nobody remembers ৳1,234.56 as ৳1,234.56. Exact equality meant the only
+    // findable amounts were the ones that happened to be round.
+    const income = await createTransaction(tenant.session, {
+      type: "income",
+      date: "2026-08-21",
+      source: "manual",
+      categoryAccountId: await accountBySubtype(tenant, "other_income"),
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "1234.56" }],
+    });
+
+    const found = await search(tenant.session, "1234");
+    expect(found.transactions.map((t) => t.voucherNo)).toContain(income.voucherNo);
+  });
+
   it("posts a party's opening due instead of assigning it", async () => {
     // The third time this shape of bug appeared. `createParty` wrote
     // `party_balances` straight, so the customer list showed the balance and

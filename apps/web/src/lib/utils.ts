@@ -35,6 +35,11 @@ export function formatDateShort(value: string | Date): string {
   ).padStart(2, "0")}/${date.getUTCFullYear()}`;
 }
 
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+/**
+ * Re-exported so callers keep importing dates from one place.
+ *
+ * It used to be `new Date().toISOString()`, which is UTC — and Dhaka is six
+ * hours ahead, so নতুন এন্ট্রি defaulted to *yesterday* for anyone cashing up
+ * after midnight. See `packages/shared/src/calendar.ts`.
+ */
+export { todayIso } from "@hishabai/shared";

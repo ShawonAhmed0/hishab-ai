@@ -30,6 +30,13 @@ export default async function TransactionDetailPage({
   const paid = moneyFromDb(transaction.paidAmount);
   const newDue = moneyFromDb(transaction.previousDue) + moneyFromDb(transaction.dueAmount);
 
+  // উৎপাদন, স্টক সমন্বয় and অন্যান্য settle within the business: no party, no
+  // bill, no balance carried forward. Four zeroes under "বকেয়া বিবরণী" would
+  // read as an entry that failed to register rather than one that never had a
+  // due to begin with.
+  const hasParty = partyName !== null;
+  const showRole = lines.some((line) => line.role !== "item");
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3 no-print">
@@ -70,7 +77,7 @@ export default async function TransactionDetailPage({
       {/* ---- the arithmetic the user recognises (spec §13) ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>{bn.due.statement}</CardTitle>
+          <CardTitle>{hasParty ? bn.due.statement : "সারসংক্ষেপ"}</CardTitle>
           <Button variant="ghost" size="sm" className="no-print" asChild>
             <a href="?print=1">
               <Printer className="size-4" aria-hidden />
@@ -79,6 +86,22 @@ export default async function TransactionDetailPage({
           </Button>
         </CardHeader>
         <CardBody>
+          {!hasParty ? (
+            <dl className="grid grid-cols-2 gap-4">
+              <div>
+                <dt className="text-sm text-muted-foreground">{bn.fields.grandTotal}</dt>
+                <dd className="mt-1">
+                  <MoneyText value={currentBill} size="lg" />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">{bn.due.payment}</dt>
+                <dd className="mt-1">
+                  <MoneyText value={paid} size="lg" tone={paid > 0n ? "debit" : "neutral"} />
+                </dd>
+              </div>
+            </dl>
+          ) : (
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <dt className="text-sm text-muted-foreground">{bn.due.previousDue}</dt>
@@ -109,6 +132,7 @@ export default async function TransactionDetailPage({
               </dd>
             </div>
           </dl>
+          )}
         </CardBody>
       </Card>
 
@@ -119,7 +143,7 @@ export default async function TransactionDetailPage({
           </CardHeader>
           <CardBody className="space-y-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-              <Detail label={bn.fields.party} value={partyName ?? "—"} />
+              {hasParty ? <Detail label={bn.fields.party} value={partyName} /> : null}
               <Detail label={bn.fields.memoNo} value={transaction.memoNo ?? "—"} />
               <Detail
                 label="উৎস"
@@ -146,28 +170,55 @@ export default async function TransactionDetailPage({
                 <THead>
                   <TR>
                     <TH>{bn.fields.product}</TH>
+                    {/* A production voucher lists কাঁচামাল and উৎপাদিত পণ্য in
+                        the same table; without this column it reads as one
+                        undifferentiated list of products. */}
+                    {showRole ? <TH>{bn.fields.lineRole}</TH> : null}
                     <TH numeric>{bn.fields.quantity}</TH>
                     <TH numeric>{bn.fields.rate}</TH>
                     <TH numeric>{bn.fields.lineTotal}</TH>
                   </TR>
                 </THead>
                 <tbody>
-                  {lines.map((line) => (
-                    <TR key={line.id}>
-                      <TD>{line.productName ?? "—"}</TD>
-                      <TD numeric className="num">
-                        {formatQty(qtyFromDb(line.quantity), {
-                          ...(line.unitSymbol ? { unit: line.unitSymbol } : {}),
-                        })}
-                      </TD>
-                      <TD numeric>
-                        <MoneyText value={moneyFromDb(line.rate)} size="sm" symbol={false} />
-                      </TD>
-                      <TD numeric>
-                        <MoneyText value={moneyFromDb(line.amount)} size="sm" symbol={false} />
-                      </TD>
-                    </TR>
-                  ))}
+                  {lines.map((line) => {
+                    const rate = moneyFromDb(line.rate);
+                    // Production and adjustment lines quote no price: the
+                    // engine costs them from the running average. A value is
+                    // still allocated to the output, and it is the one the
+                    // journal used, so it is read from there rather than from
+                    // `amount`, which those lines never carry.
+                    const value = moneyFromDb(line.amount) || moneyFromDb(line.allocatedCost);
+
+                    return (
+                      <TR key={line.id}>
+                        <TD>{line.productName ?? "—"}</TD>
+                        {showRole ? (
+                          <TD className="text-muted-foreground">
+                            {bn.transactionLineRole[line.role] ?? line.role}
+                          </TD>
+                        ) : null}
+                        <TD numeric className="num">
+                          {formatQty(qtyFromDb(line.quantity), {
+                            ...(line.unitSymbol ? { unit: line.unitSymbol } : {}),
+                          })}
+                        </TD>
+                        <TD numeric>
+                          {rate === 0n ? (
+                            <span className="text-subtle-foreground">—</span>
+                          ) : (
+                            <MoneyText value={rate} size="sm" symbol={false} />
+                          )}
+                        </TD>
+                        <TD numeric>
+                          {value === 0n ? (
+                            <span className="text-subtle-foreground">—</span>
+                          ) : (
+                            <MoneyText value={value} size="sm" symbol={false} />
+                          )}
+                        </TD>
+                      </TR>
+                    );
+                  })}
                 </tbody>
               </TableScroll>
             ) : null}

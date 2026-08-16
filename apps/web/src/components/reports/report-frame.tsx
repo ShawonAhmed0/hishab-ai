@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { currentMonth, type ReportPeriod } from "@hishabai/core";
-import { bn } from "@hishabai/shared";
+import { bn, todayIso } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { PrintButton } from "@/components/ui/print-button";
@@ -100,7 +100,7 @@ export function ReportFrame({
       {children}
 
       <p className="hidden text-xs text-muted-foreground print:block">
-        HishabAI থেকে তৈরি — {formatDateBn(new Date())}
+        HishabAI থেকে তৈরি — {formatDateBn(todayIso())}
       </p>
     </div>
   );

@@ -35,7 +35,11 @@
      contrast once tables get to eight columns. */
   --color-foreground: #0f172a;
   --color-muted-foreground: #526074;
-  --color-subtle-foreground: #78899f;
+  /* Subtle, not invisible. This carries tile captions, account codes and every
+     em-dash standing in for an empty cell, and at #78899f it sat at 3.4:1 on
+     the sunken background — below AA everywhere it was used. The hierarchy
+     against `muted` survives; the failure did not. */
+  --color-subtle-foreground: #5f6d80;
 
   /* --- Finance semantics -------------------------------------------------
      Money needs its own vocabulary. These are used for amounts and deltas
@@ -45,7 +49,9 @@
   --color-credit-soft: #e8f6f0;
   --color-debit: #be123c; /* ব্যয় / খরচ */
   --color-debit-soft: #fdeef1;
-  --color-due: #b45309; /* বকেয়া */
+  /* বকেয়া. One notch darker than amber-700, which cleared 4.5:1 on white but
+     not on the striped total rows the aging report puts it on. */
+  --color-due: #a04405;
   --color-due-soft: #fdf3e4;
   --color-info: #1e40af;
   --color-info-soft: #eff4ff;
@@ -100,7 +106,7 @@
 
     --color-foreground: #e8edf6;
     --color-muted-foreground: #9dabc2;
-    --color-subtle-foreground: #748299;
+    --color-subtle-foreground: #8b99b0;
 
     --color-primary: #5b8def;
     --color-primary-hover: #6f9bf2;
@@ -120,6 +126,10 @@
     --color-info-soft: #17233d;
 
     --color-destructive: #f87171;
+    /* Light-on-dark inverts here: the destructive hue is lifted to sit on a
+       dark surface, so anything *placed on it* has to go dark or the pairing
+       lands at 2.9:1. */
+    --color-on-destructive: #2b0d10;
     --color-ring: #5b8def;
 
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);

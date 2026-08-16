@@ -11,7 +11,13 @@
  * hits the (company_id, date) index; nothing here scans a whole company.
  */
 import { raw, tenantQuery, tenantRead, token } from "@hishabai/db";
-import { moneyFromDb, type Money, type TransactionType } from "@hishabai/shared";
+import {
+  currentMonthRange,
+  moneyFromDb,
+  todayIso,
+  type Money,
+  type TransactionType,
+} from "@hishabai/shared";
 import type { PartySide } from "./party-ledger";
 import type { TenantScope } from "./session";
 
@@ -22,14 +28,9 @@ export interface ReportPeriod {
   to: string;
 }
 
-/** The current month, which is what every report opens on. */
+/** The current month in Dhaka, which is what every report opens on. */
 export function currentMonth(reference = new Date()): ReportPeriod {
-  const year = reference.getUTCFullYear();
-  const month = reference.getUTCMonth();
-  return {
-    from: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
-    to: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10),
-  };
+  return currentMonthRange(reference);
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -214,7 +215,7 @@ export async function getDueAging(
   scope: TenantScope,
   options: { asOf?: string; side?: PartySide } = {},
 ): Promise<AgingReport> {
-  const asOf = options.asOf ?? new Date().toISOString().slice(0, 10);
+  const asOf = options.asOf ?? todayIso();
   if (!ISO_DATE.test(asOf)) throw new Error("রিপোর্টের তারিখ সঠিক নয়");
   const side: PartySide = options.side ?? "receivable";
 

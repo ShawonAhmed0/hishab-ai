@@ -6,6 +6,7 @@ import { Building2, Check, ChevronDown, LogOut, Search } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { bn, type Role } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { cn } from "@/lib/utils";
 
 export interface CompanyOption {
@@ -129,8 +130,11 @@ export function Topbar({
         </div>
       </form>
 
-      {/* ---- alerts ---- */}
-      <div className="ml-auto md:ml-0">{notifications}</div>
+      {/* ---- alerts and appearance ---- */}
+      <div className="ml-auto flex items-center md:ml-0">
+        <ThemeToggle />
+        {notifications}
+      </div>
 
       {/* ---- account ---- */}
       <DropdownMenu.Root>

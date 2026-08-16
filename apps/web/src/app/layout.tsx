@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { ToastProvider } from "@/components/ui/toast";
+import { THEME_BOOTSTRAP, THEME_COOKIE, parseTheme } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,10 +23,21 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // A chosen theme is rendered by the server so there is no flash; with no
+  // choice stored, the inline script below asks the OS before first paint.
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+
   return (
-    <html lang="bn" suppressHydrationWarning>
+    <html
+      lang="bn"
+      className={theme === "dark" ? "dark" : undefined}
+      suppressHydrationWarning
+    >
       <head>
+        {theme === null ? (
+          <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        ) : null}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* Noto Sans Bengali for text, Inter for figures — see MASTER.md. */}

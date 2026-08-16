@@ -26,7 +26,13 @@ import {
   transactions,
   type Transaction as Tx,
 } from "@hishabai/db";
-import { ZERO, moneyToDb, type AccountSubtype, type Money } from "@hishabai/shared";
+import {
+  ZERO,
+  moneyToDb,
+  todayIso,
+  type AccountSubtype,
+  type Money,
+} from "@hishabai/shared";
 import type { Session } from "./session";
 import { allocateVoucherNo } from "./transactions";
 
@@ -91,7 +97,7 @@ export async function postOpeningBalance(
   },
 ): Promise<OpeningEntry> {
   const companyId = session.companyId;
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayIso();
   const voucherNo = await allocateVoucherNo(tx, companyId, "OPEN");
 
   const [transaction] = await tx

@@ -121,6 +121,7 @@ export const fields = {
   outputProduct: "উৎপাদিত পণ্য",
   inputProduct: "কাঁচামাল",
   amount: "টাকার পরিমাণ",
+  lineRole: "ভূমিকা",
   countedQuantity: "গণনায় পাওয়া পরিমাণ",
   recipe: "রেসিপি",
   batchCount: "কত ব্যাচ",
@@ -215,6 +216,21 @@ export const stockMovementType: Record<StockMovementType, string> = {
   reversal: "বিপরীত এন্ট্রি",
 };
 
+/**
+ * What a voucher line is *for*.
+ *
+ * A production voucher lists raw materials and finished goods in the same
+ * table, and without this they read as one undifferentiated list of products
+ * that happened to be involved.
+ */
+export const transactionLineRole: Record<string, string> = {
+  item: "পণ্য",
+  input: "কাঁচামাল",
+  output: "উৎপাদিত",
+  wastage: "অপচয়",
+  adjustment: "গণনা",
+};
+
 export const accountSubtype: Record<AccountSubtype, string> = {
   cash: "নগদ",
   bank: "ব্যাংক",
@@ -282,6 +298,7 @@ export const bn = {
   transactionStatus,
   transactionSource,
   stockMovementType,
+  transactionLineRole,
   accountSubtype,
   severity,
   messages,

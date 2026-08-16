@@ -112,7 +112,15 @@ export async function search(session: Session, rawQuery: string): Promise<Search
                or tr.memo_no ilike ${pattern}
                or tr.description ilike ${pattern}
                or pt.name ilike ${pattern}
-               ${amount ? sql`or tr.total = ${amount}::numeric` : sql``}
+               ${
+                 amount
+                   ? // People remember the taka and not the poisha, so "12222"
+                     // has to find ৳12,222.22. Truncating rather than matching
+                     // a substring keeps "1" from returning the whole ledger.
+                     sql`or tr.total = ${amount}::numeric
+                         or trunc(tr.total) = ${amount}::numeric`
+                   : sql``
+               }
              )
            order by tr.date desc, tr.created_at desc
            limit 25

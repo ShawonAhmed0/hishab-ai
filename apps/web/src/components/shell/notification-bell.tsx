@@ -55,7 +55,7 @@ export function NotificationBell({
           {badgeCount > 0 ? (
             <span
               aria-hidden
-              className="absolute right-1 top-1 flex min-w-4 items-center justify-center rounded-full bg-debit px-1 text-[0.625rem] font-semibold leading-4 text-on-destructive"
+              className="absolute right-1 top-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.625rem] font-semibold leading-4 text-on-destructive"
             >
               {badgeCount > 9 ? "9+" : badgeCount}
             </span>

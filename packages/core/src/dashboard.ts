@@ -13,6 +13,7 @@
  */
 import { tenantQuery, tenantRead } from "@hishabai/db";
 import {
+  currentMonthRange,
   moneyFromDb,
   type Money,
   type TransactionStatus,
@@ -71,9 +72,7 @@ export interface DashboardData {
 }
 
 function monthRange(reference = new Date()): { from: string; to: string } {
-  const from = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1));
-  const to = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 0));
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  return currentMonthRange(reference);
 }
 
 /** `tx.execute` requires an index signature; the shape is documented above. */
