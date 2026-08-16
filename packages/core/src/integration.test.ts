@@ -1163,3 +1163,320 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
     expect(Number(row!.cached)).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Cancelling the three types the form could not previously send.
+ *
+ * `reverseTransaction` works off journal lines and stock movements rather than
+ * off the transaction type, so in principle it never needed to know these
+ * existed. In principle is not the same as tested — and until now nothing
+ * could create one of them to cancel.
+ */
+describeDb("cancelling উৎপাদন, স্টক সমন্বয় and অন্যান্য", () => {
+  let tenant: Tenant;
+  let flourId: string;
+  let breadId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Reversal Bakery");
+    flourId = await createProduct(tenant.session, {
+      nameBn: "ময়দা",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "100",
+      salePrice: "0",
+      minStockLevel: "0",
+      openingQuantity: "500",
+      openingRate: "100",
+    });
+    breadId = await createProduct(tenant.session, {
+      nameBn: "পাউরুটি",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "0",
+      salePrice: "200",
+      minStockLevel: "0",
+      openingQuantity: "0",
+      openingRate: "0",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  /** Cache and control account, which must always be the same number. */
+  async function inventory(): Promise<{ cached: string; posted: string }> {
+    const [row] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select
+          (select coalesce(sum(value), 0)::text from product_stock
+            where company_id = ${tenant.companyId}::uuid) as cached,
+          (select coalesce(sum(jl.debit - jl.credit), 0)::text from journal_lines jl
+             join accounts a on a.id = jl.account_id
+            where jl.company_id = ${tenant.companyId}::uuid
+              and a.subtype = 'inventory') as posted
+      `),
+    )) as unknown as { cached: string; posted: string }[];
+    return row!;
+  }
+
+  it("puts every gram of a cancelled production run back", async () => {
+    const before = await inventory();
+
+    const run = await createTransaction(tenant.session, {
+      type: "production",
+      date: "2026-08-16",
+      source: "manual",
+      inputs: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "500" }],
+      outputs: [{ productId: breadId, unitId: tenant.unitKgId, quantity: "450" }],
+      wastage: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "50" }],
+      laborCost: "0",
+      otherCost: "0",
+      payments: [],
+    });
+
+    await cancelTransaction(tenant.session, run.transactionId, "ভুল ব্যাচ");
+
+    const after = await inventory();
+    expect(after.cached).toBe(before.cached);
+    expect(after.posted).toBe(before.posted);
+
+    const flour = await getProductDetail(tenant.session, flourId);
+    expect(flour?.product.quantity).toBe("500.000000");
+    const bread = await getProductDetail(tenant.session, breadId);
+    expect(bread?.product.quantity).toBe("0.000000");
+
+    // The wastage account has to come back to nothing too — a cancelled run
+    // wasted nothing.
+    const [wastage] = (await withTenant(tenant.session, async (tx) =>
+      tx.execute(sql`
+        select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+          from journal_lines jl join accounts a on a.id = jl.account_id
+         where jl.company_id = ${tenant.companyId}::uuid and a.subtype = 'wastage'
+      `),
+    )) as unknown as { total: string }[];
+    expect(wastage!.total).toBe("0.0000");
+  });
+
+  it("puts back a cancelled stock count", async () => {
+    const before = await inventory();
+
+    const count = await createTransaction(tenant.session, {
+      type: "stock_adjustment",
+      date: "2026-08-17",
+      source: "manual",
+      adjustments: [
+        { productId: flourId, unitId: tenant.unitKgId, countedQuantity: "480" },
+      ],
+    });
+
+    const short = await getProductDetail(tenant.session, flourId);
+    expect(short?.product.quantity).toBe("480.000000");
+
+    await cancelTransaction(tenant.session, count.transactionId, "ভুল গণনা");
+
+    const restored = await getProductDetail(tenant.session, flourId);
+    expect(restored?.product.quantity).toBe("500.000000");
+    expect(await inventory()).toEqual(before);
+  });
+
+  it("puts back a cancelled অন্যান্য entry", async () => {
+    const expenseAccountId = await accountBySubtype(tenant, "operating_expense");
+    const cashAccountId = await withTenant(tenant.session, async (tx) => {
+      const rows = (await tx.execute(sql`
+        select account_id from financial_accounts where id = ${tenant.cashWalletId}::uuid
+      `)) as unknown as { account_id: string }[];
+      return rows[0]!.account_id;
+    });
+
+    const before = await getDashboard(tenant.session);
+
+    const jv = await createTransaction(tenant.session, {
+      type: "other",
+      date: "2026-08-18",
+      source: "manual",
+      entries: [
+        { accountId: expenseAccountId, debit: "2000", credit: "0" },
+        { accountId: cashAccountId, debit: "0", credit: "2000" },
+      ],
+    });
+
+    await cancelTransaction(tenant.session, jv.transactionId, "ভুল এন্ট্রি");
+
+    const after = await getDashboard(tenant.session);
+    expect(moneyToDb(after.tiles.cash)).toBe(moneyToDb(before.tiles.cash));
+  });
+
+  it("dates the mirror entry as the original, not as today", async () => {
+    // Otherwise a voucher cancelled in September would leave August's
+    // profit-and-loss overstated for ever.
+    const jv = await createTransaction(tenant.session, {
+      type: "other",
+      date: "2026-07-05",
+      source: "manual",
+      entries: [
+        { accountId: await accountBySubtype(tenant, "operating_expense"), debit: "500", credit: "0" },
+        {
+          accountId: await withTenant(tenant.session, async (tx) => {
+            const rows = (await tx.execute(sql`
+              select account_id from financial_accounts where id = ${tenant.cashWalletId}::uuid
+            `)) as unknown as { account_id: string }[];
+            return rows[0]!.account_id;
+          }),
+          debit: "0",
+          credit: "500",
+        },
+      ],
+    });
+
+    await cancelTransaction(tenant.session, jv.transactionId, "পরীক্ষা");
+
+    const july = await getProfitLoss(tenant.session, { from: "2026-07-01", to: "2026-07-31" });
+    expect(moneyToDb(july.totals.expense)).toBe("0.0000");
+  });
+});
+
+describeDb("what an operator may and may not do", () => {
+  let tenant: Tenant;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Permissions");
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  it("can post an entry but cannot invent the master data it names", async () => {
+    // An operator holds `transaction.create` and nothing else, so নতুন এন্ট্রি
+    // now hides the inline "নতুন কাস্টমার" and "নতুন পণ্য" panels from them —
+    // the server refuses either way, and a control nobody is allowed to use is
+    // worse than no control.
+    const operator: Session = { ...tenant.session, role: "operator" };
+
+    await expect(
+      createParty(operator, { name: "চেষ্টা", type: "customer" }),
+    ).rejects.toMatchObject({ messageBn: expect.any(String) });
+
+    await expect(
+      createProduct(operator, {
+        nameBn: "চেষ্টা",
+        kind: "finished_good",
+        unitId: tenant.unitKgId,
+      }),
+    ).rejects.toMatchObject({ messageBn: expect.any(String) });
+
+    await expect(
+      createRecipe(operator, {
+        outputProductId: randomUUID(),
+        inputs: [{ productId: randomUUID(), quantityPerUnit: "1" }],
+      }),
+    ).rejects.toMatchObject({ messageBn: expect.any(String) });
+  });
+});
+
+describeDb("ক্রেডিট সীমা", () => {
+  let tenant: Tenant;
+  let productId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Credit");
+    productId = await createProduct(tenant.session, {
+      nameBn: "চাল",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "80",
+      minStockLevel: "0",
+      openingQuantity: "1000",
+      openingRate: "50",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  it("warns when a sale takes the customer past their limit, and posts anyway", async () => {
+    // The limit is the shopkeeper's own note to themselves, and they are at
+    // the counter with the customer in front of them. Refusing the sale would
+    // be the app overruling the person who set the limit; telling them is the
+    // useful part. It was collected, stored, shown on the ledger — and checked
+    // by nothing at all.
+    const partyId = await createParty(tenant.session, {
+      name: "সীমিত কাস্টমার",
+      type: "customer",
+      creditLimit: "10000",
+    });
+
+    const under = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-16",
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+      payments: [],
+    });
+    expect(under.warnings.map((w) => w.code)).not.toContain("OVER_CREDIT_LIMIT");
+
+    const over = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-17",
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+      payments: [],
+    });
+
+    const warning = over.warnings.find((w) => w.code === "OVER_CREDIT_LIMIT");
+    expect(warning).toBeDefined();
+    expect(warning?.messageBn).toContain("সীমিত কাস্টমার");
+    // Warned, not refused — the voucher exists.
+    expect(over.voucherNo).toMatch(/^SALE-\d{6}$/);
+
+    // And it is kept, so whoever opens the books tomorrow still sees it.
+    const view = await getNotifications(tenant.session);
+    expect(view.notifications.some((n) => n.type === "OVER_CREDIT_LIMIT")).toBe(true);
+  });
+
+  it("says nothing about a customer with no limit set", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "সীমাহীন কাস্টমার",
+      type: "customer",
+    });
+
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-18",
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "500", rate: "80" }],
+      payments: [],
+    });
+    expect(sale.warnings.map((w) => w.code)).not.toContain("OVER_CREDIT_LIMIT");
+  });
+
+  it("counts the payment, not just the bill", async () => {
+    // A ৳16,000 sale against a ৳10,000 limit is fine if ৳16,000 is handed over
+    // at the counter: nothing is owed, so nothing is over the limit.
+    const partyId = await createParty(tenant.session, {
+      name: "নগদে কেনেন যিনি",
+      type: "customer",
+      creditLimit: "10000",
+    });
+
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-19",
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "200", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "16000" }],
+    });
+    expect(sale.warnings.map((w) => w.code)).not.toContain("OVER_CREDIT_LIMIT");
+  });
+});

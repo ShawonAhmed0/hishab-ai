@@ -56,7 +56,7 @@ function Disclosure({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="text-muted-foreground hover:text-foreground"
+          className="-m-2 flex size-11 items-center justify-center text-muted-foreground hover:text-foreground"
           aria-label={bn.actions.close}
         >
           <X className="size-4" aria-hidden />
@@ -131,6 +131,7 @@ export function PartyFields({
   const [phone, setPhone] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [openingBalance, setOpeningBalance] = React.useState("");
+  const [creditLimit, setCreditLimit] = React.useState("");
 
   function submit() {
     setResult(null);
@@ -140,6 +141,7 @@ export function PartyFields({
         type,
         ...(phone ? { phone } : {}),
         ...(address ? { address } : {}),
+        ...(creditLimit ? { creditLimit } : {}),
         openingBalance: openingBalance || "0",
       });
       setResult(outcome);
@@ -205,6 +207,21 @@ export function PartyFields({
             placeholder="0"
           />
         </Field>
+
+        {type !== "vendor" ? (
+          <Field
+            error={fieldErrors["creditLimit"]}
+            hint="এর বেশি বাকি পড়লে বিক্রির সময় সতর্ক করা হবে — বিক্রি আটকাবে না"
+          >
+            <FieldLabel>{bn.fields.creditLimit}</FieldLabel>
+            <Input
+              inputMode="decimal"
+              value={creditLimit}
+              onChange={(event) => setCreditLimit(event.target.value)}
+              placeholder="0"
+            />
+          </Field>
+        ) : null}
       </div>
 
       <Field>

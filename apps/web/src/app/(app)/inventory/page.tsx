@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, Boxes, PackageX, Layers, PlusCircle } from "lucide-react";
-import { getInventory } from "@hishabai/core";
+import { can, getInventory } from "@hishabai/core";
 import {
   PRODUCT_KINDS,
   bn,
@@ -38,6 +38,7 @@ export default async function InventoryPage({
   const lowOnly = params.low === "1";
 
   const {
+    session,
     data: { products, summary, units, categories },
   } = await sessionWithData((scope) =>
     getInventory(scope, {
@@ -144,9 +145,13 @@ export default async function InventoryPage({
           <CardTitle>{products.length} টি পণ্য</CardTitle>
         </CardHeader>
 
-        <CardBody className="pt-0">
-          <AddProductPanel units={units} categories={categories} />
-        </CardBody>
+        {/* An operator can post entries but not invent master data, and a
+            control they are not allowed to use is worse than no control. */}
+        {can(session, "product.manage") ? (
+          <CardBody className="pt-0">
+            <AddProductPanel units={units} categories={categories} />
+          </CardBody>
+        ) : null}
 
         {products.length === 0 ? (
           <EmptyState

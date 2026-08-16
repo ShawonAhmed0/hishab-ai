@@ -10,6 +10,7 @@ import {
   accounts,
   financialAccounts,
   parties,
+  partyBalances,
   productStock,
   products,
   type Transaction as Tx,
@@ -24,6 +25,7 @@ import {
 import type {
   ControlAccounts,
   FinancialAccountRef,
+  PartyState,
   PostingContext,
   ProductState,
 } from "@hishabai/accounting";
@@ -283,11 +285,12 @@ export async function loadPostingContext(
     allowNegativeStock?: boolean;
   },
 ): Promise<PostingContext> {
-  const [controlAccounts, wallets, productStates] = await Promise.all([
+  const [controlAccounts, wallets, productStates, , party] = await Promise.all([
     loadControlAccounts(tx, options.companyId),
     loadWallets(tx, options.companyId, collectFinancialAccountIds(options.input)),
     loadProductStates(tx, options.companyId, collectProductIds(options.input)),
     assertReferencesAreOurs(tx, options.companyId, options.input),
+    loadPartyState(tx, options.companyId, options.input),
   ]);
 
   return {
@@ -297,6 +300,48 @@ export async function loadPostingContext(
     accounts: controlAccounts,
     financialAccounts: wallets,
     products: productStates,
+    ...(party ? { party } : {}),
     allowNegativeStock: options.allowNegativeStock ?? true,
+  };
+}
+
+/**
+ * The named party's standing, for the credit-limit warning.
+ *
+ * Only fetched when the entry names one; a stock adjustment does not pay for
+ * a round trip it has no use for.
+ */
+async function loadPartyState(
+  tx: Tx,
+  companyId: string,
+  input: TransactionInput,
+): Promise<PartyState | undefined> {
+  const partyId = "partyId" in input ? input.partyId : undefined;
+  if (!partyId) return undefined;
+
+  const [row] = await tx
+    .select({
+      id: parties.id,
+      name: parties.name,
+      creditLimit: parties.creditLimit,
+      receivable: partyBalances.receivable,
+    })
+    .from(parties)
+    .leftJoin(
+      partyBalances,
+      and(
+        eq(partyBalances.partyId, parties.id),
+        eq(partyBalances.companyId, parties.companyId),
+      ),
+    )
+    .where(and(eq(parties.companyId, companyId), eq(parties.id, partyId)))
+    .limit(1);
+
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    name: row.name,
+    receivable: row.receivable ? moneyFromDb(row.receivable) : ZERO,
+    creditLimit: row.creditLimit === null ? null : moneyFromDb(row.creditLimit),
   };
 }

@@ -113,6 +113,9 @@ interface Props {
   postingAccounts: AccountOption[];
   recipes: RecipeOption[];
   productCategories: CategoryChoice[];
+  /** An operator may post entries but not create the things they name. */
+  canManageParties: boolean;
+  canManageProducts: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +467,8 @@ export function EntryForm({
   postingAccounts,
   recipes,
   productCategories,
+  canManageParties,
+  canManageProducts,
 }: Props) {
   const router = useRouter();
   const toast = useToast();
@@ -933,7 +938,9 @@ export function EntryForm({
           <button
             type="button"
             onClick={() => setShowMore((v) => !v)}
-            className="flex cursor-pointer items-center gap-1 text-sm text-primary hover:underline"
+            // This is how উৎপাদন and স্টক সমন্বয় are reached at all, and at
+            // the text's own height it was a 20px target on a phone.
+            className="-mx-2 flex min-h-11 cursor-pointer items-center gap-1 px-2 text-sm text-primary hover:underline"
           >
             <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} aria-hidden />
             {showMore ? "কম দেখান" : "আরও ধরন দেখান"}
@@ -995,6 +1002,7 @@ export function EntryForm({
                   </Select>
                   {/* A customer who turns out not to exist yet should not cost
                       you the half-typed invoice you are standing in. */}
+                  {canManageParties ? (
                   <Button
                     type="button"
                     variant="secondary"
@@ -1006,6 +1014,7 @@ export function EntryForm({
                   >
                     <Plus className="size-4" aria-hidden />
                   </Button>
+                  ) : null}
                 </div>
               </Field>
             ) : null}
@@ -1038,7 +1047,7 @@ export function EntryForm({
             </Field>
           </div>
 
-          {addingParty && NEEDS_PARTY.includes(type) ? (
+          {addingParty && canManageParties && NEEDS_PARTY.includes(type) ? (
             <div className="rounded-md border border-border bg-surface-sunken p-4">
               <p className="mb-3 font-medium">
                 {VENDOR_SIDE.includes(type) ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"}
@@ -1062,15 +1071,17 @@ export function EntryForm({
           <CardHeader>
             <CardTitle>পণ্য</CardTitle>
             <span className="flex gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setAddingProduct((open) => !open)}
-              >
-                <Plus className="size-4" aria-hidden />
-                নতুন পণ্য
-              </Button>
+              {canManageProducts ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAddingProduct((open) => !open)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  নতুন পণ্য
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
@@ -1083,7 +1094,7 @@ export function EntryForm({
             </span>
           </CardHeader>
           <CardBody className="space-y-3">
-            {addingProduct ? <NewProductPanel /> : null}
+            {addingProduct && canManageProducts ? <NewProductPanel /> : null}
             {lines.map((line, index) => {
               const product = products.find((p) => p.id === line.productId);
               const amount = multiplyRate(qty(line.quantity || "0"), money(line.rate || "0"));
@@ -1183,18 +1194,20 @@ export function EntryForm({
         <Card>
           <CardHeader>
             <CardTitle>{bn.transactionType.production}</CardTitle>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setAddingProduct((open) => !open)}
-            >
-              <Plus className="size-4" aria-hidden />
-              নতুন পণ্য
-            </Button>
+            {canManageProducts ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setAddingProduct((open) => !open)}
+              >
+                <Plus className="size-4" aria-hidden />
+                নতুন পণ্য
+              </Button>
+            ) : null}
           </CardHeader>
           <CardBody className="space-y-5">
-            {addingProduct ? <NewProductPanel /> : null}
+            {addingProduct && canManageProducts ? <NewProductPanel /> : null}
             {recipes.length > 0 ? (
               <div className="grid gap-3 rounded-lg bg-surface-sunken p-3 sm:grid-cols-[2fr_1fr]">
                 <Field hint="রেসিপি বেছে নিলে কাঁচামাল নিজে থেকেই বসে যাবে — পরে বদলানো যাবে">
@@ -1298,7 +1311,7 @@ export function EntryForm({
       {type === "stock_adjustment" ? (
         <Card>
           <CardBody className="space-y-4">
-            {addingProduct ? <NewProductPanel /> : null}
+            {addingProduct && canManageProducts ? <NewProductPanel /> : null}
             <StockRows
               title={bn.transactionType.stock_adjustment}
               hint="গুদামে গুনে যা পাওয়া গেল সেটাই লিখুন — কমবেশি হিসাব নিজে করে নেবে"

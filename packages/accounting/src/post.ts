@@ -14,6 +14,7 @@ import {
   addMoney,
   allocateMoney,
   cmpMoney,
+  formatMoney,
   money,
   moneyToDb,
   multiplyRate,
@@ -221,6 +222,27 @@ function postSaleSide(
     for (const payment of payments) {
       journal.debit(payment.accountId, payment.amount);
       journal.credit(accounts.receivable, payment.amount, { partyId: input.partyId });
+    }
+  }
+
+  // ক্রেডিট সীমা. A warning rather than a refusal: the limit is the
+  // shopkeeper's own note to themselves, and they are standing at the counter
+  // with the customer in front of them. Telling them is the useful part.
+  const { party } = context;
+  if (!isReturn && party?.creditLimit != null && party.creditLimit > ZERO) {
+    const after = addMoney(party.receivable, netReceivable);
+    if (cmpMoney(after, party.creditLimit) > 0) {
+      warnings.push({
+        code: "OVER_CREDIT_LIMIT",
+        messageBn:
+          `${party.name} — ক্রেডিট সীমা ${formatMoney(party.creditLimit)} ছাড়িয়ে যাচ্ছে। ` +
+          `এই বিলের পর বকেয়া দাঁড়াবে ${formatMoney(after)}।`,
+        details: {
+          partyId: party.id,
+          creditLimit: moneyToDb(party.creditLimit),
+          projected: moneyToDb(after),
+        },
+      });
     }
   }
 

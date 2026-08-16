@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PlusCircle, Users, UserCheck, Wallet } from "lucide-react";
-import { getParties } from "@hishabai/core";
+import { can, getParties } from "@hishabai/core";
 import { bn, moneyFromDb } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
@@ -27,6 +27,7 @@ export default async function CustomersPage({
   const dueOnly = params.due === "1";
 
   const {
+    session,
     data: { parties, summary },
   } = await sessionWithData((scope) =>
     getParties(scope, {
@@ -108,9 +109,11 @@ export default async function CustomersPage({
           <CardTitle>{parties.length} জন কাস্টমার</CardTitle>
         </CardHeader>
 
-        <CardBody className="pt-0">
-          <AddPartyPanel type="customer" />
-        </CardBody>
+        {can(session, "party.manage") ? (
+          <CardBody className="pt-0">
+            <AddPartyPanel type="customer" />
+          </CardBody>
+        ) : null}
 
         {parties.length === 0 ? (
           <EmptyState

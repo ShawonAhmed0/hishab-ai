@@ -165,6 +165,15 @@ the `/api/v1` Android surface (not started), and real voice/OCR (the parser in
 `entry/voice-scan.tsx` is a heuristic stub — the review-and-confirm flow
 around it is not).
 
+## Warn, don't refuse
+
+Negative stock and a breached ক্রেডিট সীমা are both `PostingWarning`s, not
+errors. Recording a sale before the matching purchase is normal practice here,
+and the credit limit is the shopkeeper's own note to themselves — they are at
+the counter with the customer in front of them, and the app overruling them is
+not help. Both post, both warn, and the warning is kept (below) rather than
+shown once.
+
 ## Alerts are states; notifications are events
 
 `notifications` holds events — the engine's own `PostingWarning`s, written

@@ -458,12 +458,18 @@ export async function cancelTransaction(
     const originalLines = await tx
       .select()
       .from(journalLines)
-      .where(eq(journalLines.transactionId, transactionId));
+      .where(eq(journalLines.transactionId, transactionId))
+      .orderBy(journalLines.id);
 
+    // Ordered, because the reversal replays these in sequence and stamps each
+    // movement with the balance it produced. A production run can consume and
+    // produce the same product, and without an ORDER BY the stamps on the
+    // mirror movements — the audit trail's whole point — differ run to run.
     const originalMovements = await tx
       .select()
       .from(stockMovements)
-      .where(eq(stockMovements.transactionId, transactionId));
+      .where(eq(stockMovements.transactionId, transactionId))
+      .orderBy(stockMovements.occurredAt, stockMovements.id);
 
     const originalPayments = await tx
       .select()

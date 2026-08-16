@@ -54,6 +54,21 @@ export interface ProductState {
   minStockLevel?: Qty;
 }
 
+/**
+ * The party's standing before this entry, so the engine can say when a sale
+ * takes them past the limit their own shopkeeper set.
+ *
+ * `creditLimit` is null when no limit was set, which is not the same as a
+ * limit of zero — the second would mean "no credit at all".
+ */
+export interface PartyState {
+  id: string;
+  name: string;
+  /** Outstanding before this transaction. */
+  receivable: Money;
+  creditLimit: Money | null;
+}
+
 export interface PostingContext {
   companyId: string;
   transactionId: string;
@@ -62,6 +77,8 @@ export interface PostingContext {
   accounts: ControlAccounts;
   financialAccounts: ReadonlyMap<string, FinancialAccountRef>;
   products: ReadonlyMap<string, ProductState>;
+  /** The party the entry names, when it names one. */
+  party?: PartyState;
   /**
    * Recording a sale before the matching purchase entry is normal practice in
    * a Bangladeshi trading business, so negative stock is permitted by default

@@ -131,7 +131,7 @@ function AddPanel({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="text-muted-foreground hover:text-foreground"
+          className="-m-2 flex size-11 items-center justify-center text-muted-foreground hover:text-foreground"
           aria-label={bn.actions.close}
         >
           <X className="size-4" aria-hidden />
@@ -487,7 +487,7 @@ export function RecipeForm({
                 aria-label={`কাঁচামাল ${index + 1} মুছুন`}
                 disabled={rows.length === 1}
                 onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
-                className="p-2 text-muted-foreground hover:text-debit disabled:opacity-40"
+                className="flex size-11 items-center justify-center text-muted-foreground hover:text-debit disabled:opacity-40"
               >
                 <X className="size-4" aria-hidden />
               </button>
@@ -543,7 +543,7 @@ export function DeactivateRecipeButton({ id, name }: { id: string; name: string 
             if (result.error) setError(result.error);
           });
         }}
-        className="text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
+        className="-mx-2 min-h-11 px-2 text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
       >
         {pending ? "…" : "বন্ধ করুন"}
       </button>
@@ -596,7 +596,7 @@ export function DeactivateButton({
             if (result.error) setError(result.error);
           });
         }}
-        className="text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
+        className="-mx-2 min-h-11 px-2 text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
       >
         {pending ? "…" : "বন্ধ করুন"}
       </button>
