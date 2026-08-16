@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ensureProfile } from "@hishabai/core";
+import { ensureProfile, resolveSession } from "@hishabai/core";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { rememberActiveCompany } from "@/lib/session";
 
 export interface AuthState {
   error?: string;
@@ -31,7 +32,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   if (!parsed.success) return { error: firstError(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
     // Deliberately vague: saying which half was wrong tells an attacker which
@@ -39,6 +40,14 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
     return { error: "ইমেইল বা পাসওয়ার্ড মিলছে না" };
   }
 
+  // Which company they land in, decided once here rather than rediscovered on
+  // every request. Every page after this can then start its own query straight
+  // away instead of waiting to be told which company to ask about.
+  const { companies } = await resolveSession(data.user.id);
+  const landing = companies[0]?.id;
+  if (!landing) redirect("/onboarding");
+
+  await rememberActiveCompany(landing);
   redirect("/dashboard");
 }
 

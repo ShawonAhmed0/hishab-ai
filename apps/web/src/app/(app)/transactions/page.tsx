@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
-import { requireSession } from "@/lib/session";
+import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
 export const metadata = { title: bn.nav.transactions };
@@ -34,20 +34,21 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await requireSession();
   const params = await searchParams;
 
   const type = TRANSACTION_TYPES.includes(params.type as TransactionType)
     ? (params.type as TransactionType)
     : undefined;
 
-  const rows = await listTransactions(session, {
-    ...(type ? { type } : {}),
-    ...(params.from ? { from: params.from } : {}),
-    ...(params.to ? { to: params.to } : {}),
-    ...(params.q ? { search: params.q } : {}),
-    includeCancelled: params.cancelled === "1",
-  });
+  const { data: rows } = await sessionWithData((scope) =>
+    listTransactions(scope, {
+      ...(type ? { type } : {}),
+      ...(params.from ? { from: params.from } : {}),
+      ...(params.to ? { to: params.to } : {}),
+      ...(params.q ? { search: params.q } : {}),
+      includeCancelled: params.cancelled === "1",
+    }),
+  );
 
   return (
     <div className="space-y-4">

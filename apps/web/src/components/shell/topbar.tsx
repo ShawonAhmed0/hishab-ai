@@ -158,3 +158,50 @@ export function Topbar({
     </header>
   );
 }
+
+/**
+ * The topbar's shape while the company list is still loading.
+ *
+ * The search box is real — it needs no session, and it is the one control
+ * someone might reach for immediately. Only the company switcher and the
+ * account button, which depend on the membership lookup, are placeholders.
+ */
+export function TopbarFrame() {
+  return (
+    <header
+      aria-busy="true"
+      className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:px-4"
+    >
+      <div className="flex max-w-[15rem] items-center gap-2 px-2 py-1.5" aria-hidden>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+          <Building2 className="size-4" aria-hidden />
+        </span>
+        <span className="h-4 w-28 rounded bg-surface-sunken" />
+      </div>
+
+      <form action="/search" className="ml-auto hidden max-w-sm flex-1 md:block">
+        <label className="sr-only" htmlFor="global-search-frame">
+          {bn.actions.search}
+        </label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground"
+            aria-hidden
+          />
+          <input
+            id="global-search-frame"
+            name="q"
+            type="search"
+            placeholder="কাস্টমার, পণ্য, মেমো, ভাউচার…"
+            className="h-10 w-full rounded-md border border-border-strong bg-surface-sunken pl-9 pr-3 text-sm placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          />
+        </div>
+      </form>
+
+      <span
+        className="ml-auto size-8 shrink-0 rounded-full bg-surface-sunken md:ml-0"
+        aria-hidden
+      />
+    </header>
+  );
+}

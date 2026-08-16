@@ -1,9 +1,8 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createCompany, ensureProfile } from "@hishabai/core";
-import { ACTIVE_COMPANY_COOKIE } from "@/lib/session";
+import { rememberActiveCompany } from "@/lib/session";
 import { getAuthUser } from "@/lib/supabase/server";
 
 export interface CompanyFormState {
@@ -42,27 +41,12 @@ export async function createCompanyAction(
     };
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(ACTIVE_COMPANY_COOKIE, companyId, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  });
-
+  await rememberActiveCompany(companyId);
   redirect("/dashboard");
 }
 
 /** Switching companies is just re-pointing the cookie; the session rebuilds. */
 export async function switchCompanyAction(companyId: string): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(ACTIVE_COMPANY_COOKIE, companyId, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  await rememberActiveCompany(companyId);
   redirect("/dashboard");
 }

@@ -1,19 +1,22 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { VERIFIED_USER_HEADER } from "@/lib/headers";
 
 type CookiesToSet = { name: string; value: string; options?: CookieOptions }[];
 
 const PUBLIC_PATHS = ["/login", "/register", "/reset-password", "/auth"];
 
 /**
- * The id of the user this middleware verified, handed to the page.
- *
  * `getUser()` is a network call to the auth service. Doing it here and again
- * in the page meant two of them per navigation. The page trusts this header
- * only because the middleware unconditionally strips any inbound copy first —
- * see `forwardVerifiedUser`.
+ * in the page meant two of them per navigation, so the verified id travels
+ * down as a header instead. A page may trust it only because this module
+ * unconditionally strips any inbound copy first — see `forwardVerifiedUser`.
+ *
+ * The name itself lives in lib/headers: importing it from here would pull this
+ * module, and `@supabase/ssr` with it, into the server bundle of every page
+ * that reads the header.
  */
-export const VERIFIED_USER_HEADER = "x-hishabai-verified-user";
+export { VERIFIED_USER_HEADER } from "@/lib/headers";
 
 /**
  * Rebuilds the request headers with our verified-user header set, and any

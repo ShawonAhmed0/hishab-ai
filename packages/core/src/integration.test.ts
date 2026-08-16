@@ -15,16 +15,19 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   closeDb,
   financialAccounts,
+  getDb,
   parties,
   products,
+  tenantQuery,
+  token,
   units,
   withTenant,
   withUser,
 } from "@hishabai/db";
 import { moneyToDb } from "@hishabai/shared";
-import { cancelTransaction, createTransaction } from "./transactions";
+import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
 import { getDashboard } from "./dashboard";
-import { listParties, listProducts } from "./master-data";
+import { listParties, listProducts, loadEntryFormData } from "./master-data";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -187,6 +190,56 @@ describeDb("company isolation is enforced by the database", () => {
         `${table} leaked rows across companies`,
       ).toBe("0");
     }
+  });
+
+  // ---- the one-round-trip read path ----
+  //
+  // tenantRead sends the context and the query as a single simple-protocol
+  // batch instead of a transaction. That is a second way into the same data,
+  // so it gets the same isolation tests rather than inheriting trust from
+  // withTenant.
+
+  it("denies the one-trip read the same rows it denies a transaction", async () => {
+    const impostor = { userId: beta.session.userId, companyId: alpha.companyId };
+
+    expect(await listTransactions(impostor)).toEqual([]);
+    expect(await loadEntryFormData(impostor)).toMatchObject({
+      parties: [],
+      products: [],
+      units: [],
+    });
+
+    const dashboard = await getDashboard(impostor);
+    expect(dashboard.recent).toEqual([]);
+    expect(dashboard.tiles.stockValue).toBe(0n);
+  });
+
+  it("leaves no tenant context behind on the pooled connection", async () => {
+    // If set_config outlived the batch, a later query that sets no context
+    // would inherit the last one — turning a fail-closed boundary into a
+    // fail-open one.
+    await listTransactions(alpha.session);
+
+    const rows = (await getDb().execute<{ company: string | null; user: string | null }>(sql`
+      select current_setting('app.company_id', true) as company,
+             current_setting('app.user_id', true) as user
+    `)) as unknown as { company: string | null; user: string | null }[];
+
+    expect(rows[0]!.company ?? "").toBe("");
+    expect(rows[0]!.user ?? "").toBe("");
+  });
+
+  it("refuses to interpolate anything that is not a uuid, date or integer", async () => {
+    await expect(
+      listTransactions({ userId: alpha.session.userId, companyId: "'; drop table parties --" }),
+    ).rejects.toThrow(/must be UUIDs/);
+
+    expect(() => tenantQuery`select ${"drop table parties"}`).toThrow(/only UUIDs/);
+    expect(() => tenantQuery`select ${1.5}`).toThrow(/not an integer/);
+    expect(() => token("parties; drop table parties")).toThrow(/not a bare token/);
+
+    // The filters the হিসাব list actually passes are still accepted.
+    expect(tenantQuery`${"2026-08-16"} ${42} ${token("sale")}`).toBe("'2026-08-16' 42 'sale'");
   });
 });
 

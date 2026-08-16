@@ -23,6 +23,10 @@ import {
   transactionPayments,
   transactions,
   units,
+  raw,
+  tenantQuery,
+  tenantRead,
+  token,
   withTenant,
   type Transaction as Tx,
 } from "@hishabai/db";
@@ -42,12 +46,14 @@ import {
   qty,
   qtyToDb,
   transactionInputSchema,
+  TRANSACTION_TYPES,
   type Money,
   type TransactionInput,
+  type TransactionStatus,
   type TransactionType,
 } from "@hishabai/shared";
 import { loadPostingContext, loadProductStates } from "./posting-context";
-import { requirePermission, type Session } from "./session";
+import { requirePermission, type Session, type TenantScope } from "./session";
 
 /** Voucher prefixes, so a number tells you what it is at a glance. */
 const VOUCHER_PREFIX: Record<TransactionType, string> = {
@@ -658,8 +664,62 @@ export interface TransactionFilter {
   offset?: number;
 }
 
+export interface TransactionListRow {
+  id: string;
+  voucherNo: string;
+  type: TransactionType;
+  status: TransactionStatus;
+  date: string;
+  memoNo: string | null;
+  total: string;
+  paidAmount: string;
+  dueAmount: string;
+  partyName: string | null;
+}
+
 /** The হিসাব list: filterable, sorted newest first, paged. */
-export async function listTransactions(session: Session, filter: TransactionFilter = {}) {
+export async function listTransactions(
+  session: TenantScope,
+  filter: TransactionFilter = {},
+): Promise<TransactionListRow[]> {
+  // Everything except the search box is a date, an enum or an integer, so the
+  // common case — opening the list, or filtering it — can go over the
+  // one-round-trip read. A search term is free text and has to be bound by the
+  // driver, so that path keeps the transaction and its four round trips.
+  if (!filter.search) {
+    const where = [tenantQuery`tr.company_id = app.current_company_id()`];
+
+    // Checked against the constant list, so it is a known token rather than
+    // anything the request supplied.
+    if (filter.type && TRANSACTION_TYPES.includes(filter.type)) {
+      where.push(tenantQuery`tr.type = ${token(filter.type)}`);
+    }
+    if (filter.from) where.push(tenantQuery`tr.date >= ${filter.from}::date`);
+    if (filter.to) where.push(tenantQuery`tr.date <= ${filter.to}::date`);
+    if (!filter.includeCancelled) where.push(tenantQuery`tr.status = 'posted'`);
+
+    return tenantRead<TransactionListRow>(
+      session,
+      tenantQuery`
+        select tr.id,
+               tr.voucher_no   as "voucherNo",
+               tr.type::text   as type,
+               tr.status::text as status,
+               tr.date::text   as date,
+               tr.memo_no      as "memoNo",
+               tr.total::text        as total,
+               tr.paid_amount::text  as "paidAmount",
+               tr.due_amount::text   as "dueAmount",
+               p.name          as "partyName"
+          from transactions tr
+          left join parties p on p.id = tr.party_id
+         where ${raw(where.join(" and "))}
+         order by tr.date desc, tr.created_at desc
+         limit ${filter.limit ?? 50} offset ${filter.offset ?? 0}
+      `,
+    );
+  }
+
   return withTenant(session, async (tx) => {
     const conditions = [eq(transactions.companyId, session.companyId)];
     if (filter.type) conditions.push(eq(transactions.type, filter.type));

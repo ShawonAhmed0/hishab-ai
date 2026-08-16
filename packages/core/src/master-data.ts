@@ -12,6 +12,8 @@ import {
   productStock,
   products,
   units,
+  tenantQuery,
+  tenantRead,
   withTenant,
 } from "@hishabai/db";
 import {
@@ -23,7 +25,7 @@ import {
   qty,
   qtyToDb,
 } from "@hishabai/shared";
-import { requirePermission, type Session } from "./session";
+import { requirePermission, type Session, type TenantScope } from "./session";
 import { writeAudit } from "./transactions";
 
 // ---------------------------------------------------------------------------
@@ -330,11 +332,19 @@ export interface EntryFormData {
   expenseCategories: { id: string; nameBn: string; code: string }[];
 }
 
-export async function loadEntryFormData(session: Session): Promise<EntryFormData> {
-  const company = session.companyId;
-
-  return withTenant(session, async (tx) => {
-    const rows = (await tx.execute(sql`
+export async function loadEntryFormData(session: TenantScope): Promise<EntryFormData> {
+  // One statement, one round trip. The company is never named — it comes from
+  // the session context, which RLS checks membership against.
+  const rows = await tenantRead<{
+    parties: EntryFormData["parties"] | null;
+    products: EntryFormData["products"] | null;
+    units: EntryFormData["units"] | null;
+    wallets: EntryFormData["wallets"] | null;
+    income_categories: EntryFormData["incomeCategories"] | null;
+    expense_categories: EntryFormData["expenseCategories"] | null;
+  }>(
+    session,
+    tenantQuery`
       select
         (select coalesce(json_agg(json_build_object(
                   'id', t.id, 'name', t.name, 'type', t.type,
@@ -346,7 +356,7 @@ export async function loadEntryFormData(session: Session): Promise<EntryFormData
                from parties p
                left join party_balances pb
                  on pb.party_id = p.id and pb.company_id = p.company_id
-              where p.company_id = ${company}::uuid and p.is_active
+              where p.company_id = app.current_company_id() and p.is_active
            ) t) as parties,
 
         (select coalesce(json_agg(json_build_object(
@@ -362,49 +372,42 @@ export async function loadEntryFormData(session: Session): Promise<EntryFormData
                join units u on u.id = pr.unit_id
                left join product_stock ps
                  on ps.product_id = pr.id and ps.company_id = pr.company_id
-              where pr.company_id = ${company}::uuid and pr.is_active
+              where pr.company_id = app.current_company_id() and pr.is_active
            ) t) as products,
 
         (select coalesce(json_agg(json_build_object(
                   'id', id, 'nameBn', name_bn, 'symbol', symbol) order by name_bn), '[]'::json)
-           from units where company_id = ${company}::uuid and is_active) as units,
+           from units where company_id = app.current_company_id() and is_active) as units,
 
         (select coalesce(json_agg(json_build_object(
                   'id', id, 'nameBn', name_bn, 'kind', kind::text, 'isDefault', is_default)
                   order by kind::text, name_bn), '[]'::json)
            from financial_accounts
-          where company_id = ${company}::uuid and is_active) as wallets,
+          where company_id = app.current_company_id() and is_active) as wallets,
 
         (select coalesce(json_agg(json_build_object(
                   'id', id, 'nameBn', name_bn, 'code', code) order by code), '[]'::json)
            from accounts
-          where company_id = ${company}::uuid and is_category and is_active
+          where company_id = app.current_company_id() and is_category and is_active
             and type = 'income') as income_categories,
 
         (select coalesce(json_agg(json_build_object(
                   'id', id, 'nameBn', name_bn, 'code', code) order by code), '[]'::json)
            from accounts
-          where company_id = ${company}::uuid and is_category and is_active
+          where company_id = app.current_company_id() and is_category and is_active
             and type = 'expense') as expense_categories
-    `)) as unknown as {
-      parties: EntryFormData["parties"] | null;
-      products: EntryFormData["products"] | null;
-      units: EntryFormData["units"] | null;
-      wallets: EntryFormData["wallets"] | null;
-      income_categories: EntryFormData["incomeCategories"] | null;
-      expense_categories: EntryFormData["expenseCategories"] | null;
-    }[];
+    `,
+  );
 
-    const raw = rows[0]!;
-    return {
-      parties: raw.parties ?? [],
-      products: raw.products ?? [],
-      units: raw.units ?? [],
-      wallets: raw.wallets ?? [],
-      incomeCategories: raw.income_categories ?? [],
-      expenseCategories: raw.expense_categories ?? [],
-    };
-  });
+  const raw = rows[0]!;
+  return {
+    parties: raw.parties ?? [],
+    products: raw.products ?? [],
+    units: raw.units ?? [],
+    wallets: raw.wallets ?? [],
+    incomeCategories: raw.income_categories ?? [],
+    expenseCategories: raw.expense_categories ?? [],
+  };
 }
 
 /** The খাত dropdown: income categories for আয়, expense categories for ব্যয়. */

@@ -25,7 +25,7 @@ import {
   SalesTrendChart,
   type ChartPoint,
 } from "@/components/charts/trend-charts";
-import { requireSession } from "@/lib/session";
+import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
 export const metadata = { title: bn.nav.dashboard };
@@ -40,9 +40,11 @@ const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
 };
 
 export default async function DashboardPage() {
-  const session = await requireSession();
-  // One round trip for the whole page — tiles, charts, lists and alerts.
-  const { tiles, trend, recent, topDueCustomers, lowStock } = await getDashboard(session);
+  // One round trip for the whole page — tiles, charts, lists and alerts — and
+  // it runs alongside the session lookup rather than after it.
+  const {
+    data: { tiles, trend, recent, topDueCustomers, lowStock },
+  } = await sessionWithData(getDashboard);
 
   // Money is a bigint and cannot cross to a client component. Charts get plain
   // taka — exact figures are rendered from the real values in the tiles and

@@ -11,15 +11,14 @@
  * the flows and the trend aggregate, and both are bounded by date against the
  * (company_id, date) index.
  */
-import { sql } from "drizzle-orm";
-import { withTenant } from "@hishabai/db";
+import { tenantQuery, tenantRead } from "@hishabai/db";
 import {
   moneyFromDb,
   type Money,
   type TransactionStatus,
   type TransactionType,
 } from "@hishabai/shared";
-import type { Session } from "./session";
+import type { TenantScope } from "./session";
 
 export interface DashboardTiles {
   cash: Money;
@@ -91,7 +90,7 @@ interface RawDashboard {
 }
 
 export async function getDashboard(
-  session: Session,
+  session: TenantScope,
   options: { from?: string; to?: string; months?: number } = {},
 ): Promise<DashboardData> {
   const period = {
@@ -99,16 +98,17 @@ export async function getDashboard(
     to: options.to ?? monthRange().to,
   };
   const months = options.months ?? 6;
-  const company = session.companyId;
 
-  return withTenant(session, async (tx) => {
-    // One statement. Each subquery returns JSON so the whole dashboard arrives
-    // as a single row.
-    const rows = (await tx.execute<RawDashboard>(sql`
+  // One statement, one round trip. Each subquery returns JSON so the whole
+  // dashboard arrives as a single row, and the company is never named: it
+  // comes from the session context, which RLS checks membership against.
+  const rows = await tenantRead<RawDashboard>(
+    session,
+    tenantQuery`
       select
         (select coalesce(json_agg(json_build_object('kind', kind, 'balance', balance::text)), '[]'::json)
            from financial_accounts
-          where company_id = ${company}::uuid and is_active) as wallets,
+          where company_id = app.current_company_id() and is_active) as wallets,
 
         (select coalesce(json_agg(json_build_object('type', t.type, 'amount', t.amount)), '[]'::json)
            from (
@@ -116,7 +116,7 @@ export async function getDashboard(
                     coalesce(sum(jl.credit - jl.debit), 0)::text as amount
                from journal_lines jl
                join accounts a on a.id = jl.account_id
-              where jl.company_id = ${company}::uuid
+              where jl.company_id = app.current_company_id()
                 and jl.date between ${period.from}::date and ${period.to}::date
                 and a.type in ('income', 'expense')
               group by a.type
@@ -125,10 +125,10 @@ export async function getDashboard(
         (select json_build_object(
                   'receivable', coalesce(sum(receivable), 0)::text,
                   'payable', coalesce(sum(payable), 0)::text)
-           from party_balances where company_id = ${company}::uuid) as dues,
+           from party_balances where company_id = app.current_company_id()) as dues,
 
         (select coalesce(sum(value), 0)::text
-           from product_stock where company_id = ${company}::uuid) as stock_value,
+           from product_stock where company_id = app.current_company_id()) as stock_value,
 
         (select coalesce(json_agg(json_build_object(
                   'period', t.period, 'income', t.income,
@@ -140,7 +140,7 @@ export async function getDashboard(
                     coalesce(sum(case when a.subtype = 'sales' then jl.credit - jl.debit else 0 end), 0)::text as sales
                from journal_lines jl
                join accounts a on a.id = jl.account_id
-              where jl.company_id = ${company}::uuid
+              where jl.company_id = app.current_company_id()
                 and jl.date >= (current_date - make_interval(months => ${months}))
               group by 1
            ) t) as trend,
@@ -156,7 +156,7 @@ export async function getDashboard(
                     tr.memo_no, p.name as party_name, tr.created_at
                from transactions tr
                left join parties p on p.id = tr.party_id
-              where tr.company_id = ${company}::uuid
+              where tr.company_id = app.current_company_id()
               order by tr.created_at desc
               limit 12
            ) t) as recent,
@@ -168,7 +168,7 @@ export async function getDashboard(
              select p.id, p.name, pb.receivable::text
                from party_balances pb
                join parties p on p.id = pb.party_id
-              where pb.company_id = ${company}::uuid and pb.receivable > 0
+              where pb.company_id = app.current_company_id() and pb.receivable > 0
               order by pb.receivable desc
               limit 8
            ) t) as top_due,
@@ -183,64 +183,64 @@ export async function getDashboard(
                join units u on u.id = pr.unit_id
                left join product_stock ps
                  on ps.product_id = pr.id and ps.company_id = pr.company_id
-              where pr.company_id = ${company}::uuid
+              where pr.company_id = app.current_company_id()
                 and pr.is_active
                 and pr.min_stock_level > 0
                 and coalesce(ps.quantity, 0) <= pr.min_stock_level
               order by pr.name_bn
               limit 20
            ) t) as low_stock
-    `)) as unknown as RawDashboard[];
+    `,
+  );
 
-    const raw = rows[0]!;
+  const raw = rows[0]!;
 
-    const walletTotal = (kind: string): Money => {
-      let total = 0n;
-      for (const wallet of raw.wallets ?? []) {
-        if (wallet.kind === kind) total += moneyFromDb(wallet.balance);
-      }
-      return total as Money;
-    };
+  const walletTotal = (kind: string): Money => {
+    let total = 0n;
+    for (const wallet of raw.wallets ?? []) {
+      if (wallet.kind === kind) total += moneyFromDb(wallet.balance);
+    }
+    return total as Money;
+  };
 
-    const flow = (type: string) =>
-      moneyFromDb((raw.flows ?? []).find((f) => f.type === type)?.amount ?? "0");
+  const flow = (type: string) =>
+    moneyFromDb((raw.flows ?? []).find((f) => f.type === type)?.amount ?? "0");
 
-    const monthIncome = flow("income");
-    // Expenses are debit-normal, so `credit - debit` comes back negative.
-    const monthExpense = -flow("expense") as Money;
+  const monthIncome = flow("income");
+  // Expenses are debit-normal, so `credit - debit` comes back negative.
+  const monthExpense = -flow("expense") as Money;
 
-    const trend: TrendPoint[] = (raw.trend ?? []).map((row) => {
-      const income = moneyFromDb(row.income);
-      const expense = moneyFromDb(row.expense);
-      return {
-        period: row.period,
-        income,
-        expense,
-        sales: moneyFromDb(row.sales),
-        profit: (income - expense) as Money,
-      };
-    });
-
+  const trend: TrendPoint[] = (raw.trend ?? []).map((row) => {
+    const income = moneyFromDb(row.income);
+    const expense = moneyFromDb(row.expense);
     return {
-      tiles: {
-        cash: walletTotal("cash"),
-        bank: walletTotal("bank"),
-        mfs: walletTotal("mfs"),
-        monthIncome,
-        monthExpense,
-        netProfit: (monthIncome - monthExpense) as Money,
-        customerDue: moneyFromDb(raw.dues?.receivable ?? "0"),
-        vendorPayable: moneyFromDb(raw.dues?.payable ?? "0"),
-        stockValue: moneyFromDb(raw.stock_value ?? "0"),
-      },
-      trend,
-      recent: raw.recent ?? [],
-      topDueCustomers: (raw.top_due ?? []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        receivable: moneyFromDb(row.receivable),
-      })),
-      lowStock: raw.low_stock ?? [],
+      period: row.period,
+      income,
+      expense,
+      sales: moneyFromDb(row.sales),
+      profit: (income - expense) as Money,
     };
   });
+
+  return {
+    tiles: {
+      cash: walletTotal("cash"),
+      bank: walletTotal("bank"),
+      mfs: walletTotal("mfs"),
+      monthIncome,
+      monthExpense,
+      netProfit: (monthIncome - monthExpense) as Money,
+      customerDue: moneyFromDb(raw.dues?.receivable ?? "0"),
+      vendorPayable: moneyFromDb(raw.dues?.payable ?? "0"),
+      stockValue: moneyFromDb(raw.stock_value ?? "0"),
+    },
+    trend,
+    recent: raw.recent ?? [],
+    topDueCustomers: (raw.top_due ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      receivable: moneyFromDb(row.receivable),
+    })),
+    lowStock: raw.low_stock ?? [],
+  };
 }

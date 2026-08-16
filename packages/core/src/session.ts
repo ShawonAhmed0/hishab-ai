@@ -8,9 +8,25 @@
  */
 import type { Role } from "@hishabai/shared";
 
-export interface Session {
+/**
+ * Identity and company, without a role that has been checked against the
+ * database yet.
+ *
+ * This exists so a page can start its own read while the membership lookup is
+ * still in flight, instead of waiting a full round trip to learn something the
+ * database is going to verify anyway: the `tenant_isolation` policy requires
+ * `app.is_member(company_id)`, so a company id taken from a cookie can only
+ * ever return zero rows if it is not really theirs.
+ *
+ * It is deliberately *not* a Session. Reads may take a scope; anything that
+ * writes or checks a permission needs the resolved role.
+ */
+export interface TenantScope {
   userId: string;
   companyId: string;
+}
+
+export interface Session extends TenantScope {
   role: Role;
   /** For the audit trail, when the caller can supply them. */
   ipAddress?: string;

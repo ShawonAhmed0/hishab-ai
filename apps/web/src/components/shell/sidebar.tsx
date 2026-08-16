@@ -107,4 +107,33 @@ export function BottomNav({ allowed }: { allowed: string[] }) {
   );
 }
 
+/**
+ * What stands in the sidebar's place while the role is still being read.
+ *
+ * Same width, same border, same brand block, so the page beside it is laid out
+ * at its final position from the first paint and nothing jumps when the real
+ * navigation arrives. Only the items — the part that depends on the role — are
+ * left blank.
+ */
+export function SidebarFrame() {
+  return (
+    <div
+      aria-hidden
+      className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex"
+    >
+      <div className="flex items-center gap-2.5 border-b border-border px-4 py-4">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-on-primary">
+          <Wallet className="size-4" aria-hidden />
+        </span>
+        <span className="font-bold tracking-tight">HishabAI</span>
+      </div>
+      <div className="flex flex-1 flex-col gap-0.5 p-2" aria-busy="true">
+        {Array.from({ length: 9 }).map((_, index) => (
+          <span key={index} className="h-10 rounded-md bg-surface-sunken/60" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export { NAV_ITEMS };
