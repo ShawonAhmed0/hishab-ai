@@ -64,7 +64,9 @@ async function run<T>(fn: () => Promise<T>): Promise<CreateResult<T>> {
         fieldErrors,
       };
     }
-    if (error instanceof PermissionError) return { ok: false, error: error.messageBn };
+    if (error instanceof PermissionError) {
+      return { ok: false, error: (await dict()).messages.notAllowed };
+    }
     if (error instanceof Error && /unique|duplicate/i.test(error.message)) {
       return { ok: false, error: (await dict()).messages.alreadyExists };
     }

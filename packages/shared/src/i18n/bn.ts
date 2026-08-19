@@ -294,6 +294,7 @@ export const messages = {
   cancelFailed: "বাতিল করা যায়নি। আবার চেষ্টা করুন।",
   cancelReasonRequired: "বাতিলের কারণ লিখুন",
   companyCreateFailed: "কোম্পানি তৈরি করা যায়নি",
+  notAllowed: "এই কাজটি করার অনুমতি আপনার নেই।",
 } as const;
 
 /**
@@ -917,6 +918,77 @@ export const emptyStates = {
   noDues: "কারও বকেয়া নেই",
 } as const;
 
+/**
+ * Why the engine refused an entry.
+ *
+ * The engine is pure and cannot reach a dictionary, so it names the rule and
+ * hands the numbers over already formatted — the format is identical in both
+ * locales, only the sentence around it changes — and the sentence is built
+ * here. See `BlockedReason` in `../types`.
+ */
+export const blocked = {
+  emptyTransaction: "এই এন্ট্রিতে কোনো অঙ্ক নেই।",
+  unbalancedEntry: "হিসাব মেলেনি — ডেবিট ও ক্রেডিট সমান হয়নি। এন্ট্রিটি সংরক্ষণ করা হয়নি।",
+  negativeJournalAmount: "হিসাবের অঙ্ক ঋণাত্মক হতে পারে না।",
+  missingProduct: "পণ্যটি খুঁজে পাওয়া যায়নি।",
+  missingFinancialAccount: "পেমেন্ট মাধ্যমটি খুঁজে পাওয়া যায়নি।",
+  paymentExceedsTotal: (paid: string, total: string) =>
+    `পেমেন্টের পরিমাণ মোট মূল্যের চেয়ে বেশি হতে পারে না — ${paid}, মোট ${total}।`,
+  discountExceedsTotal: (discount: string, total: string) =>
+    `ছাড় মোট মূল্যের চেয়ে বেশি হতে পারে না — ${discount}, মোট ${total}।`,
+  productionCostUnpaid: (cost: string, paid: string) =>
+    `লেবার ও অন্যান্য খরচের সমান পরিমাণ পেমেন্ট মাধ্যম থেকে দিতে হবে — খরচ ${cost}, দেওয়া হয়েছে ${paid}।`,
+  wastageNotAnInput: (product: string) =>
+    `${product} — অপচয়ের পণ্যটি এই উৎপাদনের কাঁচামালের তালিকায় নেই।`,
+  wastageExceedsInputs: "অপচয়ের পরিমাণ ব্যবহৃত কাঁচামালের চেয়ে বেশি হতে পারে না।",
+  negativeStock: (product: string, available: string, requested: string) =>
+    `${product} — পর্যাপ্ত স্টক নেই। বর্তমান স্টক ${available}, চাওয়া হয়েছে ${requested}।`,
+} as const;
+
+/**
+ * The authorised override — spec R1.2.
+ *
+ * Deliberately plain about what is happening: an override is a decision the
+ * shopkeeper is making on the record, not a dismissible warning, and the
+ * wording says so.
+ */
+export const override = {
+  blockedTitle: "এন্ট্রিটি সংরক্ষণ করা যায়নি",
+  overrideTitle: "নিয়ম এড়িয়ে সংরক্ষণ করবেন?",
+  explain: "অ্যাডমিন হিসেবে আপনি এটি সংরক্ষণ করতে পারেন। কাজটি হিসাবের খাতায় লেখা থাকবে।",
+  pin: "ওভাররাইড PIN",
+  pinHint: "যে PIN সেটিংসে সেট করেছেন",
+  submit: "PIN দিয়ে সংরক্ষণ করুন",
+  wrongPin: "PIN মেলেনি।",
+  noPin: "ওভাররাইড PIN এখনো সেট করা হয়নি। সেটিংস থেকে সেট করুন।",
+  notAdmin: "শুধু অ্যাডমিন এই বাধা এড়াতে পারেন।",
+  notOverridable: "এই বাধাটি এড়ানো যায় না।",
+  recorded: "নিয়ম এড়ানো হয়েছে — হিসাবের খাতায় লেখা হয়েছে।",
+  setTitle: "ওভাররাইড PIN",
+  setDescription:
+    "স্টক না থাকা সত্ত্বেও বিক্রয়ের মতো এন্ট্রি সংরক্ষণ করতে এই PIN লাগবে। শুধু অ্যাডমিনের জন্য।",
+  newPin: "নতুন PIN",
+  confirmPin: "আবার লিখুন",
+  pinRule: "৪ থেকে ১২টি সংখ্যা",
+  mismatch: "দুটি PIN এক হয়নি।",
+  isSet: "PIN সেট করা আছে",
+  notSet: "PIN সেট করা নেই",
+  savePin: "PIN সংরক্ষণ করুন",
+  saved: "PIN সংরক্ষণ করা হয়েছে",
+} as const;
+
+/** Things the entry did anyway, and the shopkeeper should still know about. */
+export const warned = {
+  stockWentNegative: (product: string) =>
+    `${product} — স্টক ঋণাত্মক হয়ে গেছে। ক্রয় এন্ট্রি বাদ পড়েছে কি না দেখুন।`,
+  zeroCostReturn: (product: string) =>
+    `${product} — গড় ক্রয়মূল্য শূন্য, তাই ফেরত পণ্যের কোনো মূল্য যোগ হয়নি।`,
+  zeroCostSurplus: (product: string) =>
+    `${product} — গড় ক্রয়মূল্য শূন্য, তাই বাড়তি স্টকের কোনো মূল্য ধরা হয়নি।`,
+  overCreditLimit: (party: string, limit: string, projected: string) =>
+    `${party} — ক্রেডিট সীমা ${limit} ছাড়িয়ে যাচ্ছে। এই বিলের পর বকেয়া দাঁড়াবে ${projected}।`,
+} as const;
+
 export const bn = {
   nav,
   actions,
@@ -938,6 +1010,9 @@ export const bn = {
   severity,
   messages,
   emptyStates,
+  blocked,
+  warned,
+  override,
   shell,
   auth,
   onboarding,

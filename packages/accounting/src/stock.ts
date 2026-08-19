@@ -38,9 +38,8 @@ export class StockLedger {
     if (!seed) {
       throw new PostingError(
         "MISSING_PRODUCT",
-        "পণ্যটি খুঁজে পাওয়া যায়নি।",
+        { rule: "missingProduct" },
         `Unknown product ${productId}`,
-        { productId },
       );
     }
     const copy: ProductState = { ...seed };
@@ -66,16 +65,23 @@ export class StockLedger {
 
     if (quantity > state.quantity) {
       if (!this.allowNegative) {
+        // Spec R1.1: the numbers go with the refusal. "পর্যাপ্ত স্টক নেই" on
+        // its own sends the user to another screen to find out by how much.
         throw new PostingError(
           "NEGATIVE_STOCK",
-          `${state.nameBn} — পর্যাপ্ত স্টক নেই। বর্তমান স্টক ${formatQty(state.quantity)}।`,
+          {
+            rule: "negativeStock",
+            productId,
+            product: state.nameBn,
+            available: formatQty(state.quantity, { unit: state.unitSymbol }),
+            requested: formatQty(quantity, { unit: state.unitSymbol }),
+          },
           `Insufficient stock for product ${productId}`,
-          { productId, requested: quantity.toString(), available: state.quantity.toString() },
         );
       }
       this.warnings.push({
         code: "NEGATIVE_STOCK",
-        messageBn: `${state.nameBn} — স্টক ঋণাত্মক হয়ে গেছে। ক্রয় এন্ট্রি বাদ পড়েছে কি না দেখুন।`,
+        reason: { rule: "stockWentNegative", product: state.nameBn },
         details: { productId, requested: quantity.toString(), available: state.quantity.toString() },
       });
     }

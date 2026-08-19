@@ -176,8 +176,73 @@ export const AUDIT_ACTIONS = [
   "delete",
   "login",
   "export",
+  /** An admin pushed a posting past a rule that had blocked it — spec R1.2. */
+  "override",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export const NOTIFICATION_SEVERITIES = ["info", "warning", "critical"] as const;
 export type NotificationSeverity = (typeof NOTIFICATION_SEVERITIES)[number];
+
+// ---------------------------------------------------------------------------
+// Refusals
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a posting was refused, in a form either language can render.
+ *
+ * The engine is pure: it cannot reach the dictionary, and a resolved Bengali
+ * sentence baked into it would be the frozen-label mistake in a new place. So
+ * it names the rule and hands over the numbers already formatted — the number
+ * format is identical in both locales, only the sentence around it differs —
+ * and `blockedMessage` builds the sentence from whichever dictionary the
+ * request is being served in.
+ *
+ * Product, party and wallet names travel through here as data, exactly as
+ * they came out of their `nameBn` column.
+ */
+export type BlockedReason =
+  | { rule: "emptyTransaction" }
+  | { rule: "unbalancedEntry" }
+  | { rule: "negativeJournalAmount" }
+  | { rule: "missingProduct" }
+  | { rule: "missingFinancialAccount" }
+  | { rule: "paymentExceedsTotal"; paid: string; total: string }
+  | { rule: "discountExceedsTotal"; discount: string; total: string }
+  | { rule: "productionCostUnpaid"; cost: string; paid: string }
+  | { rule: "wastageNotAnInput"; product: string }
+  | { rule: "wastageExceedsInputs" }
+  | {
+      rule: "negativeStock";
+      productId: string;
+      product: string;
+      available: string;
+      requested: string;
+    };
+
+export type BlockedRule = BlockedReason["rule"];
+
+/**
+ * The same shape for the things that post anyway but are worth saying out
+ * loud. A warning is read by the person at the counter in whichever language
+ * they chose, so it cannot be a Bengali sentence either.
+ */
+export type WarnedReason =
+  | { rule: "stockWentNegative"; product: string }
+  | { rule: "zeroCostReturn"; product: string }
+  | { rule: "zeroCostSurplus"; product: string }
+  | { rule: "overCreditLimit"; party: string; limit: string; projected: string };
+
+/**
+ * The rules an admin may push past, per spec R1.2.
+ *
+ * Everything absent from this list is a refusal no PIN can lift: an unbalanced
+ * journal or a product that does not exist is a bug or a typo, not a business
+ * judgement the shopkeeper is entitled to make.
+ */
+export const OVERRIDABLE_RULES = ["negativeStock"] as const;
+export type OverridableRule = (typeof OVERRIDABLE_RULES)[number];
+
+export function isOverridable(rule: BlockedRule): rule is OverridableRule {
+  return (OVERRIDABLE_RULES as readonly string[]).includes(rule);
+}

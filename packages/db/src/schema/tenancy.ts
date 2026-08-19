@@ -96,6 +96,37 @@ export const counters = pgTable(
   (table) => [primaryKey({ columns: [table.companyId, table.key] })],
 );
 
+/**
+ * The PIN an admin re-types to push an entry past a rule that blocked it
+ * (spec R1.2).
+ *
+ * A separate table rather than a column on `company_members`, because
+ * `membership_visibility` lets every member of a company read every membership
+ * row — RLS is row-level, not column-level, so a hash living there would be
+ * readable by the colleague it exists to stop. This table's policy is
+ * `user_id = app.current_user_id()`: nobody can read anybody else's hash by
+ * any route.
+ *
+ * Company-scoped because the authority is: the role that grants it lives on
+ * `company_members`, and the audit row it writes is a company's record.
+ */
+export const overrideCredentials = pgTable(
+  "override_credentials",
+  {
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    /** `scrypt$N$r$p$salt$hash`. Never leaves the server. */
+    pinHash: text("pin_hash").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [primaryKey({ columns: [table.companyId, table.userId] })],
+);
+
 export const companiesRelations = relations(companies, ({ many }) => ({
   members: many(companyMembers),
 }));
@@ -113,4 +144,5 @@ export const companyMembersRelations = relations(companyMembers, ({ one }) => ({
 
 export type Company = typeof companies.$inferSelect;
 export type CompanyMember = typeof companyMembers.$inferSelect;
+export type OverrideCredential = typeof overrideCredentials.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;

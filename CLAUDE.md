@@ -23,8 +23,13 @@ Business logic lives in `packages/`, never in route files.
 npm test && npm run build
 ```
 
-`npm test` needs `DATABASE_URL`; without it the 32 integration tests **silently
-skip** and you get 89 passing instead of 121. Check the count.
+`npm test` needs `DATABASE_URL`; without it the integration tests **silently
+skip** and you get 100 passing instead of 166. Check the count.
+
+A schema change needs `npm run migrate -w @hishabai/db` before the integration
+tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
+the drizzle migrations, then re-applies every file in `packages/db/src/sql`
+(they are idempotent, which is why re-running after a policy edit is safe).
 
 `npm run build`, not just `npm run typecheck` — `typedRoutes` types are
 generated at build time, so `tsc -b` cannot see a bad `href` and will pass on
@@ -203,14 +208,66 @@ the `/api/v1` Android surface (not started), and real voice/OCR (the parser in
 `entry/voice-scan.tsx` is a heuristic stub — the review-and-confirm flow
 around it is not).
 
-## Warn, don't refuse
+## Refuse, but leave a door — and it is a door, not a hint
 
-Negative stock and a breached ক্রেডিট সীমা are both `PostingWarning`s, not
-errors. Recording a sale before the matching purchase is normal practice here,
-and the credit limit is the shopkeeper's own note to themselves — they are at
-the counter with the customer in front of them, and the app overruling them is
-not help. Both post, both warn, and the warning is kept (below) rather than
-shown once.
+This section used to read "Warn, don't refuse", and for negative stock it no
+longer does. **A sale of stock the books have not received is refused**
+(`PostingError`, code `NEGATIVE_STOCK`), the transaction rolls back, and the
+message names the product and both numbers: *"পর্যাপ্ত স্টক নেই। বর্তমান স্টক
+১০০ কেজি, চাওয়া হয়েছে ১৫০ কেজি।"*
+
+The old reasoning was that recording a sale before the matching চালান is normal
+practice here, so refusing it was the app overruling the person at the counter.
+That is still true of the *practice* — and it is why the door exists rather than
+why the rule does not. What the warning could not do was stop the case it was
+written for: stock walking out of the godown against an entry nobody ever made,
+which no report can find afterwards because there is nothing to find. A warning
+in a toast is read by whoever is not busy.
+
+So: `allowNegativeStock` defaults to **false** everywhere, and is true in
+exactly two places — `reverseTransaction`, because a cancellation must always be
+postable no matter what stock has done since, and an entry an admin has
+authorised. Everything else refuses.
+
+A breached **ক্রেডিট সীমা is still a warning**, unchanged. It is the
+shopkeeper's own note to themselves about a customer standing in front of them,
+and nothing goes missing when it is exceeded.
+
+### The override
+
+`packages/core/src/overrides.ts`. Three things have to hold, and a role check
+alone is not one of them:
+
+1. the session's role is `admin`;
+2. the person re-types their PIN **now** — an admin session may well be sitting
+   unlocked on the counter, so the role proves only that somebody logged in;
+3. an `audit_logs` row with `action = 'override'` records the rule and the
+   values, written inside the posting transaction so an entry that rolls back
+   leaves no claim behind.
+
+The PIN is scrypt-hashed in `override_credentials`, which is a table of its own
+rather than a column on `company_members` — `membership_visibility` shows every
+member row to every member, and **RLS is row-level, not column-level**, so a
+hash there would be readable by exactly the colleague it exists to stop. Its
+policy is `user_id = app.current_user_id()`. `overridePinIsSet` returns a
+boolean and there is no path that returns anything more.
+
+`createTransaction` posts, and if a rule refuses and an override was supplied,
+posts *again* with that one rule relaxed. The engine is pure, so the second run
+is free — and the audit row then names the rule that actually blocked and the
+numbers it blocked over, rather than whatever the browser claimed was about to
+happen. A rule that refuses again after being relaxed is a real failure.
+
+### A refusal carries a reason, not a sentence
+
+`PostingError` holds a `BlockedReason` — the rule, plus the values already
+formatted (the number format is identical in both locales). `blockedMessage`
+builds the sentence from whichever dictionary the request is being served in.
+The engine cannot reach a dictionary and a Bengali sentence frozen into it would
+be the `NAV_ITEMS` mistake in a new place; `messageBn` is a getter over the
+Bengali dictionary, for logs and audit summaries that have no request locale.
+Adding a rule to `BlockedReason` without a case in `blockedMessage` is a compile
+error at the `never`.
 
 ## Alerts are states; notifications are events
 

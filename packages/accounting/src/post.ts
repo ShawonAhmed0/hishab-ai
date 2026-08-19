@@ -43,7 +43,7 @@ export function postTransaction(
   input: TransactionInput,
   context: PostingContext,
 ): PostingResult {
-  const stock = new StockLedger(context.products, context.allowNegativeStock ?? true);
+  const stock = new StockLedger(context.products, context.allowNegativeStock ?? false);
   const journal = new JournalBuilder();
   const warnings: PostingWarning[] = [];
 
@@ -56,7 +56,7 @@ export function postTransaction(
     if (journalLines.length === 0) {
       throw new PostingError(
         "EMPTY_TRANSACTION",
-        "এই এন্ট্রিতে কোনো অঙ্ক নেই।",
+        { rule: "emptyTransaction" },
         "Transaction produced no journal lines.",
       );
     }
@@ -114,9 +114,8 @@ function resolvePayments(
     if (!wallet) {
       throw new PostingError(
         "MISSING_FINANCIAL_ACCOUNT",
-        "পেমেন্ট মাধ্যমটি খুঁজে পাওয়া যায়নি।",
+        { rule: "missingFinancialAccount" },
         `Unknown financial account ${payment.financialAccountId}`,
-        { financialAccountId: payment.financialAccountId },
       );
     }
     const draft: PaymentDraft = {
@@ -144,9 +143,8 @@ function assertPaymentWithinTotal(paid: Money, total: Money): void {
   if (cmpMoney(paid, total) > 0) {
     throw new PostingError(
       "PAYMENT_EXCEEDS_TOTAL",
-      "পেমেন্টের পরিমাণ মোট মূল্যের চেয়ে বেশি হতে পারে না।",
+      { rule: "paymentExceedsTotal", paid: formatMoney(paid), total: formatMoney(total) },
       "Payment exceeds transaction total.",
-      { paid: moneyToDb(paid), total: moneyToDb(total) },
     );
   }
 }
@@ -155,9 +153,12 @@ function assertNonNegativeTotal(total: Money, discount: Money): void {
   if (total < 0n) {
     throw new PostingError(
       "INVALID_AMOUNT",
-      "ছাড় মোট মূল্যের চেয়ে বেশি হতে পারে না।",
+      {
+        rule: "discountExceedsTotal",
+        discount: formatMoney(discount),
+        total: formatMoney(total),
+      },
       "Discount exceeds the value of the transaction.",
-      { total: moneyToDb(total), discount: moneyToDb(discount) },
     );
   }
 }
@@ -234,9 +235,12 @@ function postSaleSide(
     if (cmpMoney(after, party.creditLimit) > 0) {
       warnings.push({
         code: "OVER_CREDIT_LIMIT",
-        messageBn:
-          `${party.name} — ক্রেডিট সীমা ${formatMoney(party.creditLimit)} ছাড়িয়ে যাচ্ছে। ` +
-          `এই বিলের পর বকেয়া দাঁড়াবে ${formatMoney(after)}।`,
+        reason: {
+          rule: "overCreditLimit",
+          party: party.name,
+          limit: formatMoney(party.creditLimit),
+          projected: formatMoney(after),
+        },
         details: {
           partyId: party.id,
           creditLimit: moneyToDb(party.creditLimit),
@@ -258,7 +262,7 @@ function postSaleSide(
       if (value === ZERO && quantity !== ZERO_QTY) {
         warnings.push({
           code: "ZERO_COST_ISSUE",
-          messageBn: `${state.nameBn} — গড় ক্রয়মূল্য শূন্য, তাই ফেরত পণ্যের কোনো মূল্য যোগ হয়নি।`,
+          reason: { rule: "zeroCostReturn", product: state.nameBn },
           details: { productId: line.productId },
         });
       }
@@ -477,9 +481,12 @@ function postProduction(
   if (conversion !== ZERO && cmpMoney(paid, conversion) !== 0) {
     throw new PostingError(
       "PRODUCTION_COST_UNPAID",
-      "লেবার ও অন্যান্য খরচের সমান পরিমাণ পেমেন্ট মাধ্যম থেকে দিতে হবে।",
+      {
+        rule: "productionCostUnpaid",
+        cost: formatMoney(conversion),
+        paid: formatMoney(paid),
+      },
       "Production conversion cost must equal the payments provided.",
-      { conversion: moneyToDb(conversion), paid: moneyToDb(paid) },
     );
   }
 
@@ -491,9 +498,11 @@ function postProduction(
     if (rate === undefined) {
       throw new PostingError(
         "WASTAGE_NOT_AN_INPUT",
-        "অপচয়ের পণ্যটি এই উৎপাদনের কাঁচামালের তালিকায় নেই।",
+        {
+          rule: "wastageNotAnInput",
+          product: context.products.get(waste.productId)?.nameBn ?? waste.productId,
+        },
         "Wastage product is not among the production inputs.",
-        { productId: waste.productId },
       );
     }
     wastageCost = addMoney(wastageCost, multiplyRate(qty(waste.quantity), rate));
@@ -503,9 +512,8 @@ function postProduction(
   if (pool < 0n) {
     throw new PostingError(
       "INVALID_AMOUNT",
-      "অপচয়ের পরিমাণ ব্যবহৃত কাঁচামালের চেয়ে বেশি হতে পারে না।",
-      "Wastage cost exceeds the total production cost pool.",
-      { pool: moneyToDb(pool) },
+      { rule: "wastageExceedsInputs" },
+      `Wastage cost exceeds the total production cost pool of ${moneyToDb(pool)}.`,
     );
   }
 
@@ -564,7 +572,7 @@ function postStockAdjustment(
       if (value === ZERO) {
         warnings.push({
           code: "ZERO_COST_ISSUE",
-          messageBn: `${state.nameBn} — গড় ক্রয়মূল্য শূন্য, তাই বাড়তি স্টকের কোনো মূল্য ধরা হয়নি।`,
+          reason: { rule: "zeroCostSurplus", product: state.nameBn },
           details: { productId: adjustment.productId },
         });
       }

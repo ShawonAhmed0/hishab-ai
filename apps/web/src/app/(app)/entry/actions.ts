@@ -2,9 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
-import { createTransaction, MissingSetupError, PermissionError } from "@hishabai/core";
+import {
+  createTransaction,
+  MissingSetupError,
+  OverrideError,
+  PermissionError,
+} from "@hishabai/core";
 import { PostingError } from "@hishabai/accounting";
-import { addMoney, moneyToDb } from "@hishabai/shared";
+import {
+  addMoney,
+  blockedMessage,
+  isOverridable,
+  moneyToDb,
+  warnedMessage,
+} from "@hishabai/shared";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
@@ -26,6 +37,15 @@ export interface EntryFailure {
   error: string;
   /** Field path → message, for the inline errors. */
   fieldErrors?: Record<string, string>;
+  /**
+   * Set when a posting rule refused the entry and an admin is allowed to push
+   * past it. The browser uses this to raise the PIN dialog; it is not
+   * permission to do anything, and the server re-checks the role and the PIN
+   * on the retry regardless of what comes back here.
+   */
+  canOverride?: boolean;
+  /** Why the PIN attempt itself failed, when one was made. */
+  overrideError?: OverrideError["kind"];
 }
 
 export type EntryResult = EntrySuccess | EntryFailure;
@@ -37,14 +57,20 @@ export type EntryResult = EntrySuccess | EntryFailure;
  * and every figure that comes back — total, due, cost of goods, new average
  * cost — was calculated here (spec §24).
  */
-export async function createEntryAction(rawInput: unknown): Promise<EntryResult> {
+export async function createEntryAction(
+  rawInput: unknown,
+  override?: { pin: string },
+): Promise<EntryResult> {
   const session = await requireSession();
 
   try {
-    const result = await createTransaction(session, rawInput);
+    const result = await createTransaction(session, rawInput, {
+      ...(override ? { override } : {}),
+    });
     revalidatePath("/dashboard");
     revalidatePath("/transactions");
 
+    const t = await dict();
     return {
       ok: true,
       voucherNo: result.voucherNo,
@@ -53,7 +79,10 @@ export async function createEntryAction(rawInput: unknown): Promise<EntryResult>
       due: moneyToDb(result.totals.due),
       previousDue: moneyToDb(result.previousDue),
       newDue: moneyToDb(addMoney(result.previousDue, result.totals.due)),
-      warnings: result.warnings.map((w) => w.messageBn),
+      warnings: [
+        ...result.overrides.map(() => t.override.recorded),
+        ...result.warnings.map((w) => warnedMessage(w.reason, t)),
+      ],
     };
   } catch (error) {
     if (error instanceof ZodError) {
@@ -69,8 +98,35 @@ export async function createEntryAction(rawInput: unknown): Promise<EntryResult>
       };
     }
 
+    // A refusal carries the rule and the numbers rather than a sentence, so it
+    // renders in whichever language this request is being served in.
     if (error instanceof PostingError) {
-      return { ok: false, error: error.messageBn };
+      const t = await dict();
+      return {
+        ok: false,
+        error: blockedMessage(error.reason, t),
+        // Only an admin may push past one, and only some rules may be pushed
+        // past at all. Both are checked again on the retry.
+        canOverride: isOverridable(error.reason.rule) && session.role === "admin",
+      };
+    }
+
+    // The PIN itself was wrong, missing, or the role was not admin. The entry
+    // is still blocked; the dialog stays open and says which.
+    if (error instanceof OverrideError) {
+      const t = await dict();
+      const message: Record<OverrideError["kind"], string> = {
+        wrong_pin: t.override.wrongPin,
+        no_pin: t.override.noPin,
+        not_admin: t.override.notAdmin,
+        not_overridable: t.override.notOverridable,
+      };
+      return {
+        ok: false,
+        error: message[error.kind],
+        canOverride: error.kind === "wrong_pin",
+        overrideError: error.kind,
+      };
     }
 
     if (error instanceof PermissionError) {

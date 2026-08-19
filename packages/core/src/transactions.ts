@@ -9,7 +9,6 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import {
   accounts,
-  auditLogs,
   financialAccounts,
   journalEntries,
   journalLines,
@@ -31,8 +30,10 @@ import {
   type Transaction as Tx,
 } from "@hishabai/db";
 import {
+  PostingError,
   postTransaction,
   reverseTransaction,
+  type PostingContext,
   type PostingResult,
   type StockMovementDraft,
 } from "@hishabai/accounting";
@@ -47,6 +48,9 @@ import {
   qtyToDb,
   transactionInputSchema,
   TRANSACTION_TYPES,
+  isOverridable,
+  type AuditAction,
+  type BlockedReason,
   type Money,
   type TransactionInput,
   type TransactionStatus,
@@ -54,6 +58,8 @@ import {
 } from "@hishabai/shared";
 import { loadPostingContext, loadProductStates } from "./posting-context";
 import { recordPostingWarnings } from "./notifications";
+import { writeAudit } from "./audit";
+import { authoriseOverride, type OverrideRequest } from "./overrides";
 import { requirePermission, type Session, type TenantScope } from "./session";
 
 /** Voucher prefixes, so a number tells you what it is at a glance. */
@@ -78,6 +84,68 @@ export interface CreateTransactionResult {
   previousDue: Money;
   newDue: Money;
   warnings: PostingResult["warnings"];
+  /** Rules an admin pushed this entry past, in the order they were hit. */
+  overrides: BlockedReason[];
+}
+
+export interface CreateTransactionOptions {
+  /**
+   * The PIN the admin re-typed, when the browser is retrying an entry a rule
+   * refused. Absent on every ordinary save.
+   */
+  override?: OverrideRequest;
+}
+
+/**
+ * Post, and where a rule refuses and the caller supplied an authorised
+ * override, post again with that one rule relaxed.
+ *
+ * Running the engine twice costs nothing — it is pure, with the context
+ * already loaded — and it buys the thing that matters: the audit row names the
+ * rule that *actually* blocked and the numbers it blocked over, rather than
+ * whatever the browser claimed it was about to hit. A rule that refuses again
+ * after being relaxed is a real failure and ends the loop.
+ */
+async function postWithOverrides(
+  tx: Tx,
+  session: Session,
+  args: {
+    input: TransactionInput;
+    context: PostingContext;
+    transactionId: string;
+    options: CreateTransactionOptions;
+  },
+): Promise<{ result: PostingResult; overrides: BlockedReason[] }> {
+  const overrides: BlockedReason[] = [];
+  let allowNegativeStock = false;
+
+  for (;;) {
+    try {
+      const result = postTransaction(args.input, {
+        ...args.context,
+        allowNegativeStock,
+      });
+      return { result, overrides };
+    } catch (error) {
+      const override = args.options.override;
+      if (
+        !(error instanceof PostingError) ||
+        !isOverridable(error.reason.rule) ||
+        !override ||
+        overrides.some((done) => done.rule === error.reason.rule)
+      ) {
+        throw error;
+      }
+
+      await authoriseOverride(tx, session, {
+        request: override,
+        reason: error.reason,
+        transactionId: args.transactionId,
+      });
+      overrides.push(error.reason);
+      if (error.reason.rule === "negativeStock") allowNegativeStock = true;
+    }
+  }
 }
 
 /**
@@ -89,6 +157,7 @@ export interface CreateTransactionResult {
 export async function createTransaction(
   session: Session,
   rawInput: unknown,
+  options: CreateTransactionOptions = {},
 ): Promise<CreateTransactionResult> {
   requirePermission(session, "transaction.create");
 
@@ -103,7 +172,12 @@ export async function createTransaction(
       input,
     });
 
-    const result = postTransaction(input, context);
+    const { result, overrides } = await postWithOverrides(tx, session, {
+      input,
+      context,
+      transactionId,
+      options,
+    });
 
     const partyId = "partyId" in input ? input.partyId : undefined;
     const previousDue = partyId
@@ -149,6 +223,7 @@ export async function createTransaction(
       previousDue,
       newDue: (previousDue + result.totals.due) as Money,
       warnings: result.warnings,
+      overrides,
     };
   });
 }
@@ -630,32 +705,6 @@ async function currentPartyDue(
   if (!row) return ZERO;
   const vendorSide = type === "purchase" || type === "vendor_payment" || type === "purchase_return";
   return moneyFromDb(vendorSide ? row.payable : row.receivable);
-}
-
-export async function writeAudit(
-  tx: Tx,
-  session: Session,
-  entry: {
-    action: "create" | "update" | "cancel" | "delete" | "login" | "export";
-    entityType: string;
-    entityId?: string;
-    summaryBn?: string;
-    before?: unknown;
-    after?: unknown;
-  },
-): Promise<void> {
-  await tx.insert(auditLogs).values({
-    companyId: session.companyId,
-    userId: session.userId,
-    action: entry.action,
-    entityType: entry.entityType,
-    entityId: entry.entityId ?? null,
-    summaryBn: entry.summaryBn ?? null,
-    before: entry.before ?? null,
-    after: entry.after ?? null,
-    ipAddress: session.ipAddress ?? null,
-    userAgent: session.userAgent ?? null,
-  });
 }
 
 /** Most recent entries, for the dashboard and the হিসাব list. */

@@ -1,5 +1,5 @@
-import { Building2, Layers, Ruler, Tags, Wallet, Wrench } from "lucide-react";
-import { getSettings } from "@hishabai/core";
+import { Building2, KeyRound, Layers, Ruler, Tags, Wallet, Wrench } from "lucide-react";
+import { getSettings, overridePinIsSet } from "@hishabai/core";
 import { formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import {
   CompanyForm,
   DeactivateButton,
   DeactivateRecipeButton,
+  OverridePinForm,
   ProductCategoryForm,
   UnitForm,
   WalletForm,
@@ -25,6 +26,9 @@ export async function generateMetadata() {
 
 export default async function SettingsPage() {
   const [{ session, data }, t] = await Promise.all([sessionWithData(getSettings), dict()]);
+
+  // A boolean, and only for the caller: the hash is never read by a page.
+  const pinIsSet = session.role === "admin" ? await overridePinIsSet(session) : false;
 
   // The nav already hides this page without the permission, but a typed URL
   // reaches it anyway — so the forms are gated here rather than only there.
@@ -368,6 +372,27 @@ export default async function SettingsPage() {
           {editable ? <AddRecipePanel products={data.products} /> : null}
         </CardBody>
       </Card>
+
+      {/*
+        Admins only, and only their own PIN — spec R1.2. A manager can reach
+        this page but has nothing to set here, because a manager cannot
+        override in the first place.
+      */}
+      {session.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <span className="inline-flex items-center gap-2">
+                <KeyRound className="size-4 text-primary" aria-hidden />
+                {t.override.setTitle}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <OverridePinForm isSet={pinIsSet} />
+          </CardBody>
+        </Card>
+      ) : null}
     </div>
   );
 }

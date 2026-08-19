@@ -7,7 +7,7 @@
  * the client, and more importantly not at the server boundary either.
  */
 import { z } from "zod";
-import { parseFixed } from "./decimal";
+import { normalizeDigits, parseFixed } from "./decimal";
 import { TRANSACTION_SOURCES } from "./types";
 
 /**
@@ -358,3 +358,22 @@ export const recipeInputSchema = z.object({
     .min(1, "অন্তত একটি কাঁচামাল যোগ করুন"),
 });
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
+
+/**
+ * The override PIN — spec R1.2.
+ *
+ * Digits only, and Bengali numerals are normalised first: the shopkeeper who
+ * set "১২৩৪" on a Bengali keyboard and types "1234" on an English one is the
+ * same person with the same PIN.
+ *
+ * Four is the shortest that is worth anything and twelve is longer than anyone
+ * will type at a counter. There is no message about *which* rule it failed —
+ * the field never says more than "PIN সঠিক নয়", on purpose.
+ */
+export const overridePinSchema = z
+  .string()
+  .transform((value) => normalizeDigits(value.trim()))
+  .refine((value) => /^\d{4,12}$/.test(value), "PIN সঠিক নয়");
+
+export const overrideRequestSchema = z.object({ pin: overridePinSchema });
+export type OverrideRequestInput = z.infer<typeof overrideRequestSchema>;

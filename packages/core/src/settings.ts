@@ -26,7 +26,7 @@ import {
   type MfsProvider,
 } from "@hishabai/shared";
 import { requirePermission, type Session, type TenantScope } from "./session";
-import { writeAudit } from "./transactions";
+import { writeAudit } from "./audit";
 import type { RecipeRow } from "./recipes";
 
 export interface CompanyProfile {

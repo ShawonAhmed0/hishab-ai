@@ -13,6 +13,7 @@ import {
   partyBalances,
   productStock,
   products,
+  units,
   type Transaction as Tx,
 } from "@hishabai/db";
 import {
@@ -245,6 +246,7 @@ export async function loadProductStates(
       nameBn: products.nameBn,
       kind: products.kind,
       minStockLevel: products.minStockLevel,
+      unitSymbol: units.symbol,
       quantity: productStock.quantity,
       value: productStock.value,
       avgCost: productStock.avgCost,
@@ -256,6 +258,12 @@ export async function loadProductStates(
         eq(productStock.productId, products.id),
         eq(productStock.companyId, products.companyId),
       ),
+    )
+    // The unit rides along because a refusal has to say "১০০ কেজি", not
+    // "১০০" — see `blocked.negativeStock`. Same row, no extra round trip.
+    .leftJoin(
+      units,
+      and(eq(units.id, products.unitId), eq(units.companyId, products.companyId)),
     )
     .where(and(eq(products.companyId, companyId), inArray(products.id, [...ids])));
 
@@ -269,6 +277,7 @@ export async function loadProductStates(
         quantity: row.quantity ? qtyFromDb(row.quantity) : ZERO_QTY,
         value: row.value ? moneyFromDb(row.value) : ZERO,
         avgCost: row.avgCost ? moneyFromDb(row.avgCost) : ZERO,
+        unitSymbol: row.unitSymbol ?? "",
         minStockLevel: qtyFromDb(row.minStockLevel),
       } satisfies ProductState,
     ]),
@@ -282,6 +291,11 @@ export async function loadPostingContext(
     transactionId: string;
     date: string;
     input: TransactionInput;
+    /**
+     * Off by default since spec R1.1 — a sale of stock the books have never
+     * received is refused. Set only by a cancellation, which must always be
+     * postable, and by an entry an admin has authorised with their PIN.
+     */
     allowNegativeStock?: boolean;
   },
 ): Promise<PostingContext> {
@@ -301,7 +315,7 @@ export async function loadPostingContext(
     financialAccounts: wallets,
     products: productStates,
     ...(party ? { party } : {}),
-    allowNegativeStock: options.allowNegativeStock ?? true,
+    allowNegativeStock: options.allowNegativeStock ?? false,
   };
 }
 

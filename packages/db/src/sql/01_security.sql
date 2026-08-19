@@ -140,6 +140,26 @@ create policy membership_visibility on company_members
   using (app.is_member(company_id))
   with check (app.has_role(company_id, array['admin']::role[]));
 
+-- The override PIN is the one thing in the schema that a colleague must not be
+-- able to read, and `membership_visibility` above shows every member row to
+-- every member — RLS is row-level, not column-level. So the hash lives in its
+-- own table with its own rule: your row, and only yours. Writing one also
+-- requires the admin role, since only an admin may override at all.
+alter table override_credentials enable row level security;
+alter table override_credentials force row level security;
+drop policy if exists override_pin_is_private on override_credentials;
+create policy override_pin_is_private on override_credentials
+  using (
+    company_id = app.current_company_id()
+    and user_id = app.current_user_id()
+    and app.is_member(company_id)
+  )
+  with check (
+    company_id = app.current_company_id()
+    and user_id = app.current_user_id()
+    and app.has_role(company_id, array['admin']::role[])
+  );
+
 -- A user sees their own profile, plus the profiles of people they share a
 -- company with — enough to render "কে তৈরি করেছে", and nothing more.
 alter table profiles enable row level security;

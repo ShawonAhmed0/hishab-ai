@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import {
+  OverrideError,
   PermissionError,
   createCategoryAccount,
   createFinancialAccount,
@@ -12,8 +13,10 @@ import {
   setRecipeActive,
   setSettingActive,
   updateCompany,
+  updateOverridePin,
   updateRecipe,
 } from "@hishabai/core";
+import { normalizeDigits, overridePinSchema } from "@hishabai/shared";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
@@ -45,7 +48,9 @@ async function run(
     revalidatePath("/entry");
     return { ok: true, section };
   } catch (error) {
-    if (error instanceof PermissionError) return { error: error.messageBn, section };
+    if (error instanceof PermissionError) {
+      return { error: (await dict()).messages.notAllowed, section };
+    }
     if (error instanceof ZodError) {
       return { error: error.issues[0]?.message ?? (await dict()).settings.invalidInput, section };
     }
@@ -168,4 +173,45 @@ export async function saveRecipeAction(
 
 export async function deactivateRecipeAction(recipeId: string): Promise<SettingsState> {
   return run("recipe", (session) => setRecipeActive(session, recipeId, false));
+}
+
+/**
+ * Sets the caller's own override PIN — spec R1.2.
+ *
+ * Deliberately not routed through `run`: its failure modes are their own
+ * (`OverrideError`), and the PIN's shape is checked here so the message comes
+ * from the dictionary rather than from the zod schema, whose messages are
+ * Bengali literals.
+ *
+ * The PIN arrives, is hashed, and is gone. Nothing here returns it, echoes it
+ * into a `SettingsState`, or writes it to a log.
+ */
+export async function setOverridePinAction(
+  _previous: SettingsState,
+  form: FormData,
+): Promise<SettingsState> {
+  const section = "overridePin";
+  const session = await requireSession();
+  const t = await dict();
+
+  const pin = text(form, "pin") ?? "";
+  const confirm = text(form, "confirmPin") ?? "";
+
+  if (!overridePinSchema.safeParse(pin).success) {
+    return { error: t.override.pinRule, section };
+  }
+  if (normalizeDigits(pin) !== normalizeDigits(confirm)) {
+    return { error: t.override.mismatch, section };
+  }
+
+  try {
+    await updateOverridePin(session, pin);
+    revalidatePath("/settings");
+    return { ok: true, section };
+  } catch (error) {
+    if (error instanceof OverrideError) return { error: t.override.notAdmin, section };
+    if (error instanceof PermissionError) return { error: t.messages.notAllowed, section };
+    console.error("settings:overridePin failed", error);
+    return { error: t.messages.errorGeneric, section };
+  }
 }

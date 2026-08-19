@@ -88,6 +88,7 @@ export interface ProductSeed {
   kind?: ProductState["kind"];
   quantity: Qty;
   avgCost: Money;
+  unitSymbol?: string;
   minStockLevel?: Qty;
 }
 
@@ -99,6 +100,7 @@ export function product(seed: ProductSeed): ProductState {
     kind: seed.kind ?? "finished_good",
     quantity: seed.quantity,
     avgCost: seed.avgCost,
+    unitSymbol: seed.unitSymbol ?? "কেজি",
     value: multiplyRate(seed.quantity, seed.avgCost),
   };
   if (seed.minStockLevel !== undefined) state.minStockLevel = seed.minStockLevel;
@@ -147,7 +149,7 @@ export function makeContext(
     date: "2026-08-16",
     accounts: CONTROL_ACCOUNTS,
     financialAccounts: WALLETS,
-    allowNegativeStock: true,
+    allowNegativeStock: false,
     ...rest,
     products,
   };

@@ -17,7 +17,7 @@ export interface UsersState {
  * with a generic apology that hides which of the two happened.
  */
 async function messageFor(error: unknown): Promise<string> {
-  if (error instanceof PermissionError) return error.messageBn;
+  if (error instanceof PermissionError) return (await dict()).messages.notAllowed;
   if (error instanceof Error && /[ঀ-৿]/.test(error.message)) {
     return error.message;
   }

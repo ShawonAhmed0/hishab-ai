@@ -63,9 +63,8 @@ export class JournalBuilder {
     if (debit < 0n || credit < 0n) {
       throw new PostingError(
         "INVALID_AMOUNT",
-        "হিসাবের অঙ্ক ঋণাত্মক হতে পারে না।",
-        "Journal amounts must be non-negative; use the opposite side instead.",
-        { accountId, debit: moneyToDb(debit), credit: moneyToDb(credit) },
+        { rule: "negativeJournalAmount" },
+        `Journal amounts must be non-negative on ${accountId}; use the opposite side instead.`,
       );
     }
     const line: JournalLineDraft = { accountId, debit, credit };
@@ -93,9 +92,8 @@ export class JournalBuilder {
     if (debit !== credit) {
       throw new PostingError(
         "UNBALANCED_ENTRY",
-        "হিসাব মেলেনি — ডেবিট ও ক্রেডিট সমান হয়নি। এন্ট্রিটি সংরক্ষণ করা হয়নি।",
-        "Double-entry invariant violated: debits do not equal credits.",
-        { debit: moneyToDb(debit), credit: moneyToDb(credit) },
+        { rule: "unbalancedEntry" },
+        `Double-entry invariant violated: debits ${moneyToDb(debit)} do not equal credits ${moneyToDb(credit)}.`,
       );
     }
     return this.lines;

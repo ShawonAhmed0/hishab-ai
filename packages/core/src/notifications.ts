@@ -24,7 +24,7 @@ import {
   withTenant,
   type Transaction as Tx,
 } from "@hishabai/db";
-import type { PostingWarning } from "@hishabai/accounting";
+import { warningMessageBn, type PostingWarning } from "@hishabai/accounting";
 import { formatMoney, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { type Session, type TenantScope } from "./session";
 
@@ -233,10 +233,12 @@ export async function recordPostingWarnings(
       type: warning.code,
       severity: "warning" as const,
       titleBn: `${options.voucherNo} — খেয়াল করুন`,
-      bodyBn: warning.messageBn,
+      bodyBn: warningMessageBn(warning),
       entityType: "transaction",
       entityId: options.transactionId,
-      metadata: warning.details ?? {},
+      // The reason travels with the row, so a later reader can render it in
+      // their own language instead of the one the writer happened to be in.
+      metadata: { ...warning.reason, ...(warning.details ?? {}) },
     })),
   );
 }

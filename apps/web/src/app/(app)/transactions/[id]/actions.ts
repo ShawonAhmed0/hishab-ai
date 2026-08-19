@@ -33,7 +33,7 @@ export async function cancelTransactionAction(
     revalidatePath("/dashboard");
     return { ok: true, reversalVoucherNo: result.reversalVoucherNo };
   } catch (error) {
-    if (error instanceof PermissionError) return { error: error.messageBn };
+    if (error instanceof PermissionError) return { error: (await dict()).messages.notAllowed };
     console.error("cancelTransactionAction failed", error);
     return { error: (await dict()).messages.cancelFailed };
   }

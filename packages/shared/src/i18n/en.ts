@@ -278,6 +278,7 @@ export const en: Dictionary = {
     cancelFailed: "Could not cancel. Please try again.",
     cancelReasonRequired: "Please say why you are cancelling",
     companyCreateFailed: "Could not create the company",
+    notAllowed: "You do not have permission to do this.",
   },
 
   onboarding: {
@@ -843,5 +844,61 @@ export const en: Dictionary = {
     noProducts: "No products added yet",
     noAlerts: "No alerts",
     noDues: "Nobody owes anything",
+  },
+
+  blocked: {
+    emptyTransaction: "This entry has no amounts in it.",
+    unbalancedEntry:
+      "The books do not balance — debits do not equal credits. The entry was not saved.",
+    negativeJournalAmount: "A journal amount cannot be negative.",
+    missingProduct: "That product could not be found.",
+    missingFinancialAccount: "That payment method could not be found.",
+    paymentExceedsTotal: (paid: string, total: string) =>
+      `Payment cannot be more than the total — ${paid} against a total of ${total}.`,
+    discountExceedsTotal: (discount: string, total: string) =>
+      `Discount cannot be more than the total — ${discount} against a total of ${total}.`,
+    productionCostUnpaid: (cost: string, paid: string) =>
+      `Labour and other costs must be paid in full from a payment method — cost ${cost}, paid ${paid}.`,
+    wastageNotAnInput: (product: string) =>
+      `${product} is not one of the raw materials in this production run.`,
+    wastageExceedsInputs: "Wastage cannot be more than the materials consumed.",
+    negativeStock: (product: string, available: string, requested: string) =>
+      `Not enough stock for ${product}. Current stock: ${available}, requested: ${requested}.`,
+  },
+
+  warned: {
+    stockWentNegative: (product: string) =>
+      `Stock of ${product} has gone negative. Check whether a purchase entry was missed.`,
+    zeroCostReturn: (product: string) =>
+      `${product} has an average cost of zero, so the returned goods added no value.`,
+    zeroCostSurplus: (product: string) =>
+      `${product} has an average cost of zero, so the surplus stock was valued at nothing.`,
+    overCreditLimit: (party: string, limit: string, projected: string) =>
+      `${party} is going past their credit limit of ${limit}. After this bill they will owe ${projected}.`,
+  },
+
+  override: {
+    blockedTitle: "This entry could not be saved",
+    overrideTitle: "Save anyway, past the rule?",
+    explain: "As an admin you may save this. The override is written to the audit log.",
+    pin: "Override PIN",
+    pinHint: "The PIN you set in Settings",
+    submit: "Save with PIN",
+    wrongPin: "That PIN did not match.",
+    noPin: "No override PIN has been set yet. Set one in Settings.",
+    notAdmin: "Only an admin can override this.",
+    notOverridable: "This block cannot be overridden.",
+    recorded: "Rule overridden — written to the audit log.",
+    setTitle: "Override PIN",
+    setDescription:
+      "This PIN is what lets you save an entry a rule blocked — a sale of stock the books have not received, for instance. Admins only.",
+    newPin: "New PIN",
+    confirmPin: "Type it again",
+    pinRule: "4 to 12 digits",
+    mismatch: "The two PINs do not match.",
+    isSet: "A PIN is set",
+    notSet: "No PIN set",
+    savePin: "Save PIN",
+    saved: "PIN saved",
   },
 };

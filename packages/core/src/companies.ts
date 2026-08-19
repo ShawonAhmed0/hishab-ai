@@ -22,7 +22,7 @@ import {
 } from "@hishabai/shared";
 import { postOpeningBalance } from "./opening-balance";
 import { requirePermission, type Session } from "./session";
-import { writeAudit } from "./transactions";
+import { writeAudit } from "./audit";
 
 export interface CompanySummary {
   id: string;

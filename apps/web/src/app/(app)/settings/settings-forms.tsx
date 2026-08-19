@@ -15,6 +15,7 @@ import {
   deactivateAction,
   deactivateRecipeAction,
   saveRecipeAction,
+  setOverridePinAction,
   updateCompanyAction,
   type SettingsState,
 } from "./actions";
@@ -609,5 +610,56 @@ export function DeactivateButton({
       </button>
       {error ? <span className="text-xs text-debit">{error}</span> : null}
     </span>
+  );
+}
+
+/**
+ * The override PIN — spec R1.2.
+ *
+ * Two fields and a boolean. `isSet` is the whole of what the server will say
+ * about an existing PIN: there is no endpoint that returns it, and nothing on
+ * this page has ever seen it.
+ */
+export function OverridePinForm({ isSet }: { isSet: boolean }) {
+  const t = useT();
+  const [state, action, pending] = useActionState<SettingsState, FormData>(
+    setOverridePinAction,
+    {},
+  );
+
+  return (
+    <form action={action} className="space-y-4">
+      <Feedback state={state} done={t.override.saved} />
+
+      <p className="text-sm text-muted-foreground">{t.override.setDescription}</p>
+      <p className="text-sm font-medium">{isSet ? t.override.isSet : t.override.notSet}</p>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field hint={t.override.pinRule}>
+          <FieldLabel required>{t.override.newPin}</FieldLabel>
+          <Input
+            name="pin"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            required
+          />
+        </Field>
+        <Field>
+          <FieldLabel required>{t.override.confirmPin}</FieldLabel>
+          <Input
+            name="confirmPin"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            required
+          />
+        </Field>
+      </div>
+
+      <Button type="submit" loading={pending}>
+        {t.override.savePin}
+      </Button>
+    </form>
   );
 }

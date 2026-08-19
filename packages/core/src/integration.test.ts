@@ -48,6 +48,7 @@ import {
 import { createRecipe } from "./recipes";
 import { getNotifications, markAllNotificationsRead } from "./notifications";
 import { getSettings } from "./settings";
+import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -842,6 +843,19 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
   });
 
   it("refuses conversion cost that no wallet actually paid", async () => {
+    // The test above consumed every kilo of ময়দা, and since R1.1 an input
+    // line with nothing behind it is refused before the labour rule is ever
+    // reached. So this buys a kilo first: the point being tested is the
+    // unpaid labour, not the empty bin.
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: await seedParty(tenant, "ময়দা সরবরাহকারী", "vendor"),
+      lines: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "1", rate: "100" }],
+      payments: [],
+    });
+
     // Accruing labour against nobody would invent a liability the vendor
     // report has never heard of, so the engine insists on a real payment.
     await expect(
@@ -1434,7 +1448,10 @@ describeDb("ক্রেডিট সীমা", () => {
 
     const warning = over.warnings.find((w) => w.code === "OVER_CREDIT_LIMIT");
     expect(warning).toBeDefined();
-    expect(warning?.messageBn).toContain("সীমিত কাস্টমার");
+    expect(warning?.reason).toMatchObject({
+      rule: "overCreditLimit",
+      party: "সীমিত কাস্টমার",
+    });
     // Warned, not refused — the voucher exists.
     expect(over.voucherNo).toMatch(/^SALE-\d{6}$/);
 
@@ -1479,4 +1496,313 @@ describeDb("ক্রেডিট সীমা", () => {
     });
     expect(sale.warnings.map((w) => w.code)).not.toContain("OVER_CREDIT_LIMIT");
   });
+});
+
+/**
+ * Spec R1.1–R1.4. The rule that used to be a warning.
+ *
+ * These run against the real triggers because that is the only place the claim
+ * can be proved: `product_stock` is maintained from `journal_lines`, so "the
+ * books have not received it" means "no journal line put it there", and a test
+ * against a fixture map would be testing the fixture.
+ */
+describeDb("স্টক না থাকলে বিক্রয় আটকে যায়", () => {
+  let tenant: Tenant;
+  let vendorId: string;
+  let customerId: string;
+
+  const PIN = "4821";
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Block");
+    vendorId = await seedParty(tenant, "ব্লক ভেন্ডর", "vendor");
+    customerId = await seedParty(tenant, "ব্লক কাস্টমার", "customer");
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  /** A product the books have never received anything for. */
+  async function emptyProduct(name: string): Promise<string> {
+    return createProduct(tenant.session, {
+      nameBn: name,
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      salePrice: "160",
+      purchasePrice: "120",
+    });
+  }
+
+  function sell(productId: string, quantity: string, date: string) {
+    return createTransaction(tenant.session, {
+      type: "sale",
+      date,
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity, rate: "160" }],
+      payments: [],
+    });
+  }
+
+  async function transactionCount(): Promise<number> {
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ count: string }>(
+        sql`select count(*)::text as count from transactions where company_id = ${tenant.companyId}::uuid`,
+      ),
+    );
+    return Number((rows as unknown as { count: string }[])[0]!.count);
+  }
+
+  it("refuses the sale, and rolls the whole entry back", async () => {
+    const productId = await seedProduct(tenant, "কম স্টকের পণ্য", "100", "120");
+    const before = await transactionCount();
+
+    await expect(sell(productId, "150", "2026-08-20")).rejects.toThrow(/NEGATIVE_STOCK/);
+
+    // Not "no sale row" — no rows at all. The failure has to take the journal
+    // lines and the stock movement with it.
+    expect(await transactionCount()).toBe(before);
+
+    const stock = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ quantity: string }>(sql`
+        select quantity::text as quantity from product_stock
+         where company_id = ${tenant.companyId}::uuid and product_id = ${productId}::uuid
+      `),
+    );
+    expect((stock as unknown as { quantity: string }[])[0]!.quantity).toBe("100.000000");
+  });
+
+  it("names the product and both numbers", async () => {
+    const productId = await seedProduct(tenant, "নাম দেখানোর পণ্য", "40", "120");
+
+    await expect(sell(productId, "60", "2026-08-20")).rejects.toMatchObject({
+      code: "NEGATIVE_STOCK",
+      reason: {
+        rule: "negativeStock",
+        productId,
+        product: "নাম দেখানোর পণ্য",
+        available: "40 kg",
+        requested: "60 kg",
+      },
+    });
+  });
+
+  /**
+   * R1.3. The point of the requirement: goods can be sitting in the godown,
+   * but until the চালান is entered they are not sellable — and the moment it
+   * is, they are. No parallel counter, no flag: the same derived stock either
+   * covers the sale or does not.
+   */
+  it("makes goods sellable exactly when the purchase entry lands", async () => {
+    const productId = await emptyProduct("চালান ছাড়া পণ্য");
+
+    await expect(sell(productId, "10", "2026-08-21")).rejects.toThrow(/NEGATIVE_STOCK/);
+
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-08-21",
+      source: "manual",
+      partyId: vendorId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "120" }],
+      payments: [],
+    });
+
+    const sale = await sell(productId, "10", "2026-08-21");
+    expect(sale.voucherNo).toMatch(/^SALE/);
+    expect(sale.overrides).toEqual([]);
+  });
+
+  /**
+   * R1.4. Material consumption is not a second code path — a production run
+   * takes its raw materials out through the same `StockLedger.out`, so it is
+   * refused on the same terms.
+   */
+  it("refuses a production run that consumes more raw material than exists", async () => {
+    const rawId = await createProduct(tenant.session, {
+      nameBn: "কম কাঁচামাল",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "100",
+    });
+    const outputId = await emptyProduct("উৎপাদিত পণ্য");
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "production",
+        date: "2026-08-22",
+        source: "manual",
+        inputs: [{ productId: rawId, unitId: tenant.unitKgId, quantity: "5" }],
+        outputs: [{ productId: outputId, unitId: tenant.unitKgId, quantity: "5" }],
+        wastage: [],
+        payments: [],
+      }),
+    ).rejects.toThrow(/NEGATIVE_STOCK/);
+  });
+
+  it("still lets a cancellation reverse an entry whose stock has since gone", async () => {
+    const productId = await seedProduct(tenant, "ফেরতযোগ্য পণ্য", "50", "120");
+    const sale = await sell(productId, "50", "2026-08-23");
+
+    // Stock is now zero. Cancelling puts it back, and must never be refused
+    // for the same reason the sale would be if it were entered fresh.
+    const cancelled = await cancelTransaction(tenant.session, sale.transactionId, "ভুল হয়েছে");
+    expect(cancelled.reversalVoucherNo).toBeTruthy();
+  });
+
+  describe("the authorised override", () => {
+    it("refuses without a PIN set, whatever the admin types", async () => {
+      const productId = await seedProduct(tenant, "PIN ছাড়া পণ্য", "10", "120");
+
+      await expect(
+        createTransaction(
+          tenant.session,
+          {
+            type: "sale",
+            date: "2026-08-24",
+            source: "manual",
+            partyId: customerId,
+            lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
+            payments: [],
+          },
+          { override: { pin: PIN } },
+        ),
+      ).rejects.toMatchObject({ name: "OverrideError", kind: "no_pin" });
+    });
+
+    it("takes a PIN, and says so without ever handing one back", async () => {
+      expect(await overridePinIsSet(tenant.session)).toBe(false);
+      await updateOverridePin(tenant.session, PIN);
+      expect(await overridePinIsSet(tenant.session)).toBe(true);
+    });
+
+    it("refuses the wrong PIN, and saves nothing", async () => {
+      const productId = await seedProduct(tenant, "ভুল PIN পণ্য", "10", "120");
+      const before = await transactionCount();
+
+      await expect(
+        createTransaction(
+          tenant.session,
+          {
+            type: "sale",
+            date: "2026-08-24",
+            source: "manual",
+            partyId: customerId,
+            lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
+            payments: [],
+          },
+          { override: { pin: "9999" } },
+        ),
+      ).rejects.toMatchObject({ name: "OverrideError", kind: "wrong_pin" });
+
+      expect(await transactionCount()).toBe(before);
+    });
+
+    it("refuses a manager holding the right PIN", async () => {
+      const productId = await seedProduct(tenant, "ম্যানেজারের পণ্য", "10", "120");
+
+      await expect(
+        createTransaction(
+          { ...tenant.session, role: "manager" },
+          {
+            type: "sale",
+            date: "2026-08-24",
+            source: "manual",
+            partyId: customerId,
+            lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
+            payments: [],
+          },
+          { override: { pin: PIN } },
+        ),
+      ).rejects.toMatchObject({ name: "OverrideError", kind: "not_admin" });
+    });
+
+    it("lets the admin through, and writes what they overrode to the audit log", async () => {
+      const productId = await seedProduct(tenant, "ওভাররাইড পণ্য", "10", "120");
+
+      const sale = await createTransaction(
+        tenant.session,
+        {
+          type: "sale",
+          date: "2026-08-25",
+          source: "manual",
+          partyId: customerId,
+          lines: [{ productId, unitId: tenant.unitKgId, quantity: "25", rate: "160" }],
+          payments: [],
+        },
+        { override: { pin: PIN } },
+      );
+
+      expect(sale.overrides).toEqual([
+        {
+          rule: "negativeStock",
+          productId,
+          product: "ওভাররাইড পণ্য",
+          available: "10 kg",
+          requested: "25 kg",
+        },
+      ]);
+      // The entry posts and the warning survives, so the shopkeeper is still
+      // told the stock went negative.
+      expect(sale.warnings.map((w) => w.code)).toContain("NEGATIVE_STOCK");
+
+      const rows = await withTenant(tenant.session, (tx) =>
+        tx.execute<{ user_id: string; after: unknown; summary_bn: string }>(sql`
+          select user_id, after, summary_bn from audit_logs
+           where company_id = ${tenant.companyId}::uuid
+             and action = 'override'
+             and entity_id = ${sale.transactionId}::uuid
+        `),
+      );
+      const audit = (rows as unknown as { user_id: string; after: Record<string, string>; summary_bn: string }[]);
+      expect(audit).toHaveLength(1);
+      expect(audit[0]!.user_id).toBe(tenant.userId);
+      expect(audit[0]!.after["rule"]).toBe("negativeStock");
+      expect(audit[0]!.after["requested"]).toBe("25 kg");
+      expect(audit[0]!.summary_bn).toContain("পর্যাপ্ত স্টক নেই");
+    });
+
+    it("accepts the same PIN typed in Bengali numerals", async () => {
+      const productId = await seedProduct(tenant, "বাংলা অঙ্কের পণ্য", "10", "120");
+
+      const sale = await createTransaction(
+        tenant.session,
+        {
+          type: "sale",
+          date: "2026-08-25",
+          source: "manual",
+          partyId: customerId,
+          lines: [{ productId, unitId: tenant.unitKgId, quantity: "15", rate: "160" }],
+          payments: [],
+        },
+        { override: { pin: "৪৮২১" } },
+      );
+      expect(sale.overrides).toHaveLength(1);
+    });
+  });
+
+  /** X.1 — a new read path is a new way in, and gets its own isolation test. */
+  it("hides one admin's PIN hash from every other session", async () => {
+    const other = await makeTenant("Peeper");
+    try {
+      const rows = await withTenant(other.session, (tx) =>
+        tx.execute<{ count: string }>(
+          sql`select count(*)::text as count from override_credentials`,
+        ),
+      );
+      expect((rows as unknown as { count: string }[])[0]!.count).toBe("0");
+
+      // And the same question asked about our row by id, explicitly.
+      const targeted = await withTenant(other.session, (tx) =>
+        tx.execute<{ count: string }>(sql`
+          select count(*)::text as count from override_credentials
+           where user_id = ${tenant.userId}::uuid
+        `),
+      );
+      expect((targeted as unknown as { count: string }[])[0]!.count).toBe("0");
+    } finally {
+      await dropTenant(other);
+    }
+  }, 60_000);
 });

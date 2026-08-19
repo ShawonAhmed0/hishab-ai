@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ZERO,
   ZERO_QTY,
+  blockedMessage,
+  bn,
   deriveRate,
+  en,
   money,
   moneyToDb,
   qty,
@@ -167,21 +170,10 @@ describe("বিক্রয় — edge cases", () => {
     expectBalanced(result.journalLines);
   });
 
-  it("warns rather than blocks when stock goes negative", () => {
-    const result = postTransaction(
-      parse({
-        ...base,
-        type: "sale",
-        partyId: ID.customer,
-        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "5000", rate: "160" }],
-      }),
-      makeContext(),
-    );
-    expect(result.warnings.map((w) => w.code)).toContain("NEGATIVE_STOCK");
-  });
-
-  it("blocks negative stock when the company turns it off", () => {
-    expect(() =>
+  // Spec R1.1/R1.3. This reverses what the engine used to do — see the
+  // "Warn, don't refuse" section of CLAUDE.md, and the exception it now names.
+  it("refuses to sell stock the books have not received", () => {
+    const sell = () =>
       postTransaction(
         parse({
           ...base,
@@ -189,9 +181,46 @@ describe("বিক্রয় — edge cases", () => {
           partyId: ID.customer,
           lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "5000", rate: "160" }],
         }),
-        makeContext({ allowNegativeStock: false }),
-      ),
-    ).toThrow(/NEGATIVE_STOCK/);
+        makeContext(),
+      );
+
+    expect(sell).toThrow(/NEGATIVE_STOCK/);
+
+    // The refusal has to carry the two numbers, or the user goes to another
+    // screen to find out by how much they are short.
+    try {
+      sell();
+      expect.unreachable();
+    } catch (error) {
+      const reason = (error as PostingError).reason;
+      expect(reason).toEqual({
+        rule: "negativeStock",
+        productId: ID.paper,
+        product: "অফসেট পেপার",
+        available: "1,000 কেজি",
+        requested: "5,000 কেজি",
+      });
+      // Same numbers, either language.
+      expect(blockedMessage(reason, bn)).toContain("1,000 কেজি");
+      expect(blockedMessage(reason, en)).toBe(
+        "Not enough stock for অফসেট পেপার. Current stock: 1,000 কেজি, requested: 5,000 কেজি.",
+      );
+    }
+  });
+
+  // A cancellation, and an admin who typed their override PIN, are the only
+  // two callers that get this.
+  it("lets stock go negative when the posting is explicitly authorised", () => {
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "sale",
+        partyId: ID.customer,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "5000", rate: "160" }],
+      }),
+      makeContext({ allowNegativeStock: true }),
+    );
+    expect(result.warnings.map((w) => w.code)).toContain("NEGATIVE_STOCK");
   });
 
   it("takes the entire remaining book value when a sale clears the shelf", () => {

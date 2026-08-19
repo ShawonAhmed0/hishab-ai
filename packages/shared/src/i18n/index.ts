@@ -7,6 +7,7 @@
  * codebase does not have. What it *would* give us for free is the missing-key
  * check, so `./bn` derives `Dictionary` and `./en` is annotated with it.
  */
+import type { BlockedReason, WarnedReason } from "../types";
 import { bn, type Dictionary } from "./bn";
 import { en } from "./en";
 
@@ -49,4 +50,61 @@ export function getDictionary(locale: Locale): Dictionary {
  */
 export function parseLocale(value: string | undefined | null): Locale | null {
   return value === "bn" || value === "en" ? value : null;
+}
+
+/**
+ * The sentence for a refusal, in the caller's language.
+ *
+ * A switch rather than `t.blocked[reason.rule](...)` on purpose: each rule
+ * carries different values, and the switch is what makes TypeScript check that
+ * they are passed in the right order. Adding a rule to `BlockedReason` without
+ * a case here is a compile error at the `never`.
+ */
+export function blockedMessage(reason: BlockedReason, t: Dictionary): string {
+  switch (reason.rule) {
+    case "emptyTransaction":
+      return t.blocked.emptyTransaction;
+    case "unbalancedEntry":
+      return t.blocked.unbalancedEntry;
+    case "negativeJournalAmount":
+      return t.blocked.negativeJournalAmount;
+    case "missingProduct":
+      return t.blocked.missingProduct;
+    case "missingFinancialAccount":
+      return t.blocked.missingFinancialAccount;
+    case "paymentExceedsTotal":
+      return t.blocked.paymentExceedsTotal(reason.paid, reason.total);
+    case "discountExceedsTotal":
+      return t.blocked.discountExceedsTotal(reason.discount, reason.total);
+    case "productionCostUnpaid":
+      return t.blocked.productionCostUnpaid(reason.cost, reason.paid);
+    case "wastageNotAnInput":
+      return t.blocked.wastageNotAnInput(reason.product);
+    case "wastageExceedsInputs":
+      return t.blocked.wastageExceedsInputs;
+    case "negativeStock":
+      return t.blocked.negativeStock(reason.product, reason.available, reason.requested);
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
+}
+
+/** The same, for the warnings that post anyway. */
+export function warnedMessage(reason: WarnedReason, t: Dictionary): string {
+  switch (reason.rule) {
+    case "stockWentNegative":
+      return t.warned.stockWentNegative(reason.product);
+    case "zeroCostReturn":
+      return t.warned.zeroCostReturn(reason.product);
+    case "zeroCostSurplus":
+      return t.warned.zeroCostSurplus(reason.product);
+    case "overCreditLimit":
+      return t.warned.overCreditLimit(reason.party, reason.limit, reason.projected);
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
 }

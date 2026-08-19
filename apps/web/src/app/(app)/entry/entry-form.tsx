@@ -50,6 +50,7 @@ import {
   ProductFields,
   type CategoryChoice,
 } from "@/components/master-data/create-forms";
+import { Dialog } from "@/components/ui/dialog";
 import { createEntryAction, type EntryResult } from "./actions";
 import { VoiceScanPanel, type ParsedDraft } from "./voice-scan";
 
@@ -549,6 +550,12 @@ export function EntryForm({
   const [pending, startTransition] = React.useTransition();
   const [result, setResult] = React.useState<EntryResult | null>(null);
 
+  // The override — spec R1.2. The payload is held rather than rebuilt so the
+  // retry posts exactly what the server already refused, and the PIN is held
+  // only for as long as the dialog is open.
+  const [blockedPayload, setBlockedPayload] = React.useState<unknown>(null);
+  const [pin, setPin] = React.useState("");
+
   const fieldErrors = result && !result.ok ? (result.fieldErrors ?? {}) : {};
 
   // --- derived, for the preview only. The server recomputes all of this. ----
@@ -841,15 +848,24 @@ export function EntryForm({
     }
   }
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
+  /**
+   * One save path, whether or not a PIN is riding along.
+   *
+   * The server is the authority on both halves of this: it recomputes every
+   * figure from the raw input, and it re-checks the role and the PIN on the
+   * retry. `canOverride` coming back is what raises the dialog; it is not
+   * permission to do anything.
+   */
+  function save(payload: unknown, override?: { pin: string }) {
     setResult(null);
 
     startTransition(async () => {
-      const outcome = await createEntryAction(buildPayload());
+      const outcome = await createEntryAction(payload, override);
       setResult(outcome);
 
       if (outcome.ok) {
+        setBlockedPayload(null);
+        setPin("");
         toast.success(
           `${t.messages.saved} — ${outcome.voucherNo}`,
           t.entry.savedTotal(formatMoney(money(outcome.total))),
@@ -857,8 +873,21 @@ export function EntryForm({
         for (const warning of outcome.warnings) toast.show({ tone: "info", title: warning });
         changeType(type);
         router.refresh();
+        return;
+      }
+
+      if (outcome.canOverride) {
+        setBlockedPayload(payload);
+      } else {
+        setBlockedPayload(null);
+        setPin("");
       }
     });
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    save(buildPayload());
   }
 
   const summaryErrors =
@@ -1598,6 +1627,73 @@ export function EntryForm({
           </p>
         </CardBody>
       </Card>
+
+      {/*
+        Spec R1.2. Blocking on purpose: a refusal dismissed by a stray click
+        outside reads exactly like a save, and the entry is not saved.
+      */}
+      <Dialog
+        open={blockedPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) {
+            setBlockedPayload(null);
+            setPin("");
+          }
+        }}
+        blocking
+        closeLabel={t.actions.close}
+        title={t.override.overrideTitle}
+        description={
+          <>
+            <p>{result && !result.ok ? result.error : null}</p>
+            <p className="mt-2">{t.override.explain}</p>
+          </>
+        }
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setBlockedPayload(null);
+                setPin("");
+              }}
+            >
+              {t.actions.cancel}
+            </Button>
+            <Button
+              type="button"
+              loading={pending}
+              disabled={pin.trim().length < 4}
+              onClick={() => {
+                if (blockedPayload !== null) save(blockedPayload, { pin });
+              }}
+            >
+              {t.override.submit}
+            </Button>
+          </>
+        }
+      >
+        <Field fieldId="overridePin" hint={t.override.pinHint}>
+          <FieldLabel required>{t.override.pin}</FieldLabel>
+          <Input
+            id="overridePin"
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            value={pin}
+            onChange={(event) => setPin(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (blockedPayload !== null && pin.trim().length >= 4) {
+                  save(blockedPayload, { pin });
+                }
+              }
+            }}
+          />
+        </Field>
+      </Dialog>
     </form>
   );
 }

@@ -34,7 +34,7 @@ import {
 } from "@hishabai/shared";
 import { requirePermission, type Session, type TenantScope } from "./session";
 import { postOpeningBalance, systemAccountId } from "./opening-balance";
-import { writeAudit } from "./transactions";
+import { writeAudit } from "./audit";
 
 // ---------------------------------------------------------------------------
 // Parties

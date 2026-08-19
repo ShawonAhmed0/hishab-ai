@@ -51,6 +51,8 @@ export interface ProductState {
   value: Money;
   /** Weighted average unit cost before this transaction. */
   avgCost: Money;
+  /** কেজি, পিস — data from the unit row, shown beside every quantity. */
+  unitSymbol: string;
   minStockLevel?: Qty;
 }
 
@@ -80,9 +82,10 @@ export interface PostingContext {
   /** The party the entry names, when it names one. */
   party?: PartyState;
   /**
-   * Recording a sale before the matching purchase entry is normal practice in
-   * a Bangladeshi trading business, so negative stock is permitted by default
-   * and reported as a warning rather than refused.
+   * Selling stock the books have never received is refused (spec R1.1/R1.3),
+   * so this defaults to false. It is set true in exactly two places: a
+   * cancellation, which must always be postable no matter what stock has done
+   * since, and an entry an admin has authorised with their override PIN.
    */
   allowNegativeStock?: boolean;
 }

@@ -19,7 +19,7 @@ import {
 } from "@hishabai/db";
 import { recipeInputSchema } from "@hishabai/shared";
 import { requirePermission, type Session } from "./session";
-import { writeAudit } from "./transactions";
+import { writeAudit } from "./audit";
 
 export interface RecipeInputRow {
   productId: string;
