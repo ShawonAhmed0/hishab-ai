@@ -10,12 +10,19 @@ import {
   UserCog,
 } from "lucide-react";
 import type { Route } from "next";
-import { bn } from "@hishabai/shared";
+import type { Dictionary } from "@hishabai/shared";
 import type { Permission } from "@hishabai/core";
 
 export interface NavItem {
   href: Route;
-  label: string;
+  /**
+   * A key, not a string.
+   *
+   * This list is module state, evaluated once when the module loads, so a
+   * resolved label would freeze whichever locale happened to be current for
+   * the first request the server handled.
+   */
+  label: keyof Dictionary["nav"];
   icon: typeof LayoutDashboard;
   /** Hidden entirely when the role lacks this. */
   permission?: Permission;
@@ -24,13 +31,13 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: bn.nav.dashboard, icon: LayoutDashboard, mobile: true },
-  { href: "/entry", label: bn.nav.newEntry, icon: PlusCircle, mobile: true },
-  { href: "/transactions", label: bn.nav.transactions, icon: ArrowLeftRight, mobile: true },
-  { href: "/inventory", label: bn.nav.inventory, icon: Boxes, permission: "product.manage" },
-  { href: "/customers", label: bn.nav.customers, icon: Users, permission: "party.manage", mobile: true },
-  { href: "/vendors", label: bn.nav.vendors, icon: Truck, permission: "party.manage" },
-  { href: "/reports", label: bn.nav.reports, icon: BarChart3, permission: "report.viewFinancial", mobile: true },
-  { href: "/users", label: bn.nav.users, icon: UserCog, permission: "user.manage" },
-  { href: "/settings", label: bn.nav.settings, icon: Settings, permission: "settings.manage" },
+  { href: "/dashboard", label: "dashboard", icon: LayoutDashboard, mobile: true },
+  { href: "/entry", label: "newEntry", icon: PlusCircle, mobile: true },
+  { href: "/transactions", label: "transactions", icon: ArrowLeftRight, mobile: true },
+  { href: "/inventory", label: "inventory", icon: Boxes, permission: "product.manage" },
+  { href: "/customers", label: "customers", icon: Users, permission: "party.manage", mobile: true },
+  { href: "/vendors", label: "vendors", icon: Truck, permission: "party.manage" },
+  { href: "/reports", label: "reports", icon: BarChart3, permission: "report.viewFinancial", mobile: true },
+  { href: "/users", label: "users", icon: UserCog, permission: "user.manage" },
+  { href: "/settings", label: "settings", icon: Settings, permission: "settings.manage" },
 ];

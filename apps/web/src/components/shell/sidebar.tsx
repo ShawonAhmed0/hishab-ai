@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet } from "lucide-react";
 import { NAV_ITEMS } from "./nav-items";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,12 +25,13 @@ function allowedItems(allowed: string[]) {
  * anti-pattern, and this is a tool people use all day.
  */
 export function Sidebar({ allowed }: { allowed: string[] }) {
+  const t = useT();
   const pathname = usePathname();
   const items = allowedItems(allowed);
 
   return (
     <nav
-      aria-label="প্রধান মেনু"
+      aria-label={t.shell.mainMenu}
       className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex"
     >
       <Link
@@ -59,7 +61,7 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
                 )}
               >
                 <item.icon className="size-4 shrink-0" aria-hidden />
-                {item.label}
+                {t.nav[item.label]}
               </Link>
             </li>
           );
@@ -74,6 +76,7 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
  * the targets get too narrow to hit reliably.
  */
 export function BottomNav({ allowed }: { allowed: string[] }) {
+  const t = useT();
   const pathname = usePathname();
   const shown = allowedItems(allowed)
     .filter((item) => item.mobile)
@@ -81,7 +84,7 @@ export function BottomNav({ allowed }: { allowed: string[] }) {
 
   return (
     <nav
-      aria-label="প্রধান মেনু"
+      aria-label={t.shell.mainMenu}
       className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))` }}
     >
@@ -99,7 +102,7 @@ export function BottomNav({ allowed }: { allowed: string[] }) {
             )}
           >
             <item.icon className="size-5" aria-hidden />
-            <span className="truncate">{item.label}</span>
+            <span className="truncate">{t.nav[item.label]}</span>
           </Link>
         );
       })}

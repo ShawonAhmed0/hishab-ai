@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle } from "lucide-react";
-import { bn } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { cancelTransactionAction } from "./actions";
@@ -17,6 +17,7 @@ export function CancelTransactionButton({
   transactionId: string;
   voucherNo: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = React.useState(false);
@@ -32,7 +33,14 @@ export function CancelTransactionButton({
         setError(result.error);
         return;
       }
-      toast.success(bn.messages.cancelled, `বিপরীত এন্ট্রি ${result.reversalVoucherNo}`);
+      // The template literal this replaced would happily have rendered
+      // "বিপরীত এন্ট্রি undefined"; the typed message will not take one.
+      toast.success(
+        t.messages.cancelled,
+        result.reversalVoucherNo
+          ? t.transactions.reversalCreated(result.reversalVoucherNo)
+          : undefined,
+      );
       setOpen(false);
       router.refresh();
     });
@@ -41,7 +49,7 @@ export function CancelTransactionButton({
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <Button variant="destructive">{bn.actions.cancel}</Button>
+        <Button variant="destructive">{t.actions.cancel}</Button>
       </Dialog.Trigger>
 
       <Dialog.Portal>
@@ -49,32 +57,31 @@ export function CancelTransactionButton({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-5 shadow-overlay">
           <Dialog.Title className="flex items-center gap-2 text-lg font-semibold">
             <AlertTriangle className="size-5 text-debit" aria-hidden />
-            লেনদেন বাতিল করবেন?
+            {t.transactions.cancelTitle}
           </Dialog.Title>
 
           <Dialog.Description className="mt-2 text-sm text-muted-foreground">
-            {voucherNo} মুছে যাবে না। এর প্রভাব বাতিল করতে একটি বিপরীত এন্ট্রি তৈরি হবে,
-            এবং দুটোই হিসাবের খাতায় থেকে যাবে।
+            {t.transactions.cancelBody(voucherNo)}
           </Dialog.Description>
 
           <div className="mt-4">
             <Field error={error}>
-              <FieldLabel required>বাতিলের কারণ</FieldLabel>
+              <FieldLabel required>{t.transactions.cancelReason}</FieldLabel>
               <Textarea
                 rows={3}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
-                placeholder="যেমন: ভুল কাস্টমারের নামে এন্ট্রি হয়েছিল"
+                placeholder={t.transactions.cancelReasonPlaceholder}
               />
             </Field>
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
-              <Button variant="secondary">{bn.actions.close}</Button>
+              <Button variant="secondary">{t.actions.close}</Button>
             </Dialog.Close>
             <Button variant="destructive" loading={pending} onClick={confirm}>
-              {bn.actions.confirm}
+              {t.actions.confirm}
             </Button>
           </div>
         </Dialog.Content>

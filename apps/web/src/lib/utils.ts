@@ -1,30 +1,23 @@
 import { clsx, type ClassValue } from "clsx";
+import type { Dictionary } from "@hishabai/shared";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-/** Bengali date rendering with English digits, matching the numeral decision. */
-const BN_MONTHS = [
-  "জানুয়ারি",
-  "ফেব্রুয়ারি",
-  "মার্চ",
-  "এপ্রিল",
-  "মে",
-  "জুন",
-  "জুলাই",
-  "আগস্ট",
-  "সেপ্টেম্বর",
-  "অক্টোবর",
-  "নভেম্বর",
-  "ডিসেম্বর",
-];
-
-export function formatDateBn(value: string | Date): string {
+/**
+ * The long date form — "19 আগস্ট 2026" / "19 August 2026".
+ *
+ * Takes the dictionary rather than a locale so the caller passes what it
+ * already has; every screen that shows a date has `t` in scope. Digits stay
+ * English in both locales, which is the same numeral decision the money
+ * formatter makes.
+ */
+export function formatDate(value: string | Date, t: Dictionary): string {
   const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : value;
   if (Number.isNaN(date.getTime())) return "—";
-  return `${date.getUTCDate()} ${BN_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+  return `${date.getUTCDate()} ${t.months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 export function formatDateShort(value: string | Date): string {

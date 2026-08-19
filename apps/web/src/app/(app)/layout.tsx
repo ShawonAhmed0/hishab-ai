@@ -4,6 +4,7 @@ import { BottomNav, Sidebar, SidebarFrame } from "@/components/shell/sidebar";
 import { NAV_ITEMS } from "@/components/shell/nav-items";
 import { NotificationBell } from "@/components/shell/notification-bell";
 import { Topbar, TopbarFrame } from "@/components/shell/topbar";
+import { dict } from "@/lib/locale.server";
 import { sessionContext } from "@/lib/session";
 import { switchCompanyAction } from "@/app/onboarding/actions";
 import { signOut } from "@/app/(auth)/actions";
@@ -69,7 +70,7 @@ async function BottomNavSlot() {
 }
 
 async function TopbarSlot() {
-  const { session, companies, fullName } = await sessionContext();
+  const [{ session, companies, fullName }, t] = await Promise.all([sessionContext(), dict()]);
 
   // The alerts are a second read, but they are the shell's own and already
   // behind the same Suspense boundary — the page below is not waiting on them.
@@ -79,7 +80,7 @@ async function TopbarSlot() {
     <Topbar
       companies={companies}
       activeCompanyId={session.companyId}
-      userName={fullName ?? "ব্যবহারকারী"}
+      userName={fullName ?? t.shell.user}
       notifications={
         <NotificationBell
           alerts={alerts.alerts}

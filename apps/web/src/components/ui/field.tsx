@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AlertCircle } from "lucide-react";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -97,12 +98,13 @@ export function FieldLabel({
   required?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const { id } = useField();
   return (
     <label htmlFor={id} className={cn("text-sm font-medium text-foreground", className)}>
       {children}
       {required ? (
-        <span className="ml-0.5 text-debit" aria-label="আবশ্যক">
+        <span className="ml-0.5 text-debit" aria-label={t.shell.required}>
           *
         </span>
       ) : null}

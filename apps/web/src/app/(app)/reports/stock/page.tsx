@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Boxes } from "lucide-react";
 import { getStockReport } from "@hishabai/core";
-import { bn, formatQty, qtyFromDb, subMoney } from "@hishabai/shared";
+import { formatQty, qtyFromDb, subMoney } from "@hishabai/shared";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { ReportFrame, periodFrom } from "@/components/reports/report-frame";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
-import { formatDateBn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
-export const metadata = { title: "স্টক রিপোর্ট" };
+export async function generateMetadata() {
+  return { title: (await dict()).reports.stock };
+}
 
 export default async function StockReportPage({
   searchParams,
@@ -18,61 +21,64 @@ export default async function StockReportPage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const period = periodFrom(await searchParams);
-  const { data } = await sessionWithData((scope) => getStockReport(scope, period));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getStockReport(scope, period)),
+    dict(),
+  ]);
 
   const movement = subMoney(data.totals.closingValue, data.totals.openingValue);
 
   return (
     <ReportFrame
-      title="স্টক রিপোর্ট"
-      description="সময়ের শুরুতে কত ছিল, কত ঢুকল, কত বেরোল, আর শেষে কত রইল"
+      title={t.reports.stock}
+      description={t.reports.stockDescription}
       period={period}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label="প্রারম্ভিক স্টক ভ্যালু"
+          label={t.reports.openingStockValue}
           value={data.totals.openingValue}
           icon={ArrowUpRight}
-          footnote={`${formatDateBn(period.from)} তারিখে`}
+          footnote={t.reports.onDate(formatDate(period.from, t))}
         />
         <StatTile
-          label="সমাপনী স্টক ভ্যালু"
+          label={t.reports.closingStockValue}
           value={data.totals.closingValue}
           icon={Boxes}
-          footnote={`${formatDateBn(period.to)} তারিখে`}
+          footnote={t.reports.onDate(formatDate(period.to, t))}
         />
         <StatTile
-          label="পরিবর্তন"
+          label={t.reports.stockChange}
           value={movement}
           tone="auto"
           icon={ArrowDownRight}
-          footnote={movement >= 0n ? "স্টক বেড়েছে" : "স্টক কমেছে"}
+          footnote={movement >= 0n ? t.reports.stockUp : t.reports.stockDown}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{data.rows.length} টি পণ্য</CardTitle>
+          <CardTitle>{t.reports.productCount(String(data.rows.length))}</CardTitle>
           <span className="text-xs text-muted-foreground no-print">
-            প্রতিটি মুভমেন্টে জমা থাকা ব্যালেন্স থেকে নেওয়া
+            {t.reports.stockValueNote}
           </span>
         </CardHeader>
 
         {data.rows.length === 0 ? (
-          <EmptyState title={bn.emptyStates.noProducts} hint="প্রথমে পণ্য যোগ করুন" />
+          <EmptyState title={t.emptyStates.noProducts} hint={t.reports.addProductsFirst} />
         ) : (
           <>
             <div className="hidden md:block">
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.product}</TH>
-                    <TH numeric>প্রারম্ভিক</TH>
-                    <TH numeric>আগমন</TH>
-                    <TH numeric>নির্গমন</TH>
-                    <TH numeric>সমাপনী</TH>
-                    <TH numeric>{bn.fields.avgCost}</TH>
-                    <TH numeric>স্টক ভ্যালু</TH>
+                    <TH>{t.fields.product}</TH>
+                    <TH numeric>{t.reports.openingColumn}</TH>
+                    <TH numeric>{t.reports.inMovementColumn}</TH>
+                    <TH numeric>{t.reports.outMovementColumn}</TH>
+                    <TH numeric>{t.reports.closingColumn}</TH>
+                    <TH numeric>{t.fields.avgCost}</TH>
+                    <TH numeric>{t.reports.stockValueColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -109,10 +115,10 @@ export default async function StockReportPage({
                 </tbody>
                 <tfoot>
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
-                    <TD className="font-semibold">সর্বমোট</TD>
+                    <TD className="font-semibold">{t.reports.grandTotalRow}</TD>
                     <TD colSpan={4} />
                     <TD numeric className="text-xs text-muted-foreground">
-                      স্টক ভ্যালু
+                      {t.reports.stockValueColumn}
                     </TD>
                     <TD numeric>
                       <MoneyText

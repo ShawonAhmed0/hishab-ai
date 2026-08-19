@@ -1,13 +1,16 @@
 import { getProfitLoss, type ProfitLossLine } from "@hishabai/core";
-import { bn, type Money } from "@hishabai/shared";
+import type { Dictionary, Money } from "@hishabai/shared";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { StatTile } from "@/components/ui/stat-tile";
 import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { ReportFrame, periodFrom } from "@/components/reports/report-frame";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 
-export const metadata = { title: "লাভ-ক্ষতি" };
+export async function generateMetadata() {
+  return { title: (await dict()).reports.profitLoss };
+}
 
 export default async function ProfitLossPage({
   searchParams,
@@ -15,59 +18,64 @@ export default async function ProfitLossPage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const period = periodFrom(await searchParams);
-  const { data } = await sessionWithData((scope) => getProfitLoss(scope, period));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getProfitLoss(scope, period)),
+    dict(),
+  ]);
   const { totals } = data;
 
   return (
     <ReportFrame
-      title="লাভ-ক্ষতি"
-      description="নির্বাচিত সময়ে কত আয় হলো, কত খরচ হলো, আর হাতে কত থাকল"
+      title={t.reports.profitLoss}
+      description={t.reports.profitLossDescription}
       period={period}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="বিক্রয়" value={totals.sales} tone="credit" />
+        <StatTile label={t.transactionType.sale} value={totals.sales} tone="credit" />
         <StatTile
-          label="বিক্রীত পণ্যের ব্যয়"
+          label={t.accountSubtype.cogs}
           value={totals.cogs}
           tone="debit"
-          footnote="গড় ক্রয়মূল্যে হিসাব করা"
+          footnote={t.reports.atAverageCost}
         />
         <StatTile
-          label="মোট মুনাফা"
+          label={t.reports.grossProfit}
           value={totals.grossProfit}
           tone="auto"
-          footnote="বিক্রয় − পণ্যের ব্যয়"
+          footnote={t.reports.grossProfitFormula}
         />
         <StatTile
-          label={bn.dashboard.netProfit}
+          label={t.dashboard.netProfit}
           value={totals.netProfit}
           tone="auto"
-          footnote="সব খরচ বাদ দেওয়ার পর"
+          footnote={t.reports.netProfitFootnote}
         />
       </div>
 
       {data.income.length === 0 && data.expense.length === 0 ? (
         <Card>
           <EmptyState
-            title="এই সময়ে কোনো আয় বা ব্যয় নেই"
-            hint="অন্য তারিখ বেছে দেখুন, অথবা প্রথম এন্ট্রিটি করুন"
+            title={t.reports.noIncomeOrExpense}
+            hint={t.reports.noIncomeOrExpenseHint}
           />
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Section
-            title="আয়"
+            t={t}
+            title={t.transactionType.income}
             lines={data.income}
             total={totals.income}
             tone="credit"
-            empty="এই সময়ে কোনো আয় হয়নি"
+            empty={t.reports.noIncome}
           />
           <Section
-            title="ব্যয়"
+            t={t}
+            title={t.transactionType.expense}
             lines={data.expense}
             total={totals.expense}
             tone="debit"
-            empty="এই সময়ে কোনো ব্যয় হয়নি"
+            empty={t.reports.noExpense}
           />
         </div>
       )}
@@ -76,8 +84,8 @@ export default async function ProfitLossPage({
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4">
           <div>
-            <p className="font-semibold">{bn.dashboard.netProfit}</p>
-            <p className="text-xs text-muted-foreground">মোট আয় − মোট ব্যয়</p>
+            <p className="font-semibold">{t.dashboard.netProfit}</p>
+            <p className="text-xs text-muted-foreground">{t.reports.netProfitFormula}</p>
           </div>
           <MoneyText value={totals.netProfit} size="xl" tone="auto" />
         </div>
@@ -87,12 +95,14 @@ export default async function ProfitLossPage({
 }
 
 function Section({
+  t,
   title,
   lines,
   total,
   tone,
   empty,
 }: {
+  t: Dictionary;
   title: string;
   lines: ProfitLossLine[];
   total: Money;
@@ -112,8 +122,8 @@ function Section({
         <TableScroll narrow>
           <THead>
             <TR>
-              <TH>খাত</TH>
-              <TH numeric>পরিমাণ</TH>
+              <TH>{t.reports.accountColumn}</TH>
+              <TH numeric>{t.reports.amountColumn}</TH>
             </TR>
           </THead>
           <tbody>
@@ -128,7 +138,7 @@ function Section({
           </tbody>
           <tfoot>
             <TR className="border-t-2 border-border-strong bg-surface-sunken">
-              <TD className="font-semibold">মোট {title}</TD>
+              <TD className="font-semibold">{t.reports.sectionTotal(title)}</TD>
               <TD numeric>
                 <MoneyText value={total} size="sm" symbol={false} tone={tone} className="font-bold" />
               </TD>

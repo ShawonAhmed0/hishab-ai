@@ -4,9 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { Building2, Check, ChevronDown, LogOut, Search } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { bn, type Role } from "@hishabai/shared";
+import type { Role } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { LocaleToggle } from "@/components/shell/locale-toggle";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 export interface CompanyOption {
@@ -32,6 +34,7 @@ export function Topbar({
   onSwitch: (companyId: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 }) {
+  const t = useT();
   const active = companies.find((c) => c.id === activeCompanyId);
   const [switching, setSwitching] = React.useState(false);
 
@@ -50,10 +53,10 @@ export function Topbar({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">
-                {active?.nameBn || active?.name || "কোম্পানি"}
+                {active?.nameBn || active?.name || t.shell.company}
               </span>
               <span className="block truncate text-xs text-muted-foreground">
-                {active ? bn.role[active.role] : ""}
+                {active ? t.role[active.role] : ""}
               </span>
             </span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -67,7 +70,7 @@ export function Topbar({
             className="z-50 min-w-[16rem] rounded-lg border border-border bg-surface p-1 shadow-overlay"
           >
             <DropdownMenu.Label className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              কোম্পানি পরিবর্তন করুন
+              {t.shell.switchCompany}
             </DropdownMenu.Label>
 
             {companies.map((company) => (
@@ -88,7 +91,7 @@ export function Topbar({
                     {company.nameBn || company.name}
                   </span>
                   <span className="block text-xs text-muted-foreground">
-                    {bn.role[company.role]}
+                    {t.role[company.role]}
                   </span>
                 </span>
                 {company.id === activeCompanyId ? (
@@ -103,7 +106,7 @@ export function Topbar({
                 href="/onboarding"
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2.5 text-sm outline-none data-[highlighted]:bg-surface-sunken"
               >
-                {bn.actions.addNew}
+                {t.actions.addNew}
               </Link>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
@@ -113,7 +116,7 @@ export function Topbar({
       {/* ---- global search ---- */}
       <form action="/search" className="ml-auto hidden max-w-sm flex-1 md:block">
         <label className="sr-only" htmlFor="global-search">
-          {bn.actions.search}
+          {t.actions.search}
         </label>
         <div className="relative">
           <Search
@@ -124,7 +127,7 @@ export function Topbar({
             id="global-search"
             name="q"
             type="search"
-            placeholder="কাস্টমার, পণ্য, মেমো, ভাউচার…"
+            placeholder={t.shell.searchPlaceholder}
             className="h-10 w-full rounded-md border border-border-strong bg-surface-sunken pl-9 pr-3 text-sm placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
         </div>
@@ -132,6 +135,7 @@ export function Topbar({
 
       {/* ---- alerts and appearance ---- */}
       <div className="ml-auto flex items-center md:ml-0">
+        <LocaleToggle />
         <ThemeToggle />
         {notifications}
       </div>
@@ -160,7 +164,7 @@ export function Topbar({
               className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2.5 text-sm text-debit outline-none data-[highlighted]:bg-debit-soft"
             >
               <LogOut className="size-4" aria-hidden />
-              {bn.actions.logout}
+              {t.actions.logout}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
@@ -177,6 +181,8 @@ export function Topbar({
  * account button, which depend on the membership lookup, are placeholders.
  */
 export function TopbarFrame() {
+  const t = useT();
+
   return (
     <header
       aria-busy="true"
@@ -191,7 +197,7 @@ export function TopbarFrame() {
 
       <form action="/search" className="ml-auto hidden max-w-sm flex-1 md:block">
         <label className="sr-only" htmlFor="global-search-frame">
-          {bn.actions.search}
+          {t.actions.search}
         </label>
         <div className="relative">
           <Search
@@ -202,7 +208,7 @@ export function TopbarFrame() {
             id="global-search-frame"
             name="q"
             type="search"
-            placeholder="কাস্টমার, পণ্য, মেমো, ভাউচার…"
+            placeholder={t.shell.searchPlaceholder}
             className="h-10 w-full rounded-md border border-border-strong bg-surface-sunken pl-9 pr-3 text-sm placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
         </div>

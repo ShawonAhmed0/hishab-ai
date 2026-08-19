@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { formatMoney, formatMoneyCompact, money } from "@hishabai/shared";
+import { useT } from "@/components/locale-provider";
 
 /**
  * Charts are secondary to the tables, not a substitute for them.
@@ -38,14 +39,9 @@ export interface ChartPoint {
   profit: number;
 }
 
-const BN_MONTHS_SHORT = [
-  "জানু", "ফেব", "মার্চ", "এপ্রিল", "মে", "জুন",
-  "জুলাই", "আগস্ট", "সেপ্ট", "অক্টো", "নভে", "ডিসে",
-];
-
-function periodLabel(period: string): string {
+function periodLabel(period: string, months: readonly string[]): string {
   const month = Number(period.slice(5, 7));
-  return BN_MONTHS_SHORT[month - 1] ?? period;
+  return months[month - 1] ?? period;
 }
 
 const axisMoney = (value: number) =>
@@ -60,11 +56,12 @@ function MoneyTooltip({
   payload?: { name?: string; value?: number; color?: string; dataKey?: string }[];
   label?: string;
 }) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-md border border-border bg-surface p-2.5 shadow-overlay">
       <p className="mb-1 text-xs font-medium text-muted-foreground">
-        {label ? periodLabel(label) : ""}
+        {label ? periodLabel(label, t.monthsShort) : ""}
       </p>
       <ul className="space-y-0.5">
         {payload.map((item) => (
@@ -99,10 +96,11 @@ const AXIS = "var(--color-subtle-foreground)";
 const ANIMATE = false;
 
 export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
+  const t = useT();
   const rows = data.map((d) => ({
     period: d.period,
-    আয়: d.income,
-    ব্যয়: d.expense,
+    income: d.income,
+    expense: d.expense,
   }));
 
   return (
@@ -111,7 +109,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
         <XAxis
           dataKey="period"
-          tickFormatter={periodLabel}
+          tickFormatter={(period: string) => periodLabel(period, t.monthsShort)}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}
@@ -126,14 +124,16 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
         <Tooltip content={<MoneyTooltip />} cursor={{ fill: "var(--color-surface-sunken)" }} />
         <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
         <Bar
-          dataKey="আয়"
+          dataKey="income"
+          name={t.dashboard.seriesIncome}
           fill="var(--color-credit)"
           radius={[3, 3, 0, 0]}
           maxBarSize={28}
           isAnimationActive={ANIMATE}
         />
         <Bar
-          dataKey="ব্যয়"
+          dataKey="expense"
+          name={t.dashboard.seriesExpense}
           fill="var(--color-debit)"
           radius={[3, 3, 0, 0]}
           maxBarSize={28}
@@ -145,10 +145,11 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
 }
 
 export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
+  const t = useT();
   const rows = data.map((d) => ({
     period: d.period,
-    বিক্রয়: d.sales,
-    লাভ: d.profit,
+    sales: d.sales,
+    profit: d.profit,
   }));
 
   return (
@@ -163,7 +164,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
         <XAxis
           dataKey="period"
-          tickFormatter={periodLabel}
+          tickFormatter={(period: string) => periodLabel(period, t.monthsShort)}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}
@@ -179,7 +180,8 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
         <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
         <Area
           type="monotone"
-          dataKey="বিক্রয়"
+          dataKey="sales"
+          name={t.dashboard.seriesSales}
           stroke="var(--color-primary)"
           strokeWidth={2}
           fill="url(#salesFill)"
@@ -189,7 +191,8 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
             greyscale and for colour-blind readers. */}
         <Area
           type="monotone"
-          dataKey="লাভ"
+          dataKey="profit"
+          name={t.dashboard.seriesProfit}
           stroke="var(--color-accent)"
           strokeWidth={2}
           strokeDasharray="5 4"

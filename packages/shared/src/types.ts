@@ -143,6 +143,28 @@ export const STOCK_MOVEMENT_TYPES = [
 ] as const;
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
 
+/**
+ * What a voucher line is *for*.
+ *
+ * A production voucher lists raw materials and finished goods in the same
+ * table; `transaction_lines.role` is what tells them apart. It was a bare
+ * `varchar` with a `Record<string, string>` label map, so the dictionary could
+ * not be checked for completeness against it.
+ */
+export const TRANSACTION_LINE_ROLES = [
+  "item",
+  "input",
+  "output",
+  "wastage",
+  "adjustment",
+] as const;
+export type TransactionLineRole = (typeof TRANSACTION_LINE_ROLES)[number];
+
+/** The column is a `varchar`, so rows read back from it are only `string`. */
+export function isTransactionLineRole(value: string): value is TransactionLineRole {
+  return (TRANSACTION_LINE_ROLES as readonly string[]).includes(value);
+}
+
 // ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------

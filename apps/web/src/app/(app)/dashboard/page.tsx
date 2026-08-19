@@ -13,7 +13,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { getDashboard } from "@hishabai/core";
-import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,13 @@ import {
   SalesTrendChart,
   type ChartPoint,
 } from "@/components/charts/trend-charts";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
-export const metadata = { title: bn.nav.dashboard };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.dashboard };
+}
 
 const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
   sale: "credit",
@@ -42,9 +45,12 @@ const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
 export default async function DashboardPage() {
   // One round trip for the whole page — tiles, charts, lists and alerts — and
   // it runs alongside the session lookup rather than after it.
-  const {
-    data: { tiles, trend, recent, topDueCustomers, lowStock },
-  } = await sessionWithData(getDashboard);
+  const [
+    {
+      data: { tiles, trend, recent, topDueCustomers, lowStock },
+    },
+    t,
+  ] = await Promise.all([sessionWithData(getDashboard), dict()]);
 
   // Money is a bigint and cannot cross to a client component. Charts get plain
   // taka — exact figures are rendered from the real values in the tiles and
@@ -62,16 +68,18 @@ export default async function DashboardPage() {
     ...lowStock.map((product) => ({
       key: `stock-${product.id}`,
       tone: "due" as const,
-      text: `${product.nameBn} — স্টক ${formatQty(qtyFromDb(product.quantity ?? "0"), {
-        unit: product.unitSymbol,
-      })}, সর্বনিম্ন ${formatQty(qtyFromDb(product.minStockLevel), { unit: product.unitSymbol })}`,
+      text: t.dashboard.lowStockAlert(
+        product.nameBn,
+        formatQty(qtyFromDb(product.quantity ?? "0"), { unit: product.unitSymbol }),
+        formatQty(qtyFromDb(product.minStockLevel), { unit: product.unitSymbol }),
+      ),
     })),
     ...(tiles.customerDue > 0n
       ? [
           {
             key: "due",
             tone: "debit" as const,
-            text: `কাস্টমারদের কাছে মোট ${topDueCustomers.length} জনের বকেয়া আছে`,
+            text: t.dashboard.customersOwing(String(topDueCustomers.length)),
           },
         ]
       : []),
@@ -81,15 +89,13 @@ export default async function DashboardPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{bn.nav.dashboard}</h1>
-          <p className="text-sm text-muted-foreground">
-            একবার লিখুন — বাকিটা HishabAI করবে
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.nav.dashboard}</h1>
+          <p className="text-sm text-muted-foreground">{t.shell.motto}</p>
         </div>
         <Button asChild>
           <Link href="/entry">
             <PlusCircle className="size-4" aria-hidden />
-            {bn.nav.newEntry}
+            {t.nav.newEntry}
           </Link>
         </Button>
       </div>
@@ -97,35 +103,35 @@ export default async function DashboardPage() {
       {/* ---- money on hand ---- */}
       <section aria-labelledby="balances-heading">
         <h2 id="balances-heading" className="sr-only">
-          ব্যালেন্স
+          {t.dashboard.balancesHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile label={bn.dashboard.cash} value={tiles.cash} icon={Wallet} />
-          <StatTile label={bn.dashboard.bank} value={tiles.bank} icon={Building} />
-          <StatTile label={bn.dashboard.mfs} value={tiles.mfs} icon={Smartphone} />
+          <StatTile label={t.dashboard.cash} value={tiles.cash} icon={Wallet} />
+          <StatTile label={t.dashboard.bank} value={tiles.bank} icon={Building} />
+          <StatTile label={t.dashboard.mfs} value={tiles.mfs} icon={Smartphone} />
         </div>
       </section>
 
       {/* ---- this month ---- */}
       <section aria-labelledby="month-heading">
         <h2 id="month-heading" className="sr-only">
-          চলতি মাস
+          {t.dashboard.thisMonthHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatTile
-            label={bn.dashboard.monthIncome}
+            label={t.dashboard.monthIncome}
             value={tiles.monthIncome}
             tone="credit"
             icon={TrendingUp}
           />
           <StatTile
-            label={bn.dashboard.monthExpense}
+            label={t.dashboard.monthExpense}
             value={tiles.monthExpense}
             tone="debit"
             icon={TrendingDown}
           />
           <StatTile
-            label={bn.dashboard.netProfit}
+            label={t.dashboard.netProfit}
             value={tiles.netProfit}
             tone="auto"
             icon={Banknote}
@@ -136,25 +142,25 @@ export default async function DashboardPage() {
       {/* ---- what is owed ---- */}
       <section aria-labelledby="dues-heading">
         <h2 id="dues-heading" className="sr-only">
-          বকেয়া ও স্টক
+          {t.dashboard.duesAndStockHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatTile
-            label={bn.dashboard.customerDue}
+            label={t.dashboard.customerDue}
             value={tiles.customerDue}
             tone="due"
             icon={Users}
             href="/customers"
           />
           <StatTile
-            label={bn.dashboard.vendorPayable}
+            label={t.dashboard.vendorPayable}
             value={tiles.vendorPayable}
             tone="due"
             icon={ReceiptText}
             href="/vendors"
           />
           <StatTile
-            label={bn.dashboard.stockValue}
+            label={t.dashboard.stockValue}
             value={tiles.stockValue}
             icon={Boxes}
             href="/inventory"
@@ -166,16 +172,16 @@ export default async function DashboardPage() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>{bn.dashboard.incomeVsExpense}</CardTitle>
-            <span className="text-xs text-muted-foreground">গত ৬ মাস</span>
+            <CardTitle>{t.dashboard.incomeVsExpense}</CardTitle>
+            <span className="text-xs text-muted-foreground">{t.dashboard.lastSixMonths}</span>
           </CardHeader>
           <CardBody>
             {chartData.length > 0 ? (
               <IncomeVsExpenseChart data={chartData} />
             ) : (
               <EmptyState
-                title={bn.emptyStates.noTransactions}
-                hint={bn.emptyStates.noTransactionsHint}
+                title={t.emptyStates.noTransactions}
+                hint={t.emptyStates.noTransactionsHint}
               />
             )}
           </CardBody>
@@ -183,16 +189,16 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{bn.dashboard.salesTrend}</CardTitle>
-            <span className="text-xs text-muted-foreground">গত ৬ মাস</span>
+            <CardTitle>{t.dashboard.salesTrend}</CardTitle>
+            <span className="text-xs text-muted-foreground">{t.dashboard.lastSixMonths}</span>
           </CardHeader>
           <CardBody>
             {chartData.length > 0 ? (
               <SalesTrendChart data={chartData} />
             ) : (
               <EmptyState
-                title={bn.emptyStates.noTransactions}
-                hint={bn.emptyStates.noTransactionsHint}
+                title={t.emptyStates.noTransactions}
+                hint={t.emptyStates.noTransactionsHint}
               />
             )}
           </CardBody>
@@ -203,20 +209,20 @@ export default async function DashboardPage() {
         {/* ---- recent transactions ---- */}
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>{bn.dashboard.recentTransactions}</CardTitle>
+            <CardTitle>{t.dashboard.recentTransactions}</CardTitle>
             <Link href="/transactions" className="text-sm text-primary hover:underline">
-              {bn.actions.viewAll}
+              {t.actions.viewAll}
             </Link>
           </CardHeader>
 
           {recent.length === 0 ? (
             <EmptyState
               icon={ReceiptText}
-              title={bn.emptyStates.noTransactions}
-              hint={bn.emptyStates.noTransactionsHint}
+              title={t.emptyStates.noTransactions}
+              hint={t.emptyStates.noTransactionsHint}
               action={
                 <Button asChild size="sm">
-                  <Link href="/entry">{bn.nav.newEntry}</Link>
+                  <Link href="/entry">{t.nav.newEntry}</Link>
                 </Button>
               }
             />
@@ -226,12 +232,12 @@ export default async function DashboardPage() {
                 <TableScroll>
                   <THead>
                     <TR>
-                      <TH>{bn.fields.date}</TH>
-                      <TH>{bn.fields.voucherNo}</TH>
-                      <TH>{bn.fields.type}</TH>
-                      <TH>{bn.fields.party}</TH>
-                      <TH numeric>{bn.fields.grandTotal}</TH>
-                      <TH numeric>{bn.fields.dueAmount}</TH>
+                      <TH>{t.fields.date}</TH>
+                      <TH>{t.fields.voucherNo}</TH>
+                      <TH>{t.fields.type}</TH>
+                      <TH>{t.fields.party}</TH>
+                      <TH numeric>{t.fields.grandTotal}</TH>
+                      <TH numeric>{t.fields.dueAmount}</TH>
                     </TR>
                   </THead>
                   <tbody>
@@ -250,11 +256,11 @@ export default async function DashboardPage() {
                         </TD>
                         <TD>
                           <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                            {bn.transactionType[row.type]}
+                            {t.transactionType[row.type]}
                           </Badge>
                           {row.status === "cancelled" ? (
                             <Badge tone="neutral" className="ml-1">
-                              {bn.transactionStatus.cancelled}
+                              {t.transactionStatus.cancelled}
                             </Badge>
                           ) : null}
                         </TD>
@@ -280,11 +286,11 @@ export default async function DashboardPage() {
                 {recent.map((row) => (
                   <MobileRow
                     key={row.id}
-                    title={row.partyName ?? bn.transactionType[row.type]}
+                    title={row.partyName ?? t.transactionType[row.type]}
                     subtitle={`${row.voucherNo} · ${formatDateShort(row.date)}`}
                     meta={
                       <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                        {bn.transactionType[row.type]}
+                        {t.transactionType[row.type]}
                       </Badge>
                     }
                     right={
@@ -292,7 +298,7 @@ export default async function DashboardPage() {
                         <MoneyText value={moneyFromDb(row.total)} size="sm" />
                         {moneyFromDb(row.dueAmount) > 0n ? (
                           <p className="mt-0.5 text-xs text-due">
-                            বকেয়া{" "}
+                            {t.fields.dueAmount}{" "}
                             <MoneyText
                               value={moneyFromDb(row.dueAmount)}
                               size="sm"
@@ -314,10 +320,10 @@ export default async function DashboardPage() {
           {/* ---- alerts ---- */}
           <Card>
             <CardHeader>
-              <CardTitle>{bn.dashboard.alerts}</CardTitle>
+              <CardTitle>{t.dashboard.alerts}</CardTitle>
             </CardHeader>
             {alerts.length === 0 ? (
-              <EmptyState title={bn.emptyStates.noAlerts} />
+              <EmptyState title={t.emptyStates.noAlerts} />
             ) : (
               <ul className="divide-y divide-border">
                 {alerts.slice(0, 6).map((alert) => (
@@ -336,13 +342,13 @@ export default async function DashboardPage() {
           {/* ---- customers who owe ---- */}
           <Card>
             <CardHeader>
-              <CardTitle>{bn.dashboard.dueCustomers}</CardTitle>
+              <CardTitle>{t.dashboard.dueCustomers}</CardTitle>
               <Link href="/customers" className="text-sm text-primary hover:underline">
-                {bn.actions.viewAll}
+                {t.actions.viewAll}
               </Link>
             </CardHeader>
             {topDueCustomers.length === 0 ? (
-              <EmptyState title="কারও বকেয়া নেই" />
+              <EmptyState title={t.emptyStates.noDues} />
             ) : (
               <ul className="divide-y divide-border">
                 {topDueCustomers.map((customer) => (

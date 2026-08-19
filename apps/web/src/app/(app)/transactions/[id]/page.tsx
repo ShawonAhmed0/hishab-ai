@@ -2,14 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { can, getTransactionDetail } from "@hishabai/core";
-import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { formatQty, isTransactionLineRole, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
-import { formatDateBn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { CancelTransactionButton } from "./cancel-button";
 
 export default async function TransactionDetailPage({
@@ -17,7 +18,7 @@ export default async function TransactionDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireSession();
+  const [session, t] = await Promise.all([requireSession(), dict()]);
   const { id } = await params;
   const detail = await getTransactionDetail(session, id);
   if (!detail) notFound();
@@ -41,7 +42,7 @@ export default async function TransactionDetailPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3 no-print">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild aria-label={bn.actions.back}>
+          <Button variant="ghost" size="icon" asChild aria-label={t.actions.back}>
             <Link href="/transactions">
               <ArrowLeft className="size-4" aria-hidden />
             </Link>
@@ -49,14 +50,14 @@ export default async function TransactionDetailPage({
           <div>
             <h1 className="num text-2xl font-bold tracking-tight">{transaction.voucherNo}</h1>
             <p className="text-sm text-muted-foreground">
-              {bn.transactionType[transaction.type]} · {formatDateBn(transaction.date)}
+              {t.transactionType[transaction.type]} · {formatDate(transaction.date, t)}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {cancelled ? (
-            <Badge tone="neutral">{bn.transactionStatus.cancelled}</Badge>
+            <Badge tone="neutral">{t.transactionStatus.cancelled}</Badge>
           ) : can(session, "transaction.cancel") ? (
             <CancelTransactionButton
               transactionId={transaction.id}
@@ -68,20 +69,18 @@ export default async function TransactionDetailPage({
 
       {cancelled ? (
         <div role="status" className="rounded-lg border border-border bg-surface-sunken p-3 text-sm">
-          এই লেনদেনটি বাতিল করা হয়েছে
-          {transaction.cancelReason ? ` — ${transaction.cancelReason}` : ""}। মূল এন্ট্রি
-          মোছা হয়নি; এর প্রভাব একটি বিপরীত এন্ট্রি দিয়ে বাতিল করা হয়েছে।
+          {t.transactions.cancelledNotice(transaction.cancelReason)}
         </div>
       ) : null}
 
       {/* ---- the arithmetic the user recognises (spec §13) ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>{hasParty ? bn.due.statement : "সারসংক্ষেপ"}</CardTitle>
+          <CardTitle>{hasParty ? t.due.statement : t.transactions.summary}</CardTitle>
           <Button variant="ghost" size="sm" className="no-print" asChild>
             <a href="?print=1">
               <Printer className="size-4" aria-hidden />
-              {bn.actions.print}
+              {t.actions.print}
             </a>
           </Button>
         </CardHeader>
@@ -89,13 +88,13 @@ export default async function TransactionDetailPage({
           {!hasParty ? (
             <dl className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm text-muted-foreground">{bn.fields.grandTotal}</dt>
+                <dt className="text-sm text-muted-foreground">{t.fields.grandTotal}</dt>
                 <dd className="mt-1">
                   <MoneyText value={currentBill} size="lg" />
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">{bn.due.payment}</dt>
+                <dt className="text-sm text-muted-foreground">{t.due.payment}</dt>
                 <dd className="mt-1">
                   <MoneyText value={paid} size="lg" tone={paid > 0n ? "debit" : "neutral"} />
                 </dd>
@@ -104,25 +103,25 @@ export default async function TransactionDetailPage({
           ) : (
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <dt className="text-sm text-muted-foreground">{bn.due.previousDue}</dt>
+              <dt className="text-sm text-muted-foreground">{t.due.previousDue}</dt>
               <dd className="mt-1">
                 <MoneyText value={previousDue} size="lg" />
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-muted-foreground">{bn.due.currentBill}</dt>
+              <dt className="text-sm text-muted-foreground">{t.due.currentBill}</dt>
               <dd className="mt-1">
                 <MoneyText value={currentBill} size="lg" />
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-muted-foreground">{bn.due.payment}</dt>
+              <dt className="text-sm text-muted-foreground">{t.due.payment}</dt>
               <dd className="mt-1">
                 <MoneyText value={paid} size="lg" tone="credit" />
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-medium">{bn.due.newDue}</dt>
+              <dt className="text-sm font-medium">{t.due.newDue}</dt>
               <dd className="mt-1">
                 <MoneyText
                   value={newDue as typeof previousDue}
@@ -139,26 +138,26 @@ export default async function TransactionDetailPage({
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>বিস্তারিত</CardTitle>
+            <CardTitle>{t.transactions.details}</CardTitle>
           </CardHeader>
           <CardBody className="space-y-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-              {hasParty ? <Detail label={bn.fields.party} value={partyName} /> : null}
-              <Detail label={bn.fields.memoNo} value={transaction.memoNo ?? "—"} />
+              {hasParty ? <Detail label={t.fields.party} value={partyName} /> : null}
+              <Detail label={t.fields.memoNo} value={transaction.memoNo ?? "—"} />
               <Detail
-                label="উৎস"
-                value={bn.transactionSource[transaction.source]}
+                label={t.transactions.source}
+                value={t.transactionSource[transaction.source]}
               />
-              <Detail label="তৈরি করেছেন" value={createdByName ?? "—"} />
+              <Detail label={t.transactions.createdBy} value={createdByName ?? "—"} />
               <Detail
-                label="তৈরির সময়"
+                label={t.transactions.createdAt}
                 value={new Date(transaction.createdAt).toLocaleString("en-GB", {
                   timeZone: "Asia/Dhaka",
                 })}
               />
               {transaction.description ? (
                 <Detail
-                  label={bn.fields.description}
+                  label={t.fields.description}
                   value={transaction.description}
                   className="col-span-2 sm:col-span-3"
                 />
@@ -169,14 +168,14 @@ export default async function TransactionDetailPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.product}</TH>
+                    <TH>{t.fields.product}</TH>
                     {/* A production voucher lists কাঁচামাল and উৎপাদিত পণ্য in
                         the same table; without this column it reads as one
                         undifferentiated list of products. */}
-                    {showRole ? <TH>{bn.fields.lineRole}</TH> : null}
-                    <TH numeric>{bn.fields.quantity}</TH>
-                    <TH numeric>{bn.fields.rate}</TH>
-                    <TH numeric>{bn.fields.lineTotal}</TH>
+                    {showRole ? <TH>{t.fields.lineRole}</TH> : null}
+                    <TH numeric>{t.fields.quantity}</TH>
+                    <TH numeric>{t.fields.rate}</TH>
+                    <TH numeric>{t.fields.lineTotal}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -194,7 +193,7 @@ export default async function TransactionDetailPage({
                         <TD>{line.productName ?? "—"}</TD>
                         {showRole ? (
                           <TD className="text-muted-foreground">
-                            {bn.transactionLineRole[line.role] ?? line.role}
+                            {isTransactionLineRole(line.role) ? t.transactionLineRole[line.role] : line.role}
                           </TD>
                         ) : null}
                         <TD numeric className="num">
@@ -229,7 +228,7 @@ export default async function TransactionDetailPage({
           {payments.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>{bn.fields.paymentMethod}</CardTitle>
+                <CardTitle>{t.fields.paymentMethod}</CardTitle>
               </CardHeader>
               <ul className="divide-y divide-border">
                 {payments.map((payment) => (
@@ -244,7 +243,7 @@ export default async function TransactionDetailPage({
                     </div>
                     {payment.handledByName ? (
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {bn.fields.handledBy}: {payment.handledByName}
+                        {t.fields.handledBy}: {payment.handledByName}
                       </p>
                     ) : null}
                   </li>
@@ -256,7 +255,7 @@ export default async function TransactionDetailPage({
           {movements.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>স্টক প্রভাব</CardTitle>
+                <CardTitle>{t.transactions.stockEffect}</CardTitle>
               </CardHeader>
               <ul className="divide-y divide-border">
                 {movements.map((movement) => (
@@ -264,8 +263,8 @@ export default async function TransactionDetailPage({
                     <div className="min-w-0">
                       <p className="truncate text-sm">{movement.productName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {bn.stockMovementType[
-                          movement.movementType as keyof typeof bn.stockMovementType
+                        {t.stockMovementType[
+                          movement.movementType as keyof typeof t.stockMovementType
                         ] ?? movement.movementType}
                       </p>
                     </div>
@@ -291,18 +290,16 @@ export default async function TransactionDetailPage({
       {can(session, "report.viewFinancial") ? (
         <Card>
           <CardHeader>
-            <CardTitle>হিসাবের খাতা</CardTitle>
-            <span className="text-xs text-muted-foreground">
-              স্বয়ংক্রিয়ভাবে তৈরি — কিছু লিখতে হয়নি
-            </span>
+            <CardTitle>{t.transactions.ledger}</CardTitle>
+            <span className="text-xs text-muted-foreground">{t.transactions.ledgerNote}</span>
           </CardHeader>
           <TableScroll>
             <THead>
               <TR>
-                <TH>হিসাব</TH>
-                <TH>বিবরণ</TH>
-                <TH numeric>ডেবিট</TH>
-                <TH numeric>ক্রেডিট</TH>
+                <TH>{t.transactions.accountColumn}</TH>
+                <TH>{t.transactions.narrationColumn}</TH>
+                <TH numeric>{t.transactions.debitColumn}</TH>
+                <TH numeric>{t.transactions.creditColumn}</TH>
               </TR>
             </THead>
             <tbody>

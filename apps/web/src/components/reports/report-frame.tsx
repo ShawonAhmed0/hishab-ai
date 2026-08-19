@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { currentMonth, type ReportPeriod } from "@hishabai/core";
-import { bn, todayIso } from "@hishabai/shared";
+import { todayIso } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { PrintButton } from "@/components/ui/print-button";
-import { formatDateBn } from "@/lib/utils";
+import { dict } from "@/lib/locale.server";
+import { formatDate } from "@/lib/utils";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -30,7 +31,7 @@ const inputClass =
  * carried to the customer — so the filters carry `.no-print` and the period is
  * restated in a line that only appears on the page.
  */
-export function ReportFrame({
+export async function ReportFrame({
   title,
   description,
   period,
@@ -49,6 +50,8 @@ export function ReportFrame({
   filters?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const t = await dict();
+
   return (
     <div className="space-y-5">
       <div className="no-print">
@@ -57,7 +60,7 @@ export function ReportFrame({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          {bn.nav.reports}
+          {t.nav.reports}
         </Link>
       </div>
 
@@ -67,11 +70,11 @@ export function ReportFrame({
           <p className="text-sm text-muted-foreground no-print">{description}</p>
           <p className="hidden text-sm text-muted-foreground print:block">
             {asOf
-              ? `${formatDateBn(period.to)} পর্যন্ত`
-              : `${formatDateBn(period.from)} — ${formatDateBn(period.to)}`}
+              ? t.reports.asOfLine(formatDate(period.to, t))
+              : t.reports.rangeLine(formatDate(period.from, t), formatDate(period.to, t))}
           </p>
         </div>
-        <PrintButton label={bn.actions.print} />
+        <PrintButton label={t.actions.print} />
       </div>
 
       <Card className="no-print">
@@ -79,18 +82,20 @@ export function ReportFrame({
           <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {asOf ? null : (
               <label className="flex flex-col gap-1.5 text-sm">
-                <span className="font-medium">শুরুর তারিখ</span>
+                <span className="font-medium">{t.reports.fromDate}</span>
                 <input type="date" name="from" defaultValue={period.from} className={inputClass} />
               </label>
             )}
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{asOf ? "কোন তারিখ পর্যন্ত" : "শেষ তারিখ"}</span>
+              <span className="font-medium">
+                {asOf ? t.reports.asOfDate : t.reports.toDate}
+              </span>
               <input type="date" name="to" defaultValue={period.to} className={inputClass} />
             </label>
             {filters}
             <div className="flex items-end">
               <Button type="submit" block>
-                {bn.actions.filter}
+                {t.actions.filter}
               </Button>
             </div>
           </form>
@@ -100,7 +105,7 @@ export function ReportFrame({
       {children}
 
       <p className="hidden text-xs text-muted-foreground print:block">
-        HishabAI থেকে তৈরি — {formatDateBn(todayIso())}
+        {t.reports.generatedLine(formatDate(todayIso(), t))}
       </p>
     </div>
   );

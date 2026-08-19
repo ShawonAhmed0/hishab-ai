@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 type ToastTone = "success" | "error" | "info";
@@ -34,11 +35,12 @@ const TONE = {
 } as const;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = React.useState<Toast[]>([]);
   const nextId = React.useRef(0);
 
   const dismiss = React.useCallback((id: number) => {
-    setToasts((current) => current.filter((t) => t.id !== id));
+    setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
   const show = React.useCallback(
@@ -89,7 +91,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => dismiss(toast.id)}
-                aria-label="বন্ধ করুন"
+                aria-label={t.actions.close}
                 className="cursor-pointer rounded p-1 hover:bg-black/5"
               >
                 <X className="size-4" aria-hidden />

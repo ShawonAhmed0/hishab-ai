@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { THEME_COOKIE } from "@/lib/theme";
 
 /**
@@ -18,6 +19,7 @@ import { THEME_COOKIE } from "@/lib/theme";
  * render the right class next time and avoid a flash of the wrong theme.
  */
 export function ThemeToggle() {
+  const t = useT();
   const [dark, setDark] = React.useState(false);
 
   // The class is already correct before hydration — set by the server from the
@@ -39,7 +41,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={toggle}
-      aria-label={dark ? "দিনের রঙে দেখুন" : "রাতের রঙে দেখুন"}
+      aria-label={dark ? t.shell.toLightTheme : t.shell.toDarkTheme}
       aria-pressed={dark}
     >
       {dark ? <Sun className="size-5" aria-hidden /> : <Moon className="size-5" aria-hidden />}

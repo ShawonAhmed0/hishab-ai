@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertTriangle, Bell, Check, Info, TriangleAlert } from "lucide-react";
-import { bn } from "@hishabai/shared";
 import type { Alert, NotificationRow } from "@hishabai/core";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 const SEVERITY_ICON = {
@@ -33,6 +33,7 @@ export function NotificationBell({
   badgeCount: number;
   onMarkAllRead: () => Promise<void>;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, start] = React.useTransition();
@@ -48,7 +49,9 @@ export function NotificationBell({
           size="icon"
           className="relative"
           aria-label={
-            badgeCount > 0 ? `${bn.nav.notifications} — ${badgeCount}টি` : bn.nav.notifications
+            badgeCount > 0
+              ? t.shell.notificationsWithCount(String(badgeCount))
+              : t.nav.notifications
           }
         >
           <Bell className="size-5" aria-hidden />
@@ -71,7 +74,7 @@ export function NotificationBell({
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-medium text-muted-foreground">
-              {bn.nav.notifications}
+              {t.nav.notifications}
             </p>
             {unread.length > 0 ? (
               <button
@@ -86,14 +89,14 @@ export function NotificationBell({
                 className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
               >
                 <Check className="size-3.5" aria-hidden />
-                সব পড়া হয়েছে
+                {t.shell.markAllRead}
               </button>
             ) : null}
           </div>
 
           {empty ? (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              এখন কিছু দেখার নেই।
+              {t.shell.noNotifications}
             </p>
           ) : null}
 

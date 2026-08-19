@@ -11,87 +11,96 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { currentMonth, getProfitLoss } from "@hishabai/core";
-import { bn } from "@hishabai/shared";
+import type { Dictionary, StringKeys } from "@hishabai/shared";
 import { Card, CardBody } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat-tile";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
-import { formatDateBn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
-export const metadata = { title: bn.nav.reports };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.reports };
+}
 
+/**
+ * Keys rather than strings, for the same reason the nav items hold keys: this
+ * array is module state and would otherwise freeze one locale for the life of
+ * the server process.
+ */
 const REPORTS: {
   href: Route;
-  title: string;
-  hint: string;
+  title: StringKeys<Dictionary["reports"]>;
+  hint: StringKeys<Dictionary["reports"]>;
   icon: typeof BarChart3;
 }[] = [
   {
     href: "/reports/profit-loss",
-    title: "লাভ-ক্ষতি",
-    hint: "আয়, ব্যয়, মোট মুনাফা ও নিট লাভ — খাত অনুযায়ী",
+    title: "profitLoss",
+    hint: "profitLossHint",
     icon: BarChart3,
   },
   {
     href: "/reports/dues",
-    title: "বকেয়া ও পাওনা",
-    hint: "কার টাকা কত দিন ধরে আটকে আছে, বয়স অনুযায়ী ভাগ করা",
+    title: "dues",
+    hint: "duesHint",
     icon: Hourglass,
   },
   {
     href: "/reports/register",
-    title: "বিক্রয় ও ক্রয়",
-    hint: "কার কাছে কত বিক্রি, কোন পণ্য কত গেল",
+    title: "register",
+    hint: "registerHint",
     icon: ClipboardList,
   },
   {
     href: "/reports/stock",
-    title: "স্টক রিপোর্ট",
-    hint: "প্রারম্ভিক, আগমন, নির্গমন ও সমাপনী স্টক",
+    title: "stock",
+    hint: "stockHint",
     icon: Boxes,
   },
   {
     href: "/reports/cash-book",
-    title: "ক্যাশ বই",
-    hint: "নগদ, ব্যাংক ও MFS-এর প্রতিটি জমা-খরচ",
+    title: "cashBook",
+    hint: "cashBookHint",
     icon: Banknote,
   },
 ];
 
 export default async function ReportsPage() {
   const period = currentMonth();
-  const { data: pl } = await sessionWithData((scope) => getProfitLoss(scope, period));
+  const [{ data: pl }, t] = await Promise.all([
+    sessionWithData((scope) => getProfitLoss(scope, period)),
+    dict(),
+  ]);
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{bn.nav.reports}</h1>
-        <p className="text-sm text-muted-foreground">
-          প্রতিটি রিপোর্ট খাতা থেকে সরাসরি তৈরি — তারিখ বেছে নিয়ে প্রিন্ট করা যায়
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t.nav.reports}</h1>
+        <p className="text-sm text-muted-foreground">{t.reports.indexHint}</p>
       </div>
 
       {/* This month at a glance; every report below opens on the same period. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label={bn.dashboard.monthIncome}
+          label={t.dashboard.monthIncome}
           value={pl.totals.income}
           tone="credit"
           icon={TrendingUp}
-          footnote={`${formatDateBn(period.from)} — ${formatDateBn(period.to)}`}
+          footnote={t.reports.rangeLine(formatDate(period.from, t), formatDate(period.to, t))}
         />
         <StatTile
-          label={bn.dashboard.monthExpense}
+          label={t.dashboard.monthExpense}
           value={pl.totals.expense}
           tone="debit"
           icon={TrendingDown}
-          footnote="বিক্রীত পণ্যের ব্যয়সহ"
+          footnote={t.reports.withCogs}
         />
         <StatTile
-          label={bn.dashboard.netProfit}
+          label={t.dashboard.netProfit}
           value={pl.totals.netProfit}
           tone="auto"
           icon={BarChart3}
-          footnote={pl.totals.netProfit >= 0n ? "লাভে আছেন" : "ক্ষতিতে আছেন"}
+          footnote={pl.totals.netProfit >= 0n ? t.reports.inProfit : t.reports.inLoss}
         />
       </div>
 
@@ -104,8 +113,8 @@ export default async function ReportsPage() {
                   <report.icon className="size-5" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">{report.title}</span>
-                  <span className="block text-sm text-muted-foreground">{report.hint}</span>
+                  <span className="block font-semibold">{t.reports[report.title]}</span>
+                  <span className="block text-sm text-muted-foreground">{t.reports[report.hint]}</span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
               </CardBody>

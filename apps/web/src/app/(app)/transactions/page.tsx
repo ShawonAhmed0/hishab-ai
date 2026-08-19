@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { ReceiptText } from "lucide-react";
 import { listTransactions } from "@hishabai/core";
-import { TRANSACTION_TYPES, bn, moneyFromDb, type TransactionType } from "@hishabai/shared";
+import { TRANSACTION_TYPES, moneyFromDb, type TransactionType } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
-export const metadata = { title: bn.nav.transactions };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.transactions };
+}
 
 const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
   sale: "credit",
@@ -40,22 +43,25 @@ export default async function TransactionsPage({
     ? (params.type as TransactionType)
     : undefined;
 
-  const { data: rows } = await sessionWithData((scope) =>
-    listTransactions(scope, {
+  const [{ data: rows }, t] = await Promise.all([
+    sessionWithData((scope) =>
+      listTransactions(scope, {
       ...(type ? { type } : {}),
       ...(params.from ? { from: params.from } : {}),
       ...(params.to ? { to: params.to } : {}),
       ...(params.q ? { search: params.q } : {}),
-      includeCancelled: params.cancelled === "1",
-    }),
-  );
+        includeCancelled: params.cancelled === "1",
+      }),
+    ),
+    dict(),
+  ]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{bn.nav.transactions}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.nav.transactions}</h1>
         <Button asChild>
-          <Link href="/entry">{bn.nav.newEntry}</Link>
+          <Link href="/entry">{t.nav.newEntry}</Link>
         </Button>
       </div>
 
@@ -65,34 +71,34 @@ export default async function TransactionsPage({
         <CardBody>
           <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{bn.actions.search}</span>
+              <span className="font-medium">{t.actions.search}</span>
               <input
                 name="q"
                 type="search"
                 defaultValue={params.q ?? ""}
-                placeholder="ভাউচার, মেমো, নাম"
+                placeholder={t.transactions.searchPlaceholder}
                 className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               />
             </label>
 
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{bn.fields.type}</span>
+              <span className="font-medium">{t.fields.type}</span>
               <select
                 name="type"
                 defaultValue={params.type ?? ""}
                 className="h-11 cursor-pointer rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               >
-                <option value="">সব</option>
+                <option value="">{t.transactions.all}</option>
                 {TRANSACTION_TYPES.map((option) => (
                   <option key={option} value={option}>
-                    {bn.transactionType[option]}
+                    {t.transactionType[option]}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">শুরু</span>
+              <span className="font-medium">{t.transactions.start}</span>
               <input
                 name="from"
                 type="date"
@@ -102,7 +108,7 @@ export default async function TransactionsPage({
             </label>
 
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">শেষ</span>
+              <span className="font-medium">{t.transactions.end}</span>
               <input
                 name="to"
                 type="date"
@@ -113,7 +119,7 @@ export default async function TransactionsPage({
 
             <div className="flex items-end gap-2">
               <Button type="submit" block>
-                {bn.actions.filter}
+                {t.actions.filter}
               </Button>
             </div>
 
@@ -125,7 +131,7 @@ export default async function TransactionsPage({
                 defaultChecked={params.cancelled === "1"}
                 className="size-4 cursor-pointer accent-[var(--color-primary)]"
               />
-              বাতিল হওয়া লেনদেনও দেখান
+              {t.transactions.includeCancelled}
             </label>
           </form>
         </CardBody>
@@ -133,17 +139,17 @@ export default async function TransactionsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{rows.length} টি লেনদেন</CardTitle>
+          <CardTitle>{t.transactions.count(String(rows.length))}</CardTitle>
         </CardHeader>
 
         {rows.length === 0 ? (
           <EmptyState
             icon={ReceiptText}
-            title={bn.messages.noResults}
-            hint={bn.emptyStates.noTransactionsHint}
+            title={t.messages.noResults}
+            hint={t.emptyStates.noTransactionsHint}
             action={
               <Button asChild size="sm">
-                <Link href="/entry">{bn.nav.newEntry}</Link>
+                <Link href="/entry">{t.nav.newEntry}</Link>
               </Button>
             }
           />
@@ -153,14 +159,14 @@ export default async function TransactionsPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.date}</TH>
-                    <TH>{bn.fields.voucherNo}</TH>
-                    <TH>{bn.fields.type}</TH>
-                    <TH>{bn.fields.party}</TH>
-                    <TH>{bn.fields.memoNo}</TH>
-                    <TH numeric>{bn.fields.grandTotal}</TH>
-                    <TH numeric>{bn.due.payment}</TH>
-                    <TH numeric>{bn.fields.dueAmount}</TH>
+                    <TH>{t.fields.date}</TH>
+                    <TH>{t.fields.voucherNo}</TH>
+                    <TH>{t.fields.type}</TH>
+                    <TH>{t.fields.party}</TH>
+                    <TH>{t.fields.memoNo}</TH>
+                    <TH numeric>{t.fields.grandTotal}</TH>
+                    <TH numeric>{t.due.payment}</TH>
+                    <TH numeric>{t.fields.dueAmount}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -179,11 +185,11 @@ export default async function TransactionsPage({
                       </TD>
                       <TD>
                         <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                          {bn.transactionType[row.type]}
+                          {t.transactionType[row.type]}
                         </Badge>
                         {row.status === "cancelled" ? (
                           <Badge tone="neutral" className="ml-1">
-                            {bn.transactionStatus.cancelled}
+                            {t.transactionStatus.cancelled}
                           </Badge>
                         ) : null}
                       </TD>
@@ -218,15 +224,15 @@ export default async function TransactionsPage({
               {rows.map((row) => (
                 <MobileRow
                   key={row.id}
-                  title={row.partyName ?? bn.transactionType[row.type]}
+                  title={row.partyName ?? t.transactionType[row.type]}
                   subtitle={`${row.voucherNo} · ${formatDateShort(row.date)}`}
                   meta={
                     <>
                       <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                        {bn.transactionType[row.type]}
+                        {t.transactionType[row.type]}
                       </Badge>
                       {row.status === "cancelled" ? (
-                        <Badge tone="neutral">{bn.transactionStatus.cancelled}</Badge>
+                        <Badge tone="neutral">{t.transactionStatus.cancelled}</Badge>
                       ) : null}
                     </>
                   }
@@ -235,7 +241,7 @@ export default async function TransactionsPage({
                       <MoneyText value={moneyFromDb(row.total)} size="sm" />
                       {moneyFromDb(row.dueAmount) > 0n ? (
                         <p className="mt-0.5 text-xs text-due">
-                          বকেয়া{" "}
+                          {t.fields.dueAmount}{" "}
                           <MoneyText
                             value={moneyFromDb(row.dueAmount)}
                             size="sm"

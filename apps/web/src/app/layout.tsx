@@ -1,17 +1,24 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { LocaleProvider } from "@/components/locale-provider";
 import { ToastProvider } from "@/components/ui/toast";
+import { currentLocale, dict } from "@/lib/locale.server";
 import { THEME_BOOTSTRAP, THEME_COOKIE, parseTheme } from "@/lib/theme";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: {
-    default: "HishabAI — Smart হিসাব, Smarter Business",
-    template: "%s · HishabAI",
-  },
-  description:
-    "বাংলায় ব্যবসার সম্পূর্ণ হিসাব — একবার লিখুন, বাকিটা HishabAI করবে।",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await dict();
+
+  return {
+    // The name and the tagline are the brand and stay put; only the sentence
+    // a search result would show is translated.
+    title: {
+      default: `HishabAI — ${t.shell.tagline}`,
+      template: "%s · HishabAI",
+    },
+    description: t.shell.appDescription,
+  };
+}
 
 /**
  * The browser chrome has to match the page, including when the user has
@@ -40,11 +47,16 @@ export async function generateViewport(): Promise<Viewport> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // A chosen theme is rendered by the server so there is no flash; with no
   // choice stored, the inline script below asks the OS before first paint.
-  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  // The locale needs no such script — there is no OS setting to consult, and
+  // the server renders the text itself.
+  const [theme, locale] = await Promise.all([
+    cookies().then((c) => parseTheme(c.get(THEME_COOKIE)?.value)),
+    currentLocale(),
+  ]);
 
   return (
     <html
-      lang="bn"
+      lang={locale}
       className={theme === "dark" ? "dark" : undefined}
       suppressHydrationWarning
     >
@@ -61,7 +73,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <LocaleProvider locale={locale}>
+          <ToastProvider>{children}</ToastProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

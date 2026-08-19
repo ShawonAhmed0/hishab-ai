@@ -1,6 +1,9 @@
 import { Wallet } from "lucide-react";
+import { dict } from "@/lib/locale.server";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const t = await dict();
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm">
@@ -10,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </div>
           <h1 className="text-2xl font-bold tracking-tight">HishabAI</h1>
           <p className="text-sm text-muted-foreground">
-            Smart হিসাব, Smarter Business
+            {t.shell.tagline}
           </p>
         </div>
         {children}

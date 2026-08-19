@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { ClipboardList, Package, Receipt, Wallet } from "lucide-react";
 import { getRegister } from "@hishabai/core";
-import { bn, deriveRate, formatQty, qtyFromDb } from "@hishabai/shared";
+import { deriveRate, formatQty, qtyFromDb } from "@hishabai/shared";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { ReportFrame, periodFrom, reportInputClass } from "@/components/reports/report-frame";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 
-export const metadata = { title: "বিক্রয় ও ক্রয়" };
+export async function generateMetadata() {
+  return { title: (await dict()).reports.register };
+}
 
 export default async function RegisterPage({
   searchParams,
@@ -20,40 +23,45 @@ export default async function RegisterPage({
   const type = params.type === "purchase" ? "purchase" : "sale";
   const period = periodFrom(params);
 
-  const { data } = await sessionWithData((scope) => getRegister(scope, { ...period, type }));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getRegister(scope, { ...period, type })),
+    dict(),
+  ]);
 
   const isSale = type === "sale";
-  const title = isSale ? "বিক্রয় রিপোর্ট" : "ক্রয় রিপোর্ট";
-  const partyLabel = isSale ? bn.fields.customer : bn.fields.vendor;
-  const dueLabel = isSale ? bn.fields.dueAmount : "পাওনা";
+  const title = isSale ? t.reports.salesRegister : t.reports.purchaseRegister;
+  const partyLabel = isSale ? t.fields.customer : t.fields.vendor;
+  const dueLabel = isSale ? t.fields.dueAmount : t.accountSubtype.payable;
 
   return (
     <ReportFrame
       title={title}
-      description={`নির্বাচিত সময়ে কার কাছে কত ${isSale ? "বিক্রি" : "কেনা"} হলো, আর কোন পণ্য কত গেল`}
+      description={
+        isSale ? t.reports.registerDescriptionSale : t.reports.registerDescriptionPurchase
+      }
       period={period}
       filters={
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium">{bn.fields.type}</span>
+          <span className="font-medium">{t.fields.type}</span>
           <select name="type" defaultValue={type} className={`${reportInputClass} cursor-pointer`}>
-            <option value="sale">{bn.transactionType.sale}</option>
-            <option value="purchase">{bn.transactionType.purchase}</option>
+            <option value="sale">{t.transactionType.sale}</option>
+            <option value="purchase">{t.transactionType.purchase}</option>
           </select>
         </label>
       }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label={isSale ? "মোট বিক্রয়" : "মোট ক্রয়"}
+          label={isSale ? t.reports.totalSales : t.reports.totalPurchases}
           value={data.totals.total}
           tone={isSale ? "credit" : "debit"}
           icon={ClipboardList}
         />
         <StatTile
-          label="নগদ পাওয়া/দেওয়া"
+          label={t.reports.cashMoved}
           value={data.totals.paid}
           icon={Receipt}
-          footnote="যত টাকা হাতবদল হয়েছে"
+          footnote={t.reports.cashMovedHint}
         />
         <StatTile
           label={dueLabel}
@@ -62,9 +70,9 @@ export default async function RegisterPage({
           icon={Wallet}
         />
         <CountTile
-          label="লেনদেন সংখ্যা"
+          label={t.reports.entryCountLabel}
           value={data.totals.count}
-          suffix="টি"
+          suffix={t.reports.countSuffix}
           icon={Package}
         />
       </div>
@@ -72,15 +80,15 @@ export default async function RegisterPage({
       {data.totals.count === 0 ? (
         <Card>
           <EmptyState
-            title={`এই সময়ে কোনো ${isSale ? "বিক্রয়" : "ক্রয়"} নেই`}
-            hint="অন্য তারিখ বেছে দেখুন"
+            title={isSale ? t.reports.noSales : t.reports.noPurchases}
+            hint={t.reports.tryAnotherRange}
           />
         </Card>
       ) : (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>{partyLabel} অনুযায়ী</CardTitle>
+              <CardTitle>{t.reports.byParty(partyLabel)}</CardTitle>
             </CardHeader>
 
             <div className="hidden md:block">
@@ -88,9 +96,9 @@ export default async function RegisterPage({
                 <THead>
                   <TR>
                     <TH>{partyLabel}</TH>
-                    <TH numeric>লেনদেন</TH>
-                    <TH numeric>মোট</TH>
-                    <TH numeric>পরিশোধ</TH>
+                    <TH numeric>{t.reports.entry}</TH>
+                    <TH numeric>{t.reports.totalColumn}</TH>
+                    <TH numeric>{t.reports.paidColumn}</TH>
                     <TH numeric>{dueLabel}</TH>
                   </TR>
                 </THead>
@@ -131,7 +139,7 @@ export default async function RegisterPage({
                 </tbody>
                 <tfoot>
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
-                    <TD className="font-semibold">সর্বমোট</TD>
+                    <TD className="font-semibold">{t.reports.grandTotalRow}</TD>
                     <TD numeric className="num font-semibold">
                       {data.totals.count}
                     </TD>
@@ -174,7 +182,7 @@ export default async function RegisterPage({
                     ? { href: `/${isSale ? "customers" : "vendors"}/${row.partyId}` as const }
                     : {})}
                   title={row.name}
-                  subtitle={`${row.count} টি লেনদেন`}
+                  subtitle={t.reports.entriesCount(String(row.count))}
                   right={
                     <>
                       <MoneyText value={row.total} size="sm" />
@@ -192,13 +200,13 @@ export default async function RegisterPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>পণ্য অনুযায়ী</CardTitle>
+              <CardTitle>{t.reports.byProduct}</CardTitle>
             </CardHeader>
 
             {data.byProduct.length === 0 ? (
               <EmptyState
-                title="কোনো পণ্য যুক্ত ছিল না"
-                hint="এই সময়ের লেনদেনগুলো পণ্যবিহীন ছিল"
+                title={t.reports.noProductsInvolved}
+                hint={t.reports.noProductsInvolvedHint}
               />
             ) : (
               <>
@@ -206,10 +214,10 @@ export default async function RegisterPage({
                   <TableScroll>
                     <THead>
                       <TR>
-                        <TH>{bn.fields.product}</TH>
-                        <TH numeric>{bn.fields.quantity}</TH>
-                        <TH numeric>মোট মূল্য</TH>
-                        <TH numeric>গড় দর</TH>
+                        <TH>{t.fields.product}</TH>
+                        <TH numeric>{t.fields.quantity}</TH>
+                        <TH numeric>{t.reports.lineValueColumn}</TH>
+                        <TH numeric>{t.reports.avgRateColumn}</TH>
                       </TR>
                     </THead>
                     <tbody>

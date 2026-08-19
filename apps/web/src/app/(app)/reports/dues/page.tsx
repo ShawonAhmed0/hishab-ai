@@ -1,24 +1,27 @@
 import Link from "next/link";
 import { AlertTriangle, Hourglass, Users } from "lucide-react";
 import { AGING_BUCKETS, getDueAging, type AgingBucket } from "@hishabai/core";
-import { addMoney, bn } from "@hishabai/shared";
+import { addMoney, type Dictionary, type StringKeys } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { ReportFrame, periodFrom, reportInputClass } from "@/components/reports/report-frame";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
-import { formatDateBn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
-export const metadata = { title: "বকেয়া ও পাওনা" };
+export async function generateMetadata() {
+  return { title: (await dict()).reports.dues };
+}
 
 /** The label under each bucket, in the words a shopkeeper would use. */
-const BUCKET_LABEL: Record<AgingBucket, string> = {
-  "0-30": "০–৩০ দিন",
-  "31-60": "৩১–৬০ দিন",
-  "61-90": "৬১–৯০ দিন",
-  "90+": "৯০+ দিন",
+const BUCKET_LABEL: Record<AgingBucket, StringKeys<Dictionary["reports"]>> = {
+  "0-30": "agingBucket0",
+  "31-60": "agingBucket31",
+  "61-90": "agingBucket61",
+  "90+": "agingBucket90",
 };
 
 export default async function DuesReportPage({
@@ -32,59 +35,65 @@ export default async function DuesReportPage({
   // The frame still supplies a range, and the end of it is the as-of date.
   const period = periodFrom(params);
 
-  const { data } = await sessionWithData((scope) =>
-    getDueAging(scope, { asOf: period.to, side }),
-  );
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getDueAging(scope, { asOf: period.to, side })),
+    dict(),
+  ]);
 
   const isReceivable = side === "receivable";
-  const title = isReceivable ? "কাস্টমার বকেয়া" : "ভেন্ডর পাওনা";
+  const title = isReceivable ? t.accountSubtype.receivable : t.accountSubtype.payable;
   const overdue = addMoney(data.totals["61-90"], data.totals["90+"]);
 
   return (
     <ReportFrame
-      title={`${title} — বয়স বিশ্লেষণ`}
-      description={`${formatDateBn(period.to)} পর্যন্ত কার টাকা কত দিন ধরে আটকে আছে`}
+      title={t.reports.agingTitle(title)}
+      description={t.reports.agingDescription(formatDate(period.to, t))}
       period={period}
       asOf
       filters={
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium">কোন দিক</span>
+          <span className="font-medium">{t.reports.whichSide}</span>
           <select name="side" defaultValue={side} className={`${reportInputClass} cursor-pointer`}>
-            <option value="receivable">কাস্টমার বকেয়া</option>
-            <option value="payable">ভেন্ডর পাওনা</option>
+            <option value="receivable">{t.accountSubtype.receivable}</option>
+            <option value="payable">{t.accountSubtype.payable}</option>
           </select>
         </label>
       }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatTile label={`মোট ${title}`} value={data.totals.all} tone="due" icon={Hourglass} />
+        <StatTile
+          label={t.reports.totalOf(title)}
+          value={data.totals.all}
+          tone="due"
+          icon={Hourglass}
+        />
         <CountTile
-          label={isReceivable ? "বকেয়া আছে যাদের" : "পাওনা আছে যাদের"}
+          label={isReceivable ? t.reports.peopleOwing : t.reports.peopleOwed}
           value={data.rows.length}
-          suffix="জন"
+          suffix={t.reports.people}
           icon={Users}
         />
         <StatTile
-          label="৬০ দিনের বেশি পুরোনো"
+          label={t.reports.olderThan60}
           value={overdue}
           tone={overdue > 0n ? "debit" : "neutral"}
           icon={AlertTriangle}
-          footnote="এগুলোই আগে তাড়া দেওয়ার মতো"
+          footnote={t.reports.chaseTheseFirst}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{data.rows.length} জন</CardTitle>
+          <CardTitle>{t.reports.personCount(String(data.rows.length))}</CardTitle>
           <span className="text-xs text-muted-foreground no-print">
-            পুরোনো বিল আগে শোধ হয়েছে ধরে হিসাব করা
+            {t.reports.fifoNote}
           </span>
         </CardHeader>
 
         {data.rows.length === 0 ? (
           <EmptyState
-            title={isReceivable ? "কারও কাছে বকেয়া নেই" : "কারও পাওনা নেই"}
-            hint="সবাই পরিশোধ করে দিয়েছে"
+            title={isReceivable ? t.reports.noReceivables : t.reports.noPayables}
+            hint={t.reports.everyoneSettled}
           />
         ) : (
           <>
@@ -92,13 +101,13 @@ export default async function DuesReportPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.name}</TH>
+                    <TH>{t.fields.name}</TH>
                     {AGING_BUCKETS.map((bucket) => (
                       <TH key={bucket} numeric>
-                        {BUCKET_LABEL[bucket]}
+                        {t.reports[BUCKET_LABEL[bucket]]}
                       </TH>
                     ))}
-                    <TH numeric>মোট</TH>
+                    <TH numeric>{t.reports.totalColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -113,7 +122,7 @@ export default async function DuesReportPage({
                         </Link>
                         {row.oldestDays > 90 ? (
                           <Badge tone="due" className="ml-2">
-                            {row.oldestDays} দিন
+                            {t.reports.days(String(row.oldestDays))}
                           </Badge>
                         ) : null}
                       </TD>
@@ -141,7 +150,7 @@ export default async function DuesReportPage({
                 </tbody>
                 <tfoot>
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
-                    <TD className="font-semibold">সর্বমোট</TD>
+                    <TD className="font-semibold">{t.reports.grandTotalRow}</TD>
                     {AGING_BUCKETS.map((bucket) => (
                       <TD key={bucket} numeric>
                         <MoneyText
@@ -172,12 +181,12 @@ export default async function DuesReportPage({
                   key={row.partyId}
                   href={`/${isReceivable ? "customers" : "vendors"}/${row.partyId}`}
                   title={row.name}
-                  subtitle={`সবচেয়ে পুরোনো ${row.oldestDays} দিন`}
+                  subtitle={t.reports.oldestDays(String(row.oldestDays))}
                   right={
                     <>
                       <MoneyText value={row.total} size="sm" tone="due" />
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {row.oldestDays > 60 ? "তাড়া দিন" : "স্বাভাবিক"}
+                        {row.oldestDays > 60 ? t.reports.chase : t.reports.normal}
                       </p>
                     </>
                   }
