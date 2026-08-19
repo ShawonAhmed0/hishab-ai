@@ -45,6 +45,20 @@ export function postTransaction(
   input: TransactionInput,
   context: PostingContext,
 ): PostingResult {
+  // R4.1. First, before anything is computed: an entry in a closed period is
+  // refused whatever else is true about it.
+  if (
+    !context.allowBackdated &&
+    context.lockedBefore !== undefined &&
+    input.date < context.lockedBefore
+  ) {
+    throw new PostingError(
+      "PERIOD_LOCKED",
+      { rule: "periodLocked", date: input.date, lockedBefore: context.lockedBefore },
+      `Entry dated ${input.date} is before the period lock at ${context.lockedBefore}`,
+    );
+  }
+
   const stock = new StockLedger(context.products, context.allowNegativeStock ?? false);
   const journal = new JournalBuilder();
   const warnings: PostingWarning[] = [];

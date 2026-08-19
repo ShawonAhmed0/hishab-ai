@@ -176,6 +176,7 @@ function relaxationsFor(relaxed: ReadonlySet<OverridableRule>) {
     allowOverdraft: relaxed.has("insufficientFunds"),
     allowOverCredit: relaxed.has("overCreditLimit") || relaxed.has("riskyParty"),
     allowNegativeCapital: relaxed.has("negativeCapital"),
+    allowBackdated: relaxed.has("periodLocked"),
   };
 }
 

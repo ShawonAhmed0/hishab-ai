@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 129 passing instead of 213. Check the count.
+skip** and you get 144 passing instead of 232. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -323,6 +323,34 @@ a percentage, and the **server** resolves a percentage against its own subtotal.
 `transactions.discount` holds the taka it came to; `discount_value` and
 `discount_type` hold what the user actually typed, so a reprinted invoice still
 says "10%" rather than a figure nobody at the counter recognises.
+
+## Validation messages are keys, not sentences
+
+`packages/shared/src/schemas.ts` is module scope, so a Bengali sentence in a
+zod schema freezes whichever language served the process's first request into
+every later one — the `NAV_ITEMS` mistake, in the place CLAUDE.md already
+warned it would come back. The schemas carry `validation.*` keys and
+`validationMessage(message, t)` resolves them against the request's dictionary.
+
+zod's own "Required" is mapped too, through a global `setErrorMap` — it is by
+far the most common message in the app, and threading an `errorMap` through
+every `.parse` call is the kind of thing you forget once and never see again.
+
+The same schema now runs **in the browser before submit**, so an empty entry
+comes back with a message against each field instead of a round trip and a
+banner. The server parses it again regardless: this is convenience, not
+authority.
+
+Two things in `field.tsx` are load-bearing and easy to undo by accident:
+
+- `ErrorSummary` renders its title even with an empty error list. It used to
+  bail, which meant a refusal carrying only a summary — a repeated চালান
+  number, a rule the user cannot override — displayed **nothing at all**.
+- `Select` blurs itself on wheel. A focused `<select>` changes its value when
+  the wheel passes over it, so scrolling back down a long form silently
+  reselected products and units. That is the R4.5 "inputs change on every
+  selection" bug, and the banner focusing with `preventScroll` is its other
+  half.
 
 ## Ageing is derived, every time
 

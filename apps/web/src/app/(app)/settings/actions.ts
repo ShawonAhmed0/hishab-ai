@@ -13,10 +13,11 @@ import {
   setRecipeActive,
   setSettingActive,
   updateCompany,
+  updateCompanyPolicy,
   updateOverridePin,
   updateRecipe,
 } from "@hishabai/core";
-import { normalizeDigits, overridePinSchema } from "@hishabai/shared";
+import { normalizeDigits, overridePinSchema, validationMessage } from "@hishabai/shared";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
@@ -52,7 +53,12 @@ async function run(
       return { error: (await dict()).messages.notAllowed, section };
     }
     if (error instanceof ZodError) {
-      return { error: error.issues[0]?.message ?? (await dict()).settings.invalidInput, section };
+      const t = await dict();
+      const first = error.issues[0]?.message;
+      return {
+        error: first ? validationMessage(first, t) : t.settings.invalidInput,
+        section,
+      };
     }
     // A duplicate unit symbol is the common one, and the constraint name is no
     // use to anybody reading the screen.
@@ -173,6 +179,27 @@ export async function saveRecipeAction(
 
 export async function deactivateRecipeAction(recipeId: string): Promise<SettingsState> {
   return run("recipe", (session) => setRecipeActive(session, recipeId, false));
+}
+
+/**
+ * The company's own rules — spec R4.1 and R5.2.
+ *
+ * A checkbox and four numbers. Everything has a working default, so a field
+ * left alone keeps the default rather than being cleared.
+ */
+export async function updatePolicyAction(
+  _previous: SettingsState,
+  form: FormData,
+): Promise<SettingsState> {
+  return run("policy", (session) =>
+    updateCompanyPolicy(session, {
+      lockedBefore: text(form, "lockedBefore") ?? "",
+      lockPriorMonths: form.get("lockPriorMonths") === "on",
+      creditPeriodDays: Number(text(form, "creditPeriodDays") ?? 0),
+      slowPayerDays: Number(text(form, "slowPayerDays") ?? 30),
+      riskyDays: Number(text(form, "riskyDays") ?? 60),
+    }),
+  );
 }
 
 /**

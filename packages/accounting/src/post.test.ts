@@ -1365,3 +1365,64 @@ describe("R3.4 — naming the other cost changes where it posts", () => {
     expectBalanced(result.journalLines);
   });
 });
+
+describe("R4.1 — the books close behind you", () => {
+  const sale = (date: string) =>
+    parse({
+      ...base,
+      date,
+      type: "sale",
+      partyId: ID.customer,
+      lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "1", rate: "160" }],
+      payments: [],
+    });
+
+  it("refuses an entry dated before the lock, and names both dates", () => {
+    try {
+      postTransaction(sale("2026-07-31"), makeContext({ lockedBefore: "2026-08-01" }));
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).code).toBe("PERIOD_LOCKED");
+      expect((error as PostingError).reason).toEqual({
+        rule: "periodLocked",
+        date: "2026-07-31",
+        lockedBefore: "2026-08-01",
+      });
+    }
+  });
+
+  it("allows the first day of the open period", () => {
+    const result = postTransaction(sale("2026-08-01"), makeContext({ lockedBefore: "2026-08-01" }));
+    expectBalanced(result.journalLines);
+  });
+
+  it("checks the date before anything else about the entry", () => {
+    // Short of stock *and* back-dated. The date is the complaint, because
+    // there is no point telling someone to fix a figure on an entry they are
+    // not allowed to file at all.
+    const short = parse({
+      ...base,
+      date: "2026-07-01",
+      type: "sale",
+      partyId: ID.customer,
+      lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "99999", rate: "160" }],
+      payments: [],
+    });
+    expect(() => postTransaction(short, makeContext({ lockedBefore: "2026-08-01" }))).toThrow(
+      /PERIOD_LOCKED/,
+    );
+  });
+
+  it("does nothing at all when the company has closed nothing", () => {
+    const result = postTransaction(sale("2020-01-01"), makeContext());
+    expectBalanced(result.journalLines);
+  });
+
+  it("lets an authorised entry through", () => {
+    const result = postTransaction(sale("2026-07-31"), {
+      ...makeContext({ lockedBefore: "2026-08-01" }),
+      allowBackdated: true,
+    });
+    expectBalanced(result.journalLines);
+  });
+});

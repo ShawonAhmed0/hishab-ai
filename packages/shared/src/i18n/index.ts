@@ -96,6 +96,8 @@ export function blockedMessage(reason: BlockedReason, t: Dictionary): string {
       return t.blocked.riskyParty(reason.party);
     case "negativeCapital":
       return t.blocked.negativeCapital(reason.available, reason.requested);
+    case "periodLocked":
+      return t.blocked.periodLocked(reason.date, reason.lockedBefore);
     default: {
       const exhaustive: never = reason;
       return exhaustive;
@@ -119,4 +121,20 @@ export function warnedMessage(reason: WarnedReason, t: Dictionary): string {
       return exhaustive;
     }
   }
+}
+
+const VALIDATION_PREFIX = "validation.";
+
+/**
+ * Resolves a schema's message key against the caller's dictionary.
+ *
+ * Anything that is not one of our keys — a zod built-in, a message from a
+ * schema that has not been converted — is returned unchanged rather than
+ * swallowed, because a wrong-language sentence is still better than a blank
+ * field error.
+ */
+export function validationMessage(message: string, t: Dictionary): string {
+  if (!message.startsWith(VALIDATION_PREFIX)) return message;
+  const key = message.slice(VALIDATION_PREFIX.length) as keyof Dictionary["validation"];
+  return t.validation[key] ?? message;
 }

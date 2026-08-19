@@ -51,6 +51,7 @@ import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./duplicates";
 import { loadAgeing } from "./ageing";
+import { getCompanyPolicy, updateCompanyPolicy } from "./policy";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -2323,5 +2324,115 @@ describeDb("বকেয়ার বয়স", () => {
       payments: [{ financialAccountId: tenant.cashWalletId, amount: "800" }],
     });
     expect(cash.voucherNo).toMatch(/^SALE/);
+  });
+});
+
+/** Spec R4.1. The period lock, against a real company's settings. */
+describeDb("বন্ধ হিসাবের সময়কাল", () => {
+  let tenant: Tenant;
+  let customerId: string;
+  let productId: string;
+
+  const PIN = "5150";
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Lock");
+    customerId = await seedParty(tenant, "লকের কাস্টমার", "customer");
+    productId = await createProduct(tenant.session, {
+      nameBn: "লকের পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "80",
+      openingQuantity: "10000",
+      openingRate: "50",
+    });
+    await updateOverridePin(tenant.session, PIN);
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  const sell = (date: string, options?: Parameters<typeof createTransaction>[2]) =>
+    createTransaction(
+      tenant.session,
+      {
+        type: "sale",
+        date,
+        source: "manual",
+        partyId: customerId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "1", rate: "80" }],
+        // Paid in full: this block is about the date, and a 2020 receivable
+        // left standing would put the party in the red band and start R3.2
+        // refusing everything after it.
+        payments: [{ financialAccountId: tenant.cashWalletId, amount: "80" }],
+      },
+      options,
+    );
+
+  it("closes nothing until the company says so", async () => {
+    expect((await getCompanyPolicy(tenant.session)).lock).toEqual({
+      lockedBefore: null,
+      lockPriorMonths: false,
+    });
+    const old = await sell("2020-01-01");
+    expect(old.voucherNo).toMatch(/^SALE/);
+  });
+
+  it("refuses an entry dated before the lock once it is set", async () => {
+    await updateCompanyPolicy(tenant.session, {
+      lockedBefore: "2026-08-01",
+      lockPriorMonths: false,
+      creditPeriodDays: 0,
+      slowPayerDays: 30,
+      riskyDays: 60,
+    });
+
+    await expect(sell("2026-07-31")).rejects.toMatchObject({
+      code: "PERIOD_LOCKED",
+      reason: { rule: "periodLocked", date: "2026-07-31", lockedBefore: "2026-08-01" },
+    });
+
+    const open = await sell("2026-08-02");
+    expect(open.voucherNo).toMatch(/^SALE/);
+  });
+
+  it("takes the admin's PIN to file into a closed period", async () => {
+    const filed = await sell("2026-07-31", {
+      override: { pin: PIN, rules: ["periodLocked"] },
+    });
+    expect(filed.overrides.map((o) => o.rule)).toEqual(["periodLocked"]);
+  });
+
+  it("leaves the rest of the settings blob alone", async () => {
+    // `settings` is shared, so the policy writes the keys it owns and nothing
+    // else — a merge, not a replace.
+    await withTenant(tenant.session, (tx) =>
+      tx.execute(sql`
+        update companies
+           set settings = coalesce(settings, '{}'::jsonb) || '{"somethingElse": 42}'::jsonb
+         where id = ${tenant.companyId}::uuid
+      `),
+    );
+
+    await updateCompanyPolicy(tenant.session, {
+      lockedBefore: "",
+      lockPriorMonths: false,
+      creditPeriodDays: 15,
+      slowPayerDays: 30,
+      riskyDays: 60,
+    });
+
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ settings: Record<string, unknown> }>(sql`
+        select settings from companies where id = ${tenant.companyId}::uuid
+      `),
+    );
+    const settings = (rows as unknown as { settings: Record<string, unknown> }[])[0]!.settings;
+    expect(settings["somethingElse"]).toBe(42);
+    expect(settings["creditPeriodDays"]).toBe(15);
+    expect(settings["lockedBefore"]).toBeNull();
   });
 });

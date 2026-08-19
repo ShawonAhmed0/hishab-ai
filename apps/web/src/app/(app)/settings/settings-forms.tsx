@@ -17,9 +17,10 @@ import {
   saveRecipeAction,
   setOverridePinAction,
   updateCompanyAction,
+  updatePolicyAction,
   type SettingsState,
 } from "./actions";
-import type { CompanyProfile } from "@hishabai/core";
+import type { CompanyPolicy, CompanyProfile } from "@hishabai/core";
 
 /** Success and failure look the same everywhere on this page. */
 function Feedback({ state, done }: { state: SettingsState; done: string }) {
@@ -659,6 +660,72 @@ export function OverridePinForm({ isSet }: { isSet: boolean }) {
 
       <Button type="submit" loading={pending}>
         {t.override.savePin}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * The company's own rules — spec R4.1 and R5.2.
+ *
+ * Both locks are off out of the box, and the copy says so: turning one on
+ * starts refusing entries that are ordinary practice, so it should be a
+ * decision rather than a surprise.
+ */
+export function PolicyForm({ policy }: { policy: CompanyPolicy }) {
+  const t = useT();
+  const [state, action, pending] = useActionState<SettingsState, FormData>(
+    updatePolicyAction,
+    {},
+  );
+
+  return (
+    <form action={action} className="space-y-4">
+      <Feedback state={state} done={t.settings.policySaved} />
+
+      <p className="text-sm text-muted-foreground">{t.settings.policyHint}</p>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field hint={t.settings.lockedBeforeHint}>
+          <FieldLabel>{t.settings.lockedBefore}</FieldLabel>
+          <Input type="date" name="lockedBefore" defaultValue={policy.lock.lockedBefore ?? ""} />
+        </Field>
+
+        <Field hint={t.settings.lockPriorMonthsHint}>
+          <FieldLabel>{t.settings.lockPriorMonths}</FieldLabel>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="lockPriorMonths"
+              defaultChecked={policy.lock.lockPriorMonths}
+              className="size-4 cursor-pointer accent-primary"
+            />
+            {t.settings.lockPriorMonthsLabel}
+          </label>
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field hint={t.settings.creditPeriodHint}>
+          <FieldLabel>{t.settings.creditPeriodDays}</FieldLabel>
+          <Input
+            numeric
+            name="creditPeriodDays"
+            defaultValue={String(policy.credit.creditPeriodDays)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel>{t.settings.slowPayerDays}</FieldLabel>
+          <Input numeric name="slowPayerDays" defaultValue={String(policy.credit.slowPayerDays)} />
+        </Field>
+        <Field>
+          <FieldLabel>{t.settings.riskyDays}</FieldLabel>
+          <Input numeric name="riskyDays" defaultValue={String(policy.credit.riskyDays)} />
+        </Field>
+      </div>
+
+      <Button type="submit" loading={pending}>
+        {t.actions.saveShort}
       </Button>
     </form>
   );

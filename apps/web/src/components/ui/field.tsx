@@ -187,6 +187,14 @@ export const Select = React.forwardRef<
       id={ctx.id}
       aria-invalid={ctx.hasError || undefined}
       aria-describedby={describedBy(ctx)}
+      // Spec R4.5. A focused <select> changes its value when the wheel passes
+      // over it, so scrolling back down a long form after a failed submit
+      // silently reselects products and units — "the inputs change on every
+      // selection". Dropping focus on wheel is the only fix that keeps the
+      // native control; the scroll itself is not prevented.
+      onWheel={(event) => {
+        if (document.activeElement === event.currentTarget) event.currentTarget.blur();
+      }}
       className={cn(
         controlClass,
         // `.select-chevron` carries the arrow, themed. It was an inline data
@@ -231,9 +239,16 @@ export function ErrorSummary({
    */
   const signature = errors.map((e) => `${e.fieldId}\u0000${e.message}`).join("\u001f");
 
-  // Announce once, when the set of problems actually changes.
+  /**
+   * Announce once, when the set of problems actually changes.
+   *
+   * `preventScroll` because the banner is at the top of a form that is several
+   * screens long: pulling focus is the point, yanking the viewport away from
+   * the field the user is standing in is not. Screen readers still announce it
+   * — `role="alert"` does that on its own.
+   */
   React.useEffect(() => {
-    if (signature.length > 0) ref.current?.focus();
+    if (signature.length > 0) ref.current?.focus({ preventScroll: true });
   }, [signature]);
 
   // Not every error has a box to jump to: `lines` with no rows at all is a
@@ -250,7 +265,11 @@ export function ErrorSummary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
 
-  if (errors.length === 0) return null;
+  // Rendered whenever the caller renders it. It used to bail on an empty list,
+  // which meant a refusal carrying only a summary — a repeated চালান number, a
+  // rule the person cannot override — displayed *nothing at all*: the dialog
+  // never opened and the banner returned null. The title is the message.
+  if (errors.length === 0 && title.trim() === "") return null;
 
   return (
     <div

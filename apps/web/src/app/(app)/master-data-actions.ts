@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { PermissionError, createParty, createProduct } from "@hishabai/core";
+import { validationMessage } from "@hishabai/shared";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
@@ -53,16 +54,13 @@ async function run<T>(fn: () => Promise<T>): Promise<CreateResult<T>> {
     return { ok: true, created };
   } catch (error) {
     if (error instanceof ZodError) {
+      const t = await dict();
       const fieldErrors: Record<string, string> = {};
       for (const issue of error.issues) {
         const path = issue.path.join(".");
-        if (!fieldErrors[path]) fieldErrors[path] = issue.message;
+        if (!fieldErrors[path]) fieldErrors[path] = validationMessage(issue.message, t);
       }
-      return {
-        ok: false,
-        error: (await dict()).messages.fixTheFields,
-        fieldErrors,
-      };
+      return { ok: false, error: t.messages.fixTheFields, fieldErrors };
     }
     if (error instanceof PermissionError) {
       return { ok: false, error: (await dict()).messages.notAllowed };

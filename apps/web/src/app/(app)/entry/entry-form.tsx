@@ -36,6 +36,8 @@ import {
   scaleQty,
   subMoney,
   subQty,
+  transactionInputSchema,
+  validationMessage,
   type Dictionary,
   type DiscountType,
   type Money,
@@ -930,9 +932,30 @@ export function EntryForm({
     });
   }
 
+  /**
+   * Spec R4.5. The same schema the server uses, run here first.
+   *
+   * An empty entry now comes back with a message against each field instead of
+   * a round trip and a banner. The server still parses it again — this is
+   * convenience, not authority — but the shopkeeper who tapped Save on a blank
+   * form finds out which boxes are missing rather than that "something" is.
+   */
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    save(buildPayload());
+    const payload = buildPayload();
+
+    const parsed = transactionInputSchema.safeParse(payload);
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.join(".");
+        if (!fieldErrors[path]) fieldErrors[path] = validationMessage(issue.message, t);
+      }
+      setResult({ ok: false, error: t.messages.fixTheFields, fieldErrors });
+      return;
+    }
+
+    save(payload);
   }
 
   const summaryErrors =

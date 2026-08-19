@@ -21,7 +21,10 @@ import {
   ZERO,
   ZERO_QTY,
   creditPolicyFrom,
+  lockedBefore,
   moneyFromDb,
+  periodLockFrom,
+  todayIso,
   qtyFromDb,
   type AccountType,
   type CreditPolicy,
@@ -366,15 +369,21 @@ export async function loadPostingContext(
     allowOverdraft?: boolean;
     allowOverCredit?: boolean;
     allowNegativeCapital?: boolean;
+    allowBackdated?: boolean;
   },
 ): Promise<PostingContext> {
-  const [chart, wallets, productStates, , party] = await Promise.all([
+  const [chart, wallets, productStates, , party, settings] = await Promise.all([
     loadChart(tx, options.companyId),
     loadWallets(tx, options.companyId, collectFinancialAccountIds(options.input)),
     loadProductStates(tx, options.companyId, collectProductIds(options.input)),
     assertReferencesAreOurs(tx, options.companyId, options.input),
     loadPartyState(tx, options.companyId, options.input),
+    loadCompanySettings(tx, options.companyId),
   ]);
+
+  // R4.1. Absent unless the company has actually closed something, so the
+  // engine has nothing to check in the ordinary case.
+  const floor = lockedBefore(periodLockFrom(settings), todayIso());
 
   return {
     companyId: options.companyId,
@@ -390,6 +399,8 @@ export async function loadPostingContext(
     allowOverdraft: options.allowOverdraft ?? false,
     allowOverCredit: options.allowOverCredit ?? false,
     allowNegativeCapital: options.allowNegativeCapital ?? false,
+    ...(floor ? { lockedBefore: floor } : {}),
+    allowBackdated: options.allowBackdated ?? false,
   };
 }
 
@@ -448,10 +459,14 @@ async function loadPartyState(
  * able to stop every entry in the company.
  */
 export async function loadCreditPolicy(tx: Tx, companyId: string): Promise<CreditPolicy> {
+  return creditPolicyFrom(await loadCompanySettings(tx, companyId));
+}
+
+export async function loadCompanySettings(tx: Tx, companyId: string): Promise<unknown> {
   const [row] = await tx
     .select({ settings: companies.settings })
     .from(companies)
     .where(eq(companies.id, companyId))
     .limit(1);
-  return creditPolicyFrom(row?.settings);
+  return row?.settings;
 }

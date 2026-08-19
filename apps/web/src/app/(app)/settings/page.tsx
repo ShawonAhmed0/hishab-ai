@@ -1,5 +1,14 @@
-import { Building2, KeyRound, Layers, Ruler, Tags, Wallet, Wrench } from "lucide-react";
-import { getSettings, overridePinIsSet } from "@hishabai/core";
+import {
+  Building2,
+  CalendarClock,
+  KeyRound,
+  Layers,
+  Ruler,
+  Tags,
+  Wallet,
+  Wrench,
+} from "lucide-react";
+import { getCompanyPolicy, getSettings, overridePinIsSet } from "@hishabai/core";
 import { formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +24,7 @@ import {
   DeactivateButton,
   DeactivateRecipeButton,
   OverridePinForm,
+  PolicyForm,
   ProductCategoryForm,
   UnitForm,
   WalletForm,
@@ -29,6 +39,7 @@ export default async function SettingsPage() {
 
   // A boolean, and only for the caller: the hash is never read by a page.
   const pinIsSet = session.role === "admin" ? await overridePinIsSet(session) : false;
+  const policy = await getCompanyPolicy(session);
 
   // The nav already hides this page without the permission, but a typed URL
   // reaches it anyway — so the forms are gated here rather than only there.
@@ -372,6 +383,22 @@ export default async function SettingsPage() {
           {editable ? <AddRecipePanel products={data.products} /> : null}
         </CardBody>
       </Card>
+
+      {editable ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <span className="inline-flex items-center gap-2">
+                <CalendarClock className="size-4 text-primary" aria-hidden />
+                {t.settings.policyTitle}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <PolicyForm policy={policy} />
+          </CardBody>
+        </Card>
+      ) : null}
 
       {/*
         Admins only, and only their own PIN — spec R1.2. A manager can reach

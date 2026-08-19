@@ -246,7 +246,9 @@ export type BlockedReason =
   /** R3.2 — a party whose oldest unpaid bill is in the red band. */
   | { rule: "riskyParty"; party: string }
   /** R3.3 — the entry would leave the business worth less than nothing. */
-  | { rule: "negativeCapital"; available: string; requested: string };
+  | { rule: "negativeCapital"; available: string; requested: string }
+  /** R4.1 — the entry is dated in a period the company has closed. */
+  | { rule: "periodLocked"; date: string; lockedBefore: string };
 
 export type BlockedRule = BlockedReason["rule"];
 
@@ -274,6 +276,7 @@ export const OVERRIDABLE_RULES = [
   "overCreditLimit",
   "riskyParty",
   "negativeCapital",
+  "periodLocked",
 ] as const;
 export type OverridableRule = (typeof OVERRIDABLE_RULES)[number];
 
@@ -301,6 +304,55 @@ export interface CreditPolicy {
   creditPeriodDays: number;
   slowPayerDays: number;
   riskyDays: number;
+}
+
+/**
+ * When the books close behind you — spec R4.1.
+ *
+ * Both default to *off*, and that is deliberate. Turning either on refuses
+ * entries that are ordinary practice — a shopkeeper entering last week's
+ * চালান on Monday morning — so it is a decision the company makes once it has
+ * a month it considers finished, not something that starts refusing on the
+ * day the feature ships.
+ */
+export interface PeriodLock {
+  /** Nothing may be dated before this. ISO date, or null for no floor. */
+  lockedBefore: string | null;
+  /** Close each month as it ends: nothing dated before the 1st of this one. */
+  lockPriorMonths: boolean;
+}
+
+export const DEFAULT_PERIOD_LOCK: PeriodLock = {
+  lockedBefore: null,
+  lockPriorMonths: false,
+};
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Same total reading as `creditPolicyFrom`: a bad blob must not stop the app. */
+export function periodLockFrom(settings: unknown): PeriodLock {
+  const raw = (settings ?? {}) as Record<string, unknown>;
+  const lockedBefore = raw["lockedBefore"];
+  return {
+    lockedBefore:
+      typeof lockedBefore === "string" && ISO_DATE_PATTERN.test(lockedBefore)
+        ? lockedBefore
+        : null,
+    lockPriorMonths: raw["lockPriorMonths"] === true,
+  };
+}
+
+/**
+ * The earliest date an entry may carry, or null when nothing is closed.
+ *
+ * The later of the two rules wins: a company that closed March explicitly and
+ * also closes each month as it ends is asking for whichever is stricter.
+ */
+export function lockedBefore(lock: PeriodLock, today: string): string | null {
+  const monthStart = lock.lockPriorMonths ? `${today.slice(0, 7)}-01` : null;
+  if (!lock.lockedBefore) return monthStart;
+  if (!monthStart) return lock.lockedBefore;
+  return lock.lockedBefore > monthStart ? lock.lockedBefore : monthStart;
 }
 
 export const DEFAULT_CREDIT_POLICY: CreditPolicy = {

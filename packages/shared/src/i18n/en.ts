@@ -381,6 +381,19 @@ export const en: Dictionary = {
     readOnlyNotice: "You can see the settings, but changing them needs admin permission.",
 
     companyProfile: "Company details",
+    policyTitle: "Company rules",
+    policySaved: "Rules saved",
+    policyHint:
+      "When the books close, and how late a due has to be before it is worth worrying about",
+    lockedBefore: "Books closed before",
+    lockedBeforeHint: "Leave empty and no date is closed",
+    lockPriorMonths: "Close each month",
+    lockPriorMonthsLabel: "Close everything before the 1st of this month",
+    lockPriorMonthsHint: "Turned on, last month's entries need an admin's PIN",
+    creditPeriodDays: "Credit period (days)",
+    creditPeriodHint: "A due only starts counting as late after this many days",
+    slowPayerDays: "Slow payer (days)",
+    riskyDays: "Risky (days)",
     companySaved: "Company details saved",
     companyName: "Company name",
     companyNameHint: "This is the name that appears on reports and printouts",
@@ -883,6 +896,8 @@ export const en: Dictionary = {
       `${party} is going past their credit limit of ${limit}. After this bill they would owe ${projected}.`,
     riskyParty: (party: string) =>
       `${party} has dues long overdue, so no new credit sale can be made to them.`,
+    periodLocked: (date: string, lockedBefore: string) =>
+      `The books are closed for ${date}. Use a date on or after ${lockedBefore}.`,
     negativeCapital: (available: string, requested: string) =>
       `This would leave the business with negative capital. Capital now: ${available}, this entry reduces it by ${requested}.`,
   },
@@ -904,6 +919,29 @@ export const en: Dictionary = {
       `${product} has an average cost of zero, so the surplus stock was valued at nothing.`,
     overCreditLimit: (party: string, limit: string, projected: string) =>
       `${party} is going past their credit limit of ${limit}. After this bill they will owe ${projected}.`,
+  },
+
+  validation: {
+    addProduct: "Add at least one product",
+    addMaterial: "Add the raw materials",
+    addOneMaterial: "Add at least one raw material",
+    addOutput: "Add what was produced",
+    choosePaymentMethod: "Choose a payment method",
+    chooseOne: "Choose one",
+    twoAccounts: "At least two accounts are needed",
+    nameRequired: "Enter a name",
+    companyNameRequired: "Enter the company name",
+    productNameRequired: "Enter the product name",
+    categoryNameRequired: "Enter the category name",
+    unitNameRequired: "Enter the unit name",
+    abbreviationRequired: "Enter a short form",
+    dateInvalid: "That date is not valid",
+    numberInvalid: "That is not a valid number",
+    mustBePositive: "Enter a number greater than zero",
+    notNegative: "This cannot be negative",
+    phoneInvalid: "That mobile number is not valid",
+    pinInvalid: "That PIN is not valid",
+    required: "This field is required",
   },
 
   override: {

@@ -124,6 +124,13 @@ export interface PostingContext {
   allowOverCredit?: boolean;
   /** R3.3 — an admin authorised an entry that drives capital negative. */
   allowNegativeCapital?: boolean;
+  /**
+   * R4.1 — the earliest date this entry may carry, or absent when the company
+   * has closed nothing. Resolved by `core` from the company's settings.
+   */
+  lockedBefore?: string;
+  /** R4.1 — an admin authorised an entry dated in a closed period. */
+  allowBackdated?: boolean;
 }
 
 export interface JournalLineDraft {

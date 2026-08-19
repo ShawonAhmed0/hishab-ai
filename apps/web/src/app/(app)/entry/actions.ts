@@ -17,6 +17,7 @@ import {
   blockedMessage,
   isOverridable,
   moneyToDb,
+  validationMessage,
   warnedMessage,
   type OverridableRule,
 } from "@hishabai/shared";
@@ -107,16 +108,13 @@ export async function createEntryAction(
     };
   } catch (error) {
     if (error instanceof ZodError) {
+      const t = await dict();
       const fieldErrors: Record<string, string> = {};
       for (const issue of error.issues) {
         const path = issue.path.join(".");
-        if (!fieldErrors[path]) fieldErrors[path] = issue.message;
+        if (!fieldErrors[path]) fieldErrors[path] = validationMessage(issue.message, t);
       }
-      return {
-        ok: false,
-        error: (await dict()).messages.fixTheFields,
-        fieldErrors,
-      };
+      return { ok: false, error: t.messages.fixTheFields, fieldErrors };
     }
 
     // A refusal carries the rule and the numbers rather than a sentence, so it

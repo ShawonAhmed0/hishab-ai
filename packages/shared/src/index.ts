@@ -10,6 +10,7 @@ export {
   en,
   blockedMessage,
   warnedMessage,
+  validationMessage,
   dictionaries,
   getDictionary,
   localeName,

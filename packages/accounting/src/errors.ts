@@ -33,7 +33,8 @@ export type PostingErrorCode =
   | "INSUFFICIENT_FUNDS"
   | "OVER_CREDIT_LIMIT"
   | "RISKY_PARTY"
-  | "NEGATIVE_CAPITAL";
+  | "NEGATIVE_CAPITAL"
+  | "PERIOD_LOCKED";
 
 export class PostingError extends Error {
   readonly code: PostingErrorCode;

@@ -407,6 +407,18 @@ export const settings = {
   readOnlyNotice: "সেটিংস দেখতে পারছেন, কিন্তু পরিবর্তন করতে অ্যাডমিন অনুমতি লাগবে।",
 
   companyProfile: "কোম্পানির তথ্য",
+  policyTitle: "কোম্পানির নিয়ম",
+  policySaved: "নিয়ম সংরক্ষণ করা হয়েছে",
+  policyHint: "কখন হিসাব বন্ধ হবে, আর কত দিন পর বকেয়া নিয়ে চিন্তা করতে হবে",
+  lockedBefore: "এই তারিখের আগে হিসাব বন্ধ",
+  lockedBeforeHint: "খালি রাখলে কোনো তারিখ বন্ধ থাকবে না",
+  lockPriorMonths: "মাস শেষে বন্ধ",
+  lockPriorMonthsLabel: "চলতি মাসের আগের সব তারিখ বন্ধ রাখুন",
+  lockPriorMonthsHint: "চালু করলে গত মাসের এন্ট্রি দিতে অ্যাডমিনের PIN লাগবে",
+  creditPeriodDays: "বাকির মেয়াদ (দিন)",
+  creditPeriodHint: "এত দিন পর থেকে বকেয়া দেরি ধরা হবে",
+  slowPayerDays: "ধীর গ্রাহক (দিন)",
+  riskyDays: "ঝুঁকিপূর্ণ (দিন)",
   companySaved: "কোম্পানির তথ্য সংরক্ষিত হয়েছে",
   companyName: "কোম্পানির নাম",
   companyNameHint: "রিপোর্ট ও প্রিন্টে এই নামটি দেখাবে",
@@ -959,6 +971,8 @@ export const blocked = {
     `${party} — ক্রেডিট সীমা ${limit} ছাড়িয়ে যাচ্ছে। এই বিলের পর বকেয়া দাঁড়াবে ${projected}।`,
   riskyParty: (party: string) =>
     `${party} — অনেক দিনের পুরনো বকেয়া আছে, তাই নতুন বাকিতে বিক্রয় করা যাবে না।`,
+  periodLocked: (date: string, lockedBefore: string) =>
+    `${date} তারিখের হিসাব বন্ধ করা আছে। ${lockedBefore} বা তার পরের তারিখ দিন।`,
   negativeCapital: (available: string, requested: string) =>
     `ব্যবসার মূলধন ঋণাত্মক হয়ে যাবে। বর্তমান মূলধন ${available}, এই এন্ট্রিতে কমছে ${requested}।`,
 } as const;
@@ -1020,6 +1034,39 @@ export const warned = {
     `${party} — ক্রেডিট সীমা ${limit} ছাড়িয়ে যাচ্ছে। এই বিলের পর বকেয়া দাঁড়াবে ${projected}।`,
 } as const;
 
+/**
+ * What a zod schema says when a field is wrong — spec R4.5.
+ *
+ * The schemas live in `../schemas` at module scope, so they cannot hold a
+ * resolved sentence: the first request the process served would freeze its
+ * language into every later one. They carry these keys instead, and
+ * `validationMessage` turns a key into a sentence in whichever language the
+ * request is being served in — on the server *and* in the browser, from the
+ * same schema, so the two can never disagree about what is wrong.
+ */
+export const validation = {
+  addProduct: "অন্তত একটি পণ্য যোগ করুন",
+  addMaterial: "কাঁচামাল যোগ করুন",
+  addOneMaterial: "অন্তত একটি কাঁচামাল যোগ করুন",
+  addOutput: "উৎপাদিত পণ্য যোগ করুন",
+  choosePaymentMethod: "পেমেন্ট মাধ্যম নির্বাচন করুন",
+  chooseOne: "নির্বাচন করুন",
+  twoAccounts: "অন্তত দুটি হিসাব লাগবে",
+  nameRequired: "নাম দিন",
+  companyNameRequired: "কোম্পানির নাম দিন",
+  productNameRequired: "পণ্যের নাম দিন",
+  categoryNameRequired: "খাতের নাম দিন",
+  unitNameRequired: "এককের নাম দিন",
+  abbreviationRequired: "সংক্ষিপ্ত রূপ দিন",
+  dateInvalid: "তারিখ সঠিক নয়",
+  numberInvalid: "সংখ্যাটি সঠিক নয়",
+  mustBePositive: "শূন্যের চেয়ে বড় সংখ্যা দিন",
+  notNegative: "ঋণাত্মক হতে পারে না",
+  phoneInvalid: "মোবাইল নম্বর সঠিক নয়",
+  pinInvalid: "PIN সঠিক নয়",
+  required: "এই ঘরটি পূরণ করুন",
+} as const;
+
 export const bn = {
   nav,
   actions,
@@ -1043,6 +1090,7 @@ export const bn = {
   emptyStates,
   blocked,
   warned,
+  validation,
   duplicate,
   override,
   shell,
