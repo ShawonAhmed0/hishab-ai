@@ -27,12 +27,15 @@ import {
   createTransaction,
   listCompanies,
   listProducts,
+  updateOverridePin,
 } from "@hishabai/core";
 import { moneyToDb } from "@hishabai/shared";
 import { eq, and } from "drizzle-orm";
 
 const EMAIL = "rafiq@paperstar.demo";
 const PASSWORD = "HishabDemo2026!";
+/** The R1.2 override PIN, so the block dialog has somewhere to go. */
+const OVERRIDE_PIN = "1234";
 
 async function ensureAuthUser(): Promise<string> {
   // The owner connection is needed for auth.users; the runtime role has no
@@ -208,6 +211,17 @@ async function main(): Promise<void> {
     minStockLevel: "200",
   });
 
+  // Deliberately short, so the R1.1 refusal is one line away rather than five
+  // hundred: sell more than 40 কেজি of this and the entry is blocked.
+  await ensureProduct("আর্ট কার্ড", {
+    kind: "finished_good",
+    purchasePrice: "300",
+    salePrice: "420",
+    minStockLevel: "10",
+    openingQuantity: "40",
+    openingRate: "300",
+  });
+
   const today = new Date().toISOString().slice(0, 10);
   const posted = await withTenant(session, async (tx) =>
     tx
@@ -253,6 +267,29 @@ async function main(): Promise<void> {
         `পরিশোধ ${moneyToDb(purchase.totals.paid)}, পাওনা ${moneyToDb(purchase.totals.due)}`,
     );
   }
+
+  // R1.2. Without this the override dialog dead-ends at "no PIN set", which is
+  // correct behaviour and a useless demo.
+  await updateOverridePin(session, OVERRIDE_PIN);
+
+  console.log(`
+Log in at http://localhost:3000
+
+  ${EMAIL}
+  ${PASSWORD}
+
+Things worth trying:
+
+  R1.1  Sell 100 কেজি of আর্ট কার্ড — only 40 in stock, so the entry is
+        refused and names both numbers.
+  R1.2  Say yes to the override, PIN ${OVERRIDE_PIN}. Settings → ওভাররাইড PIN
+        is where an admin sets their own.
+  R2.1  Enter a sale to মায়ের দোয়া ট্রেডার্স with চালান নম্বর 125 — already
+        used. The same number against রহমান পেপার মিলস is fine.
+  R2.2  Save the same sale twice: same customer, same day, same product, same
+        total. The second one asks first.
+  R0.x  The globe in the top bar switches the whole app to English.
+`);
 
   await closeDb();
 }
