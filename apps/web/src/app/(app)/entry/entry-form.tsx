@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -44,7 +46,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { MoneyText } from "@/components/ui/money";
 import { useToast } from "@/components/ui/toast";
-import { cn, todayIso } from "@/lib/utils";
+import { cn, formatDateTime, todayIso } from "@/lib/utils";
 import {
   PartyFields,
   ProductFields,
@@ -556,6 +558,11 @@ export function EntryForm({
   const [blockedPayload, setBlockedPayload] = React.useState<unknown>(null);
   const [pin, setPin] = React.useState("");
 
+  // The probable duplicate — spec R2.2. Separate from `blockedPayload`
+  // because it is a different kind of dialog: a question with a link in it,
+  // not a refusal with a PIN field.
+  const [duplicatePayload, setDuplicatePayload] = React.useState<unknown>(null);
+
   const fieldErrors = result && !result.ok ? (result.fieldErrors ?? {}) : {};
 
   // --- derived, for the preview only. The server recomputes all of this. ----
@@ -856,15 +863,19 @@ export function EntryForm({
    * retry. `canOverride` coming back is what raises the dialog; it is not
    * permission to do anything.
    */
-  function save(payload: unknown, override?: { pin: string }) {
+  function save(
+    payload: unknown,
+    options: { override?: { pin: string }; confirmDuplicate?: boolean } = {},
+  ) {
     setResult(null);
 
     startTransition(async () => {
-      const outcome = await createEntryAction(payload, override);
+      const outcome = await createEntryAction(payload, options);
       setResult(outcome);
 
       if (outcome.ok) {
         setBlockedPayload(null);
+        setDuplicatePayload(null);
         setPin("");
         toast.success(
           `${t.messages.saved} — ${outcome.voucherNo}`,
@@ -882,6 +893,8 @@ export function EntryForm({
         setBlockedPayload(null);
         setPin("");
       }
+
+      setDuplicatePayload(outcome.duplicate ? payload : null);
     });
   }
 
@@ -1629,6 +1642,60 @@ export function EntryForm({
       </Card>
 
       {/*
+        Spec R2.2. Not blocking: a repeat order from the same customer on the
+        same day is legitimate, so this asks rather than refuses — and it shows
+        the existing voucher so the answer is an informed one.
+      */}
+      <Dialog
+        open={duplicatePayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setDuplicatePayload(null);
+        }}
+        closeLabel={t.actions.close}
+        title={t.duplicate.title}
+        description={
+          result && !result.ok && result.duplicate
+            ? t.duplicate.body(
+                result.duplicate.voucherNo,
+                formatDateTime(result.duplicate.savedAt, t),
+              )
+            : undefined
+        }
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDuplicatePayload(null)}
+            >
+              {t.actions.cancel}
+            </Button>
+            <Button
+              type="button"
+              loading={pending}
+              onClick={() => {
+                if (duplicatePayload !== null) {
+                  save(duplicatePayload, { confirmDuplicate: true });
+                }
+              }}
+            >
+              {t.duplicate.saveAnyway}
+            </Button>
+          </>
+        }
+      >
+        {result && !result.ok && result.duplicate ? (
+          <Link
+            href={`/transactions/${result.duplicate.id}` as Route}
+            className="inline-flex min-h-11 items-center text-primary hover:underline"
+            target="_blank"
+          >
+            {t.duplicate.viewExisting} — {result.duplicate.voucherNo}
+          </Link>
+        ) : null}
+      </Dialog>
+
+      {/*
         Spec R1.2. Blocking on purpose: a refusal dismissed by a stray click
         outside reads exactly like a save, and the entry is not saved.
       */}
@@ -1666,7 +1733,7 @@ export function EntryForm({
               loading={pending}
               disabled={pin.trim().length < 4}
               onClick={() => {
-                if (blockedPayload !== null) save(blockedPayload, { pin });
+                if (blockedPayload !== null) save(blockedPayload, { override: { pin } });
               }}
             >
               {t.override.submit}
@@ -1687,7 +1754,7 @@ export function EntryForm({
               if (event.key === "Enter") {
                 event.preventDefault();
                 if (blockedPayload !== null && pin.trim().length >= 4) {
-                  save(blockedPayload, { pin });
+                  save(blockedPayload, { override: { pin } });
                 }
               }
             }}

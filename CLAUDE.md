@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 100 passing instead of 166. Check the count.
+skip** and you get 100 passing instead of 175. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -268,6 +268,38 @@ be the `NAV_ITEMS` mistake in a new place; `messageBn` is a getter over the
 Bengali dictionary, for logs and audit summaries that have no request locale.
 Adding a rule to `BlockedReason` without a case in `blockedMessage` is a compile
 error at the `never`.
+
+## The same entry, twice
+
+Two different things, and they get different answers.
+
+**A repeated চালান number is refused.** `transactions_memo_unique_idx` in
+`02_integrity.sql`, not an application check — a double-tapped save button wins
+that race every time. `voucher_no` already had a unique index; it is generated.
+`memo_no` is the number printed on the paper, typed by hand, and that is the one
+that gets entered twice.
+
+Three things about that index are load-bearing:
+
+- It is scoped to **(company, party, memo)**, not to the company alone. On a
+  sale the number is ours; on a purchase it is the *vendor's*, and two vendors
+  both numbering their চালান from 1 is Tuesday, not a mistake. `coalesce` folds
+  the no-party case (আয়, ব্যয়) into the same index.
+- It **excludes `reversal_of_id is not null`**. Cancellation copies `memo_no`
+  onto the mirror entry by design, so without this every cancellation of a
+  numbered entry would fail.
+- It **excludes cancelled rows**, so a number entered wrongly and cancelled can
+  be entered again — which is the next thing the shopkeeper does.
+
+**The same everything else is a question, not a refusal.** Same party, same day,
+same products, same total: probably a double save, but a customer ordering the
+same ten sacks twice on a Thursday is an ordinary Thursday. `ProbableDuplicate`
+carries the existing voucher so the dialog can link to it, and
+`confirmDuplicate` waves it through. It never waves through a repeated চালান
+number.
+
+Both live in `packages/core/src/duplicates.ts` and share **one query**, because
+inside the posting transaction every statement is a serial round trip.
 
 ## Alerts are states; notifications are events
 

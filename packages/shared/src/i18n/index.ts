@@ -84,6 +84,10 @@ export function blockedMessage(reason: BlockedReason, t: Dictionary): string {
       return t.blocked.wastageExceedsInputs;
     case "negativeStock":
       return t.blocked.negativeStock(reason.product, reason.available, reason.requested);
+    case "duplicateMemo":
+      return t.blocked.duplicateMemo(reason.memoNo, reason.voucher);
+    case "duplicateMemoNumber":
+      return t.blocked.duplicateMemoNumber(reason.memoNo);
     default: {
       const exhaustive: never = reason;
       return exhaustive;

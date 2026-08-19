@@ -943,6 +943,21 @@ export const blocked = {
   wastageExceedsInputs: "অপচয়ের পরিমাণ ব্যবহৃত কাঁচামালের চেয়ে বেশি হতে পারে না।",
   negativeStock: (product: string, available: string, requested: string) =>
     `${product} — পর্যাপ্ত স্টক নেই। বর্তমান স্টক ${available}, চাওয়া হয়েছে ${requested}।`,
+  duplicateMemo: (memoNo: string, voucher: string) =>
+    `${memoNo} নম্বর চালান আগেই আছে — ${voucher}।`,
+  duplicateMemoNumber: (memoNo: string) => `${memoNo} নম্বর চালান আগেই আছে।`,
+} as const;
+
+/**
+ * The probable duplicate — spec R2.2. A question, not a refusal: the same
+ * customer ordering the same thing twice in one day is an ordinary Tuesday.
+ */
+export const duplicate = {
+  title: "একই রকম এন্ট্রি আগেই আছে",
+  body: (voucher: string, time: string) =>
+    `হুবহু একই এন্ট্রি আগেই সংরক্ষণ করা হয়েছে — ${voucher}, ${time}। তবুও সংরক্ষণ করবেন?`,
+  viewExisting: "আগের এন্ট্রিটি দেখুন",
+  saveAnyway: "তবুও সংরক্ষণ করুন",
 } as const;
 
 /**
@@ -1012,6 +1027,7 @@ export const bn = {
   emptyStates,
   blocked,
   warned,
+  duplicate,
   override,
   shell,
   auth,

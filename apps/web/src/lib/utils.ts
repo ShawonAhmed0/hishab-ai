@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import type { Dictionary } from "@hishabai/shared";
+import { BUSINESS_TIME_ZONE, type Dictionary } from "@hishabai/shared";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]): string {
@@ -18,6 +18,35 @@ export function formatDate(value: string | Date, t: Dictionary): string {
   const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : value;
   if (Number.isNaN(date.getTime())) return "—";
   return `${date.getUTCDate()} ${t.months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/**
+ * Date and clock time in Dhaka — "20 আগস্ট 2026, 2:14 PM".
+ *
+ * The business runs on Dhaka time (`BUSINESS_TIME_ZONE`), not on the browser's,
+ * so a shopkeeper checking the books from abroad still sees the hour the entry
+ * was actually made at the counter.
+ */
+export function formatDateTime(value: string | Date, t: Dictionary): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const month = t.months[Number(get("month")) - 1] ?? get("month");
+  const clock = `${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+  return `${get("day")} ${month} ${get("year")}, ${clock}`;
 }
 
 export function formatDateShort(value: string | Date): string {

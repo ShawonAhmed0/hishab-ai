@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import {
   createTransaction,
+  DuplicateMemoError,
   MissingSetupError,
   OverrideError,
   PermissionError,
+  ProbableDuplicateError,
+  type DuplicateCandidate,
 } from "@hishabai/core";
 import { PostingError } from "@hishabai/accounting";
 import {
@@ -46,6 +49,11 @@ export interface EntryFailure {
   canOverride?: boolean;
   /** Why the PIN attempt itself failed, when one was made. */
   overrideError?: OverrideError["kind"];
+  /**
+   * An already-saved entry this one looks identical to — spec R2.2. A
+   * question, not a refusal: the browser shows it and offers to save anyway.
+   */
+  duplicate?: DuplicateCandidate;
 }
 
 export type EntryResult = EntrySuccess | EntryFailure;
@@ -59,13 +67,14 @@ export type EntryResult = EntrySuccess | EntryFailure;
  */
 export async function createEntryAction(
   rawInput: unknown,
-  override?: { pin: string },
+  options: { override?: { pin: string }; confirmDuplicate?: boolean } = {},
 ): Promise<EntryResult> {
   const session = await requireSession();
 
   try {
     const result = await createTransaction(session, rawInput, {
-      ...(override ? { override } : {}),
+      ...(options.override ? { override: options.override } : {}),
+      ...(options.confirmDuplicate ? { confirmDuplicate: true } : {}),
     });
     revalidatePath("/dashboard");
     revalidatePath("/transactions");
@@ -126,6 +135,22 @@ export async function createEntryAction(
         error: message[error.kind],
         canOverride: error.kind === "wrong_pin",
         overrideError: error.kind,
+      };
+    }
+
+    // A চালান number already in the books. A refusal — this entry *is* that
+    // entry — and no PIN lifts it.
+    if (error instanceof DuplicateMemoError) {
+      return { ok: false, error: blockedMessage(error.reason, await dict()) };
+    }
+
+    // Same everything else. A question, so the candidate goes back with it.
+    if (error instanceof ProbableDuplicateError) {
+      const t = await dict();
+      return {
+        ok: false,
+        error: t.duplicate.title,
+        duplicate: error.candidate,
       };
     }
 

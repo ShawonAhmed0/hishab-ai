@@ -147,6 +147,38 @@ begin
 end $$;
 
 -- -----------------------------------------------------------------------------
+-- চালান / memo numbers do not repeat — spec R2.1.
+--
+-- `voucher_no` already had this; it is generated. `memo_no` is the number
+-- printed on the piece of paper, typed in by hand, and that is the one that
+-- gets entered twice.
+--
+-- Scoped to the counterparty, not just the company. On a sale the number is
+-- ours and unique by construction; on a purchase it is the *vendor's* number,
+-- and two vendors both numbering their চালান from 1 is not a mistake — it is
+-- Tuesday. `coalesce` folds the no-party case (আয়, ব্যয়) into the same index
+-- rather than needing a second partial one.
+--
+-- Excluded from the index, both deliberately:
+--   - the mirror entry of a cancellation, which copies `memo_no` from the
+--     original by design, and would otherwise make every cancellation of a
+--     numbered entry fail;
+--   - cancelled entries, so a number that was entered wrongly and cancelled
+--     can be entered again — which is exactly what the shopkeeper will do.
+-- -----------------------------------------------------------------------------
+
+drop index if exists transactions_memo_unique_idx;
+create unique index transactions_memo_unique_idx
+  on transactions (
+    company_id,
+    coalesce(party_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    memo_no
+  )
+  where memo_no is not null
+    and reversal_of_id is null
+    and status <> 'cancelled';
+
+-- -----------------------------------------------------------------------------
 -- Full-text search across the things people actually look for (spec §19).
 -- -----------------------------------------------------------------------------
 

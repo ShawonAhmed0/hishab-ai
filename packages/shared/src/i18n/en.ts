@@ -864,6 +864,17 @@ export const en: Dictionary = {
     wastageExceedsInputs: "Wastage cannot be more than the materials consumed.",
     negativeStock: (product: string, available: string, requested: string) =>
       `Not enough stock for ${product}. Current stock: ${available}, requested: ${requested}.`,
+    duplicateMemo: (memoNo: string, voucher: string) =>
+      `Chalan number ${memoNo} already exists — ${voucher}.`,
+    duplicateMemoNumber: (memoNo: string) => `Chalan number ${memoNo} already exists.`,
+  },
+
+  duplicate: {
+    title: "An identical entry already exists",
+    body: (voucher: string, time: string) =>
+      `An identical entry was already saved — ${voucher}, ${time}. Save this one as well?`,
+    viewExisting: "View the existing entry",
+    saveAnyway: "Save anyway",
   },
 
   warned: {

@@ -60,6 +60,11 @@ import { loadPostingContext, loadProductStates } from "./posting-context";
 import { recordPostingWarnings } from "./notifications";
 import { writeAudit } from "./audit";
 import { authoriseOverride, type OverrideRequest } from "./overrides";
+import {
+  DuplicateMemoError,
+  checkForDuplicates,
+  isDuplicateMemoViolation,
+} from "./duplicates";
 import { requirePermission, type Session, type TenantScope } from "./session";
 
 /** Voucher prefixes, so a number tells you what it is at a glance. */
@@ -94,6 +99,12 @@ export interface CreateTransactionOptions {
    * refused. Absent on every ordinary save.
    */
   override?: OverrideRequest;
+  /**
+   * Set on the retry after the user has been shown a probable duplicate and
+   * said to save it anyway — spec R2.2. A repeated চালান number is refused
+   * regardless; this only waves through the same-everything-else case.
+   */
+  confirmDuplicate?: boolean;
 }
 
 /**
@@ -179,6 +190,15 @@ export async function createTransaction(
       options,
     });
 
+    // Before the counter is touched: a refusal here must not consume a voucher
+    // number, and `nextVoucherNo` takes a row lock that would hold it.
+    await checkForDuplicates(tx, {
+      companyId: session.companyId,
+      input,
+      total: result.totals.total,
+      ...(options.confirmDuplicate ? { confirmDuplicate: true } : {}),
+    });
+
     const partyId = "partyId" in input ? input.partyId : undefined;
     const previousDue = partyId
       ? await currentPartyDue(tx, session.companyId, partyId, input.type)
@@ -186,14 +206,22 @@ export async function createTransaction(
 
     const voucherNo = await nextVoucherNo(tx, session.companyId, VOUCHER_PREFIX[input.type]);
 
-    await persist(tx, {
-      session,
-      transactionId,
-      voucherNo,
-      input,
-      result,
-      previousDue,
-    });
+    try {
+      await persist(tx, {
+        session,
+        transactionId,
+        voucherNo,
+        input,
+        result,
+        previousDue,
+      });
+    } catch (error) {
+      // The probe above lost the race to a save that arrived at the same time.
+      if (isDuplicateMemoViolation(error)) {
+        throw new DuplicateMemoError(input.memoNo ?? "");
+      }
+      throw error;
+    }
 
     // Inside the same transaction: an entry that rolls back leaves no warning
     // behind about a voucher that does not exist.

@@ -49,6 +49,7 @@ import { createRecipe } from "./recipes";
 import { getNotifications, markAllNotificationsRead } from "./notifications";
 import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
+import type { DuplicateCandidate } from "./duplicates";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -1805,4 +1806,173 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
       await dropTenant(other);
     }
   }, 60_000);
+});
+
+/**
+ * Spec R2.1 and R2.2. The two ways the same entry gets saved twice.
+ */
+describeDb("একই এন্ট্রি দুবার", () => {
+  let tenant: Tenant;
+  let vendorA: string;
+  let vendorB: string;
+  let customerId: string;
+  let productId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Twice");
+    vendorA = await seedParty(tenant, "প্রথম ভেন্ডর", "vendor");
+    vendorB = await seedParty(tenant, "দ্বিতীয় ভেন্ডর", "vendor");
+    customerId = await seedParty(tenant, "দুবার কাস্টমার", "customer");
+    productId = await seedProduct(tenant, "দুবারের পণ্য", "100000", "100");
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  function buy(partyId: string, memoNo: string, date: string, quantity = "10") {
+    return createTransaction(tenant.session, {
+      type: "purchase",
+      date,
+      source: "manual",
+      partyId,
+      memoNo,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity, rate: "100" }],
+      payments: [],
+    });
+  }
+
+  it("refuses the same চালান number from the same vendor", async () => {
+    await buy(vendorA, "125", "2026-09-01");
+
+    await expect(buy(vendorA, "125", "2026-09-02")).rejects.toMatchObject({
+      name: "DuplicateMemoError",
+      reason: { rule: "duplicateMemo", memoNo: "125" },
+    });
+  });
+
+  /**
+   * The requirement says "per company", and per company alone this would be
+   * refused. It should not be: on a purchase the number is the *vendor's*, and
+   * two vendors both numbering their চালান from 1 is not a mistake.
+   */
+  it("allows the same number from a different vendor", async () => {
+    const second = await buy(vendorB, "125", "2026-09-01");
+    expect(second.voucherNo).toMatch(/^PURC/);
+  });
+
+  /**
+   * The trap: cancelling copies `memo_no` onto the mirror entry. A unique
+   * index that did not exclude reversals would make every cancellation of a
+   * numbered entry fail.
+   */
+  it("cancels a numbered entry, and frees the number again", async () => {
+    const original = await buy(vendorA, "900", "2026-09-03");
+    await expect(buy(vendorA, "900", "2026-09-04")).rejects.toThrow(/already exists/);
+
+    const cancelled = await cancelTransaction(
+      tenant.session,
+      original.transactionId,
+      "ভুল চালান নম্বর",
+    );
+    expect(cancelled.reversalVoucherNo).toBeTruthy();
+
+    // Re-entered after the mistake was undone — which is exactly what the
+    // shopkeeper does next.
+    const again = await buy(vendorA, "900", "2026-09-04");
+    expect(again.voucherNo).toMatch(/^PURC/);
+  });
+
+  it("keeps the database as the authority, not the application check", async () => {
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ indexdef: string }>(sql`
+        select indexdef from pg_indexes
+         where tablename = 'transactions' and indexname = 'transactions_memo_unique_idx'
+      `),
+    );
+    const found = rows as unknown as { indexdef: string }[];
+    expect(found).toHaveLength(1);
+    expect(found[0]!.indexdef).toContain("UNIQUE");
+    expect(found[0]!.indexdef).toContain("reversal_of_id IS NULL");
+  });
+
+  describe("the probable duplicate", () => {
+    const sale = (date: string, quantity: string, memoNo?: string) =>
+      createTransaction(
+        tenant.session,
+        {
+          type: "sale",
+          date,
+          source: "manual",
+          partyId: customerId,
+          ...(memoNo ? { memoNo } : {}),
+          lines: [{ productId, unitId: tenant.unitKgId, quantity, rate: "160" }],
+          payments: [],
+        },
+        {},
+      );
+
+    it("asks before saving the same party, day, products and total twice", async () => {
+      const first = await sale("2026-09-10", "5");
+
+      await expect(sale("2026-09-10", "5")).rejects.toMatchObject({
+        name: "ProbableDuplicateError",
+        candidate: { voucherNo: first.voucherNo },
+      });
+    });
+
+    it("hands back enough to link to the entry it found", async () => {
+      try {
+        await sale("2026-09-10", "5");
+        expect.unreachable();
+      } catch (error) {
+        const { candidate } = error as { candidate: DuplicateCandidate };
+        expect(candidate.id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(candidate.savedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+        expect(candidate.total).toBe("800.0000");
+      }
+    });
+
+    it("saves it once the user has said so — a repeat order is legitimate", async () => {
+      const again = await createTransaction(
+        tenant.session,
+        {
+          type: "sale",
+          date: "2026-09-10",
+          source: "manual",
+          partyId: customerId,
+          lines: [{ productId, unitId: tenant.unitKgId, quantity: "5", rate: "160" }],
+          payments: [],
+        },
+        { confirmDuplicate: true },
+      );
+      expect(again.voucherNo).toMatch(/^SALE/);
+    });
+
+    it("says nothing when the total differs", async () => {
+      const different = await sale("2026-09-10", "6");
+      expect(different.voucherNo).toMatch(/^SALE/);
+    });
+
+    it("still refuses a repeated চালান number, confirmed or not", async () => {
+      await sale("2026-09-11", "5", "777");
+
+      await expect(
+        createTransaction(
+          tenant.session,
+          {
+            type: "sale",
+            date: "2026-09-12",
+            source: "manual",
+            partyId: customerId,
+            memoNo: "777",
+            lines: [{ productId, unitId: tenant.unitKgId, quantity: "9", rate: "160" }],
+            payments: [],
+          },
+          { confirmDuplicate: true },
+        ),
+      ).rejects.toMatchObject({ name: "DuplicateMemoError" });
+    });
+  });
 });

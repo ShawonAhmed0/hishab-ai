@@ -218,7 +218,17 @@ export type BlockedReason =
       product: string;
       available: string;
       requested: string;
-    };
+    }
+  /**
+   * Not the engine's — `packages/core/src/duplicates.ts` raises this. It lives
+   * in the same union because it is the same kind of thing to the person
+   * reading it: the entry was refused, and here is why.
+   */
+  | { rule: "duplicateMemo"; memoNo: string; voucher: string }
+  /** The same, lost to a race — the unique index caught it, so there is no
+   * voucher number to name: the transaction that would have told us is the
+   * one that just aborted. */
+  | { rule: "duplicateMemoNumber"; memoNo: string };
 
 export type BlockedRule = BlockedReason["rule"];
 
