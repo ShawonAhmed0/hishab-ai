@@ -218,18 +218,35 @@ export function ErrorSummary({
   const ref = React.useRef<HTMLDivElement>(null);
   const [reachable, setReachable] = React.useState<Set<string>>(new Set());
 
+  /**
+   * What the errors *are*, not which array they arrived in.
+   *
+   * The caller rebuilds this list inline on every render, so keying an effect
+   * on the array itself fires it on every keystroke. That is what made the
+   * form unusable after a failed submit: focus was dragged back to this banner
+   * on every selection, so nobody could tab through the fields they had been
+   * told to fix.
+   */
+  const signature = errors.map((e) => `${e.fieldId}\u0000${e.message}`).join("\u001f");
+
+  // Announce once, when the set of problems actually changes.
   React.useEffect(() => {
-    if (errors.length > 0) ref.current?.focus();
-  }, [errors]);
+    if (signature.length > 0) ref.current?.focus();
+  }, [signature]);
 
   // Not every error has a box to jump to: `lines` with no rows at all is a
   // complaint about the list, not about a field in it. Those are stated rather
   // than linked, because a link that goes nowhere is worse than plain text.
   React.useEffect(() => {
-    setReachable(
-      new Set(errors.filter((e) => document.getElementById(e.fieldId)).map((e) => e.fieldId)),
+    const found = errors.filter((e) => document.getElementById(e.fieldId)).map((e) => e.fieldId);
+    setReachable((current) =>
+      current.size === found.length && found.every((id) => current.has(id))
+        ? current
+        : new Set(found),
     );
-  }, [errors]);
+    // `errors` is a fresh array each render; its contents are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   if (errors.length === 0) return null;
 
