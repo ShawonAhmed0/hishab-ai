@@ -49,7 +49,45 @@ two scales differ, so `amount / quantity` is wrong by 100×; `deriveRate` is
 what converts between them.
 
 Bengali numerals are **English digits with 2-2-3 grouping** — `1,20,000.00`.
-Every user-visible string comes from `packages/shared/src/i18n.ts`.
+This does not change with the language: `1,98,58,770` and `crore`/`lakh`, never
+`19,858,770` and `million`. The grouping is how a Bangladeshi reader parses a
+number, and ৳ stays ৳.
+
+## Two languages, one dictionary
+
+Bengali is the default and the source of truth. `packages/shared/src/i18n/bn.ts`
+holds it, `Dictionary` is **derived** from that object, and
+`packages/shared/src/i18n/en.ts` is annotated `const en: Dictionary` — so a key
+added to Bengali and forgotten in English fails the build rather than leaving a
+Bengali word on an English screen.
+
+Parametrised messages are **functions**, not templates with a `{n}` in them:
+Bengali puts the count before a classifier and English does not, so the two
+locales need the number in different places and a shared template cannot serve
+both. TypeScript does not check a function's arity on assignment, so
+`i18n.test.ts` does, along with shape parity at runtime.
+
+- **Server components** take the dictionary from `dict()` in
+  `apps/web/src/lib/locale.server.ts`.
+- **Client components** take it from `useT()`, which reads the locale out of
+  the context the root layout sets.
+- **Never call `useT()` from a component without `"use client"`.** `MoneyText`
+  did, and every server-rendered report 500'd — the type checker cannot see it,
+  only the browser can. A shared component takes what it needs as a prop.
+- **A resolved label must never live at module scope.** `NAV_ITEMS` and the
+  report index hold *keys*; a string there freezes whichever locale served the
+  first request the process handled. The same applies to zod schemas whose
+  messages come from the dictionary — build them per request.
+
+The choice rides in a validated `hishabai_locale` cookie, read by the server so
+there is no flash and no bootstrap script. Anything malformed falls back to
+Bengali rather than throwing, for the reason the `hishabai_company` cookie
+taught us: the bad value is resent on every retry, so a throw is unrecoverable
+from inside the page that would let the user clear it.
+
+Party, product, wallet and account names are **data, not dictionary**. They
+come out of `nameBn` columns and stay exactly as the shopkeeper typed them in
+both locales.
 
 ## The engine is pure
 

@@ -294,6 +294,155 @@ export const en: Dictionary = {
     createCompany: "Create company",
   },
 
+  entry: {
+    motto: "Write it once — the books, the stock and the dues sort themselves out",
+    showMoreTypes: "Show more types",
+    showFewerTypes: "Show fewer",
+    details: "Details",
+    choosePrompt: "— choose —",
+    nothingAdded: "Nothing added yet.",
+    lines: "Lines",
+    line: "Line",
+    products: "Products",
+    removeLine: (index: string) => `Remove line ${index}`,
+    removeTitledLine: (title: string, index: string) => `${title} — remove line ${index}`,
+    removePayment: (index: string) => `Remove payment ${index}`,
+    totalIs: "Total",
+    account: "Account",
+    method: "Method",
+    reason: "Reason",
+    stockIs: (quantity: string) => `Stock ${quantity}`,
+    ratePlaceholder: "125",
+
+    savedTotal: (total: string) => `Total ${total}`,
+
+    // --- Production ---
+    recipeHint: "Pick a recipe and the raw materials fill themselves in — you can still edit them",
+    withoutRecipe: "— no recipe —",
+    inputsHint: "What was consumed — no rate needed, the running average is used",
+    outputsHint: "What was produced — the material cost is split across it by quantity",
+    wastageHint: "Material lost — it has to come from the raw materials listed above",
+    conversionCostNotice: (cost: string, paid: string) =>
+      `Labour and other costs come to ${cost} — exactly that much has to be paid from a payment method below. Right now ${paid} is entered.`,
+
+    // --- Stock adjustment ---
+    countHint: "Enter what you actually counted — the difference is worked out for you",
+    countMatches: "Matches the recorded stock",
+    countSurplus: (quantity: string) => `${quantity} more than recorded`,
+    countShortfall: (quantity: string) => `${quantity} less than recorded`,
+
+    // --- Other ---
+    fromWhere: "From",
+    fromWhereHint: "Where the money came from",
+    toWhere: "To",
+    toWhereHint: "Where the money went",
+    journalUnbalanced: (difference: string) =>
+      `The two sides do not match — a difference of ${difference}.`,
+
+    // --- The running summary at the foot of the form ---
+    productionNoDue: "The material cost moves into the finished goods — nothing falls due.",
+    adjustmentNoDue: "The difference goes to the stock adjustment account — nothing falls due.",
+    bothSidesMustMatch: "The entry saves once both sides are equal.",
+    serverRecomputes:
+      "The figures above are for reading only — the server works them out again on save.",
+
+    // --- Speak or scan an entry ---
+    voiceTitle: "Speak it, or photograph it",
+    voiceOpen: "Open",
+    voiceStart: "Speak",
+    voiceStop: "Stop",
+    scanMemo: "Scan a memo",
+    comingSoon: "Soon",
+    voiceUnavailable: "Voice does not work in this browser — you can type it below instead.",
+    whatYouSaid: "What you said",
+    voiceExample:
+      "e.g. sold 500 kg of paper to Mayer Doa Traders, memo 125, total 80 thousand taka, received 50 thousand",
+    voicePlaceholder: "Write it naturally, in Bengali or Banglish…",
+    voiceParse: "Work it out",
+    voiceApply: "Fill the form",
+    voiceNotUnderstood: "not understood",
+    voiceReviewNotice:
+      "Check the form after it fills, then save — this never saves on its own.",
+  },
+
+  settings: {
+    hint: "Company details, payment methods, units and categories",
+    readOnlyNotice: "You can see the settings, but changing them needs admin permission.",
+
+    companyProfile: "Company details",
+    companySaved: "Company details saved",
+    companyName: "Company name",
+    companyNameHint: "This is the name that appears on reports and printouts",
+    bengaliName: "Bengali name",
+    businessType: "Type of business",
+    fiscalYearMonth: "Financial year starts in",
+    fiscalYearHint: "In Bangladesh the financial year usually starts in July",
+    saving: "Saving…",
+    adding: "Adding…",
+
+    walletsBalanceNote: "Balances come from the ledger and cannot be edited by hand",
+    nameColumn: "Name",
+    kindColumn: "Type",
+    openingColumn: "Opening",
+    currentBalanceColumn: "Current balance",
+    isDefault: "Default",
+    disabled: "Disabled",
+    defaultMethod: "Default method",
+    addWallet: "Add a payment method",
+    walletAdded: "Payment method added",
+    walletNamePlaceholder: "Islami Bank",
+    bankName: "Bank name",
+    accountNumber: "Account number",
+    provider: "Provider",
+    walletOpeningHint:
+      "What is in this account right now. It posts to the ledger as an opening balance.",
+
+    categories: "Income and expense categories",
+    categoryColumn: "Category",
+    systemCategory: "System category",
+    addCategory: "Add a category",
+    categoryAdded: "Category added",
+    incomeOrExpense: "Income or expense",
+    categoryName: "Category name",
+    categoryNamePlaceholder: "Warehouse rent",
+    categoryHint: "It appears in the category list on a new entry",
+
+    addUnit: "Add a unit",
+    unitAdded: "Unit added",
+    unitNamePlaceholder: "Carton",
+    unitAbbreviation: "Abbreviation",
+    abbreviationColumn: "Short",
+    productsColumn: "Products",
+    decimalPlaces: "Decimal places",
+    decimalHint: "0 for counting pieces, 3 for kilos",
+    usedInProducts: (count: string) => `used by ${count} products`,
+
+    productCategories: "Product categories",
+    addProductCategory: "Add a product category",
+    productCategoryAdded: "Category added",
+    productCategoryPlaceholder: "Paper",
+
+    recipesHint: "So a production entry fills its raw materials in by itself",
+    noRecipes:
+      "No recipes yet. Production entries work without one — a recipe only saves typing.",
+    addRecipe: "Add a recipe",
+    recipeSaved: "Recipe saved",
+    choosePrompt: "— choose —",
+    recipeNameLabel: (recipe: string) => `${recipe} name`,
+    recipeNameHint: "Leave it empty and the finished product's name is used",
+    recipeInputsHint: "How much one batch takes — quantities, not prices",
+    removeInput: (index: string) => `Remove raw material ${index}`,
+    yieldHint: "500 kg in and 450 kg out is 90",
+
+    confirmDisableWallet: (name: string) =>
+      `Disable ${name}? It will no longer appear on new entries.`,
+    confirmDisableCategory: (name: string) =>
+      `Disable ${name}? It leaves the list; the books keep it.`,
+
+    invalidInput: "Something in that form is not right",
+    duplicateNameOrAbbreviation: "Something with that name or abbreviation already exists",
+  },
+
   users: {
     hint: "Who can do what, and who has done what",
     activeUsers: "Active users",
@@ -445,6 +594,27 @@ export const en: Dictionary = {
     partiesHeading: "Customers and vendors",
     stockIs: (quantity: string) => `Stock ${quantity}`,
     memoIs: (memoNo: string) => `memo ${memoNo}`,
+
+    // --- The inline create panels ---
+    newCustomer: "New customer",
+    newVendor: "New vendor",
+    newProduct: "New product",
+    partyNamePlaceholder: "Mayer Doa Traders",
+    typeLabel: "Type",
+    openingReceivableHint: "What they already owe you",
+    openingPayableHint: "What you already owe them",
+    creditLimitHint: "Past this you get a warning on a sale — it does not block the sale",
+    productNamePlaceholder: "Offset paper",
+    unitHint: "kg, pieces, rolls — add more from settings",
+    choosePrompt: "— choose —",
+    nonePrompt: "— none —",
+    categoryLabel: "Category",
+    minStockHint: "You get an alert when it falls below this",
+    openingStock: "Opening stock",
+    openingStockHint: (unit: string) =>
+      `How many ${unit} are in the store today — it posts as opening stock`,
+    openingStockRate: "Opening stock rate",
+    openingStockRateHint: "Leave it empty and the purchase price is used",
   },
 
   transactions: {

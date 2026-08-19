@@ -314,6 +314,163 @@ export const onboarding = {
 } as const;
 
 /**
+ * নতুন এন্ট্রি — the screen the whole product is built around.
+ *
+ * "একবার লিখুন — বাকিটা HishabAI করবে" is written here more than anywhere
+ * else: most of these strings exist to tell the user what the system is about
+ * to work out for them, so they never have to.
+ */
+export const entry = {
+  motto: "একবার লিখুন — হিসাব, স্টক আর বকেয়া নিজে থেকেই ঠিক হয়ে যাবে",
+  showMoreTypes: "আরও ধরন দেখান",
+  showFewerTypes: "কম দেখান",
+  details: "বিস্তারিত",
+  choosePrompt: "— নির্বাচন করুন —",
+  nothingAdded: "কিছু যোগ করা হয়নি।",
+  lines: "লাইন",
+  line: "লাইন",
+  products: "পণ্য",
+  removeLine: (index: string) => `লাইন ${index} মুছুন`,
+  removeTitledLine: (title: string, index: string) => `${title} — লাইন ${index} মুছুন`,
+  removePayment: (index: string) => `পেমেন্ট ${index} মুছুন`,
+  totalIs: "মোট",
+  account: "হিসাব",
+  method: "মাধ্যম",
+  reason: "কারণ",
+  stockIs: (quantity: string) => `স্টক ${quantity}`,
+  ratePlaceholder: "১২৫",
+
+  savedTotal: (total: string) => `সর্বমোট ${total}`,
+
+  // --- উৎপাদন ---
+  recipeHint: "রেসিপি বেছে নিলে কাঁচামাল নিজে থেকেই বসে যাবে — পরে বদলানো যাবে",
+  withoutRecipe: "— রেসিপি ছাড়া —",
+  inputsHint: "যা ব্যবহার করা হয়েছে — দর লাগবে না, চলতি গড় মূল্যেই ধরা হবে",
+  outputsHint: "যা তৈরি হয়েছে — কাঁচামালের খরচ পরিমাণ অনুপাতে ভাগ হয়ে যাবে",
+  wastageHint: "নষ্ট হওয়া কাঁচামাল — উপরের কাঁচামালের তালিকা থেকেই হতে হবে",
+  conversionCostNotice: (cost: string, paid: string) =>
+    `লেবার ও অন্যান্য খরচ ${cost} — নিচে ঠিক এই পরিমাণ পেমেন্ট মাধ্যম থেকে দিতে হবে। এখন দেওয়া আছে ${paid}।`,
+
+  // --- স্টক সমন্বয় ---
+  countHint: "গুদামে গুনে যা পাওয়া গেল সেটাই লিখুন — কমবেশি হিসাব নিজে করে নেবে",
+  countMatches: "স্টকের সঙ্গে মিলে গেছে",
+  countSurplus: (quantity: string) => `${quantity} বেশি পাওয়া গেছে`,
+  countShortfall: (quantity: string) => `${quantity} কম পাওয়া গেছে`,
+
+  // --- অন্যান্য ---
+  fromWhere: "কোথা থেকে",
+  fromWhereHint: "টাকাটা যেখান থেকে এসেছে",
+  toWhere: "কোথায়",
+  toWhereHint: "টাকাটা যেখানে গেছে",
+  journalUnbalanced: (difference: string) => `দুই দিকের অঙ্ক মিলছে না — পার্থক্য ${difference}।`,
+
+  // --- the running summary at the foot of the form ---
+  productionNoDue: "কাঁচামালের খরচ উৎপাদিত পণ্যে চলে যাবে — কোনো বকেয়া তৈরি হবে না।",
+  adjustmentNoDue: "স্টকের কমবেশি সমন্বয় খাতে যাবে — কোনো বকেয়া তৈরি হবে না।",
+  bothSidesMustMatch: "দুই দিক সমান হলেই এন্ট্রি সংরক্ষণ হবে।",
+  serverRecomputes: "উপরের অঙ্কগুলো শুধু দেখানোর জন্য — সংরক্ষণের সময় সার্ভার নিজে হিসাব করে নেবে।",
+
+  /* --- বলে বা ছবি তুলে এন্ট্রি ---
+     Only the chrome. What the parser *matches on* stays Bengali in both
+     locales, because the shopkeeper still speaks Bengali whichever language
+     the buttons are in. */
+  voiceTitle: "বলে বা ছবি তুলে এন্ট্রি",
+  voiceOpen: "চালু করুন",
+  voiceStart: "বলুন",
+  voiceStop: "থামান",
+  scanMemo: "মেমো স্ক্যান",
+  comingSoon: "শীঘ্রই",
+  voiceUnavailable: "এই ব্রাউজারে ভয়েস কাজ করছে না — নিচে লিখেও দিতে পারেন।",
+  whatYouSaid: "যা বলেছেন",
+  voiceExample:
+    "যেমন: মায়ের দোয়া ট্রেডার্সকে ৫০০ কেজি পেপার বিক্রি করেছি, মেমো ১২৫, মোট ৮০ হাজার টাকা, ৫০ হাজার টাকা পেয়েছি",
+  voicePlaceholder: "বাংলা বা বাংলিশে স্বাভাবিকভাবে লিখুন…",
+  voiceParse: "বুঝে নিন",
+  voiceApply: "ফর্মে বসান",
+  voiceNotUnderstood: "বোঝা যায়নি",
+  voiceReviewNotice: "ফর্মে বসানোর পর নিজে দেখে তারপর সংরক্ষণ করুন — এটি নিজে থেকে সংরক্ষণ করবে না।",
+} as const;
+
+/**
+ * Settings — company profile, wallets, categories, units and recipes.
+ */
+export const settings = {
+  hint: "কোম্পানির তথ্য, পেমেন্ট মাধ্যম, একক ও খাত",
+  readOnlyNotice: "সেটিংস দেখতে পারছেন, কিন্তু পরিবর্তন করতে অ্যাডমিন অনুমতি লাগবে।",
+
+  companyProfile: "কোম্পানির তথ্য",
+  companySaved: "কোম্পানির তথ্য সংরক্ষিত হয়েছে",
+  companyName: "কোম্পানির নাম",
+  companyNameHint: "রিপোর্ট ও প্রিন্টে এই নামটি দেখাবে",
+  bengaliName: "বাংলা নাম",
+  businessType: "ব্যবসার ধরন",
+  fiscalYearMonth: "অর্থবছর শুরুর মাস",
+  fiscalYearHint: "বাংলাদেশে অর্থবছর সাধারণত জুলাই থেকে শুরু হয়",
+  saving: "সংরক্ষণ হচ্ছে…",
+  adding: "যোগ হচ্ছে…",
+
+  walletsBalanceNote: "ব্যালেন্স খাতা থেকে আসে, হাতে বদলানো যায় না",
+  nameColumn: "নাম",
+  kindColumn: "ধরন",
+  openingColumn: "প্রারম্ভিক",
+  currentBalanceColumn: "বর্তমান ব্যালেন্স",
+  isDefault: "ডিফল্ট",
+  disabled: "বন্ধ",
+  defaultMethod: "ডিফল্ট মাধ্যম",
+  addWallet: "পেমেন্ট মাধ্যম যোগ করুন",
+  walletAdded: "পেমেন্ট মাধ্যম যোগ হয়েছে",
+  walletNamePlaceholder: "ইসলামী ব্যাংক",
+  bankName: "ব্যাংকের নাম",
+  accountNumber: "অ্যাকাউন্ট নম্বর",
+  provider: "সেবাদাতা",
+  walletOpeningHint: "এখন এই মাধ্যমে যত টাকা আছে। খাতায় প্রারম্ভিক ব্যালেন্স হিসেবে বসবে।",
+
+  categories: "আয়-ব্যয়ের খাত",
+  categoryColumn: "খাত",
+  systemCategory: "সিস্টেম খাত",
+  addCategory: "খাত যোগ করুন",
+  categoryAdded: "খাত যোগ হয়েছে",
+  incomeOrExpense: "আয় না ব্যয়",
+  categoryName: "খাতের নাম",
+  categoryNamePlaceholder: "গুদাম ভাড়া",
+  categoryHint: "নতুন এন্ট্রিতে খাতের তালিকায় দেখাবে",
+
+  addUnit: "একক যোগ করুন",
+  unitAdded: "একক যোগ হয়েছে",
+  unitNamePlaceholder: "কার্টন",
+  unitAbbreviation: "সংক্ষিপ্ত রূপ",
+  abbreviationColumn: "সংক্ষিপ্ত",
+  productsColumn: "পণ্য",
+  decimalPlaces: "দশমিক ঘর",
+  decimalHint: "পিস গুনতে ০, কেজিতে ৩",
+  usedInProducts: (count: string) => `${count} টি পণ্যে ব্যবহৃত`,
+
+  productCategories: "পণ্যের ক্যাটাগরি",
+  addProductCategory: "পণ্যের ক্যাটাগরি যোগ করুন",
+  productCategoryAdded: "ক্যাটাগরি যোগ হয়েছে",
+  productCategoryPlaceholder: "কাগজ",
+
+  recipesHint: "উৎপাদন এন্ট্রিতে কাঁচামাল নিজে থেকেই বসাতে",
+  noRecipes:
+    "কোনো রেসিপি নেই। রেসিপি ছাড়াও উৎপাদন এন্ট্রি করা যায় — এটি শুধু টাইপ করা কমায়।",
+  addRecipe: "রেসিপি যোগ করুন",
+  recipeSaved: "রেসিপি সংরক্ষিত হয়েছে",
+  choosePrompt: "— নির্বাচন করুন —",
+  recipeNameLabel: (recipe: string) => `${recipe} নাম`,
+  recipeNameHint: "খালি রাখলে উৎপাদিত পণ্যের নামেই চিনবেন",
+  recipeInputsHint: "এক ব্যাচে যত লাগে — দাম নয়, শুধু পরিমাণ",
+  removeInput: (index: string) => `কাঁচামাল ${index} মুছুন`,
+  yieldHint: "৫০০ কেজি থেকে ৪৫০ কেজি পেলে ৯০",
+
+  confirmDisableWallet: (name: string) => `${name} বন্ধ করবেন? নতুন এন্ট্রিতে আর দেখাবে না।`,
+  confirmDisableCategory: (name: string) =>
+    `${name} বন্ধ করবেন? তালিকা থেকে সরে যাবে, হিসাব থাকবে।`,
+
+  invalidInput: "তথ্য সঠিক নয়",
+  duplicateNameOrAbbreviation: "এই নামে বা সংক্ষিপ্ত রূপে একটি এন্ট্রি আগে থেকেই আছে",
+} as const;
+
+/**
  * The users screen: who can do what, and who did what.
  */
 export const users = {
@@ -483,6 +640,27 @@ export const masterData = {
   partiesHeading: "কাস্টমার ও ভেন্ডর",
   stockIs: (quantity: string) => `স্টক ${quantity}`,
   memoIs: (memoNo: string) => `মেমো ${memoNo}`,
+
+  // --- the inline create panels, on নতুন এন্ট্রি and the list pages ---
+  newCustomer: "নতুন কাস্টমার",
+  newVendor: "নতুন ভেন্ডর",
+  newProduct: "নতুন পণ্য",
+  partyNamePlaceholder: "মায়ের দোয়া ট্রেডার্স",
+  typeLabel: "ধরন",
+  openingReceivableHint: "আগে থেকে যত টাকা বকেয়া আছে",
+  openingPayableHint: "আগে থেকে যত টাকা পাওনা আছে",
+  creditLimitHint: "এর বেশি বাকি পড়লে বিক্রির সময় সতর্ক করা হবে — বিক্রি আটকাবে না",
+  productNamePlaceholder: "অফসেট পেপার",
+  unitHint: "কেজি, পিস, রোল — সেটিংস থেকে যোগ করা যায়",
+  choosePrompt: "— নির্বাচন করুন —",
+  nonePrompt: "— নেই —",
+  categoryLabel: "ক্যাটাগরি",
+  minStockHint: "এর নিচে নামলে বিজ্ঞপ্তি পাবেন",
+  openingStock: "প্রারম্ভিক স্টক",
+  openingStockHint: (unit: string) =>
+    `আজ গুদামে যত ${unit} আছে — খাতায় প্রারম্ভিক স্টক হিসেবে বসবে`,
+  openingStockRate: "প্রারম্ভিক স্টকের দর",
+  openingStockRateHint: "খালি রাখলে ক্রয় মূল্য ধরা হবে",
 } as const;
 
 /**
@@ -763,7 +941,9 @@ export const bn = {
   shell,
   auth,
   onboarding,
+  entry,
   users,
+  settings,
   masterData,
   transactions,
   reports,

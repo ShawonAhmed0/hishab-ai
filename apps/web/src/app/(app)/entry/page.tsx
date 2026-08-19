@@ -1,9 +1,11 @@
 import { can, loadEntryFormData } from "@hishabai/core";
-import { bn } from "@hishabai/shared";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { EntryForm } from "./entry-form";
 
-export const metadata = { title: bn.nav.newEntry };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.newEntry };
+}
 
 export default async function EntryPage() {
   // One transaction, one connection, one consistent snapshot, fetched while

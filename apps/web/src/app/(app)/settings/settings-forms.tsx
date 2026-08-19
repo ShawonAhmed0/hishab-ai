@@ -3,8 +3,9 @@
 import * as React from "react";
 import { useActionState, useState, useTransition } from "react";
 import { Check, Plus, X } from "lucide-react";
-import { bn, type FinancialAccountKind } from "@hishabai/shared";
+import type { FinancialAccountKind } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import {
   createCategoryAction,
@@ -18,11 +19,6 @@ import {
   type SettingsState,
 } from "./actions";
 import type { CompanyProfile } from "@hishabai/core";
-
-const MONTHS = [
-  "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
-  "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর",
-];
 
 /** Success and failure look the same everywhere on this page. */
 function Feedback({ state, done }: { state: SettingsState; done: string }) {
@@ -48,6 +44,7 @@ function Feedback({ state, done }: { state: SettingsState; done: string }) {
 }
 
 export function CompanyForm({ company }: { company: CompanyProfile }) {
+  const t = useT();
   const [state, action, pending] = useActionState<SettingsState, FormData>(
     updateCompanyAction,
     {},
@@ -55,36 +52,36 @@ export function CompanyForm({ company }: { company: CompanyProfile }) {
 
   return (
     <form action={action} className="space-y-4">
-      <Feedback state={state} done="কোম্পানির তথ্য সংরক্ষিত হয়েছে" />
+      <Feedback state={state} done={t.settings.companySaved} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
-          <FieldLabel required>কোম্পানির নাম</FieldLabel>
+          <FieldLabel required>{t.settings.companyName}</FieldLabel>
           <Input name="name" required defaultValue={company.name} />
         </Field>
-        <Field hint="রিপোর্ট ও প্রিন্টে এই নামটি দেখাবে">
-          <FieldLabel>বাংলা নাম</FieldLabel>
+        <Field hint={t.settings.companyNameHint}>
+          <FieldLabel>{t.settings.bengaliName}</FieldLabel>
           <Input name="nameBn" defaultValue={company.nameBn ?? ""} />
         </Field>
         <Field>
-          <FieldLabel>ব্যবসার ধরন</FieldLabel>
+          <FieldLabel>{t.settings.businessType}</FieldLabel>
           <Input name="businessType" defaultValue={company.businessType ?? ""} />
         </Field>
         <Field>
-          <FieldLabel>{bn.fields.phone}</FieldLabel>
+          <FieldLabel>{t.fields.phone}</FieldLabel>
           <Input name="phone" inputMode="tel" defaultValue={company.phone ?? ""} />
         </Field>
       </div>
 
       <Field>
-        <FieldLabel>{bn.fields.address}</FieldLabel>
+        <FieldLabel>{t.fields.address}</FieldLabel>
         <Textarea name="address" rows={2} defaultValue={company.address ?? ""} />
       </Field>
 
-      <Field hint="বাংলাদেশে অর্থবছর সাধারণত জুলাই থেকে শুরু হয়">
-        <FieldLabel>অর্থবছর শুরুর মাস</FieldLabel>
+      <Field hint={t.settings.fiscalYearHint}>
+        <FieldLabel>{t.settings.fiscalYearMonth}</FieldLabel>
         <Select name="fiscalYearStartMonth" defaultValue={String(company.fiscalYearStartMonth)}>
-          {MONTHS.map((month, index) => (
+          {t.months.map((month, index) => (
             <option key={month} value={index + 1}>
               {month}
             </option>
@@ -93,7 +90,7 @@ export function CompanyForm({ company }: { company: CompanyProfile }) {
       </Field>
 
       <Button type="submit" disabled={pending}>
-        {pending ? "সংরক্ষণ হচ্ছে…" : bn.actions.saveShort}
+        {pending ? t.settings.saving : t.actions.saveShort}
       </Button>
     </form>
   );
@@ -113,6 +110,7 @@ function AddPanel({
   label: string;
   children: (close: () => void) => React.ReactNode;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   if (!open) {
@@ -132,7 +130,7 @@ function AddPanel({
           type="button"
           onClick={() => setOpen(false)}
           className="-m-2 flex size-11 items-center justify-center text-muted-foreground hover:text-foreground"
-          aria-label={bn.actions.close}
+          aria-label={t.actions.close}
         >
           <X className="size-4" aria-hidden />
         </button>
@@ -143,6 +141,7 @@ function AddPanel({
 }
 
 export function WalletForm() {
+  const t = useT();
   const [state, action, pending] = useActionState<SettingsState, FormData>(
     createWalletAction,
     {},
@@ -150,38 +149,38 @@ export function WalletForm() {
   const [kind, setKind] = useState<FinancialAccountKind>("bank");
 
   return (
-    <AddPanel label="পেমেন্ট মাধ্যম যোগ করুন">
+    <AddPanel label={t.settings.addWallet}>
       {() => (
         <form action={action} className="space-y-4">
-          <Feedback state={state} done="পেমেন্ট মাধ্যম যোগ হয়েছে" />
+          <Feedback state={state} done={t.settings.walletAdded} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
-              <FieldLabel required>ধরন</FieldLabel>
+              <FieldLabel required>{t.settings.kindColumn}</FieldLabel>
               <Select
                 name="kind"
                 value={kind}
                 onChange={(event) => setKind(event.target.value as FinancialAccountKind)}
               >
-                <option value="cash">{bn.financialAccountKind.cash}</option>
-                <option value="bank">{bn.financialAccountKind.bank}</option>
-                <option value="mfs">{bn.financialAccountKind.mfs}</option>
+                <option value="cash">{t.financialAccountKind.cash}</option>
+                <option value="bank">{t.financialAccountKind.bank}</option>
+                <option value="mfs">{t.financialAccountKind.mfs}</option>
               </Select>
             </Field>
 
             <Field>
-              <FieldLabel required>নাম</FieldLabel>
-              <Input name="nameBn" required placeholder="ইসলামী ব্যাংক" />
+              <FieldLabel required>{t.settings.nameColumn}</FieldLabel>
+              <Input name="nameBn" required placeholder={t.settings.walletNamePlaceholder} />
             </Field>
 
             {kind === "bank" ? (
               <>
                 <Field>
-                  <FieldLabel>ব্যাংকের নাম</FieldLabel>
+                  <FieldLabel>{t.settings.bankName}</FieldLabel>
                   <Input name="bankName" placeholder="Islami Bank" />
                 </Field>
                 <Field>
-                  <FieldLabel>অ্যাকাউন্ট নম্বর</FieldLabel>
+                  <FieldLabel>{t.settings.accountNumber}</FieldLabel>
                   <Input name="accountNumber" inputMode="numeric" />
                 </Field>
               </>
@@ -189,25 +188,25 @@ export function WalletForm() {
 
             {kind === "mfs" ? (
               <Field>
-                <FieldLabel>সেবাদাতা</FieldLabel>
+                <FieldLabel>{t.settings.provider}</FieldLabel>
                 <Select name="mfsProvider" defaultValue="bkash">
                   {(["bkash", "nagad", "rocket", "upay", "other"] as const).map((provider) => (
                     <option key={provider} value={provider}>
-                      {bn.mfsProvider[provider]}
+                      {t.mfsProvider[provider]}
                     </option>
                   ))}
                 </Select>
               </Field>
             ) : null}
 
-            <Field hint="এখন এই মাধ্যমে যত টাকা আছে। খাতায় প্রারম্ভিক ব্যালেন্স হিসেবে বসবে।">
-              <FieldLabel>{bn.fields.openingBalance}</FieldLabel>
+            <Field hint={t.settings.walletOpeningHint}>
+              <FieldLabel>{t.fields.openingBalance}</FieldLabel>
               <Input name="openingBalance" inputMode="decimal" defaultValue="0" />
             </Field>
           </div>
 
           <Button type="submit" disabled={pending}>
-            {pending ? "যোগ হচ্ছে…" : bn.actions.addNew}
+            {pending ? t.settings.adding : t.actions.addNew}
           </Button>
         </form>
       )}
@@ -216,28 +215,29 @@ export function WalletForm() {
 }
 
 export function UnitForm() {
+  const t = useT();
   const [state, action, pending] = useActionState<SettingsState, FormData>(
     createUnitAction,
     {},
   );
 
   return (
-    <AddPanel label="একক যোগ করুন">
+    <AddPanel label={t.settings.addUnit}>
       {() => (
         <form action={action} className="space-y-4">
-          <Feedback state={state} done="একক যোগ হয়েছে" />
+          <Feedback state={state} done={t.settings.unitAdded} />
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field>
-              <FieldLabel required>নাম</FieldLabel>
-              <Input name="nameBn" required placeholder="কার্টন" />
+              <FieldLabel required>{t.settings.nameColumn}</FieldLabel>
+              <Input name="nameBn" required placeholder={t.settings.unitNamePlaceholder} />
             </Field>
             <Field>
-              <FieldLabel required>সংক্ষিপ্ত রূপ</FieldLabel>
+              <FieldLabel required>{t.settings.unitAbbreviation}</FieldLabel>
               <Input name="symbol" required placeholder="ctn" />
             </Field>
-            <Field hint="পিস গুনতে ০, কেজিতে ৩">
-              <FieldLabel>দশমিক ঘর</FieldLabel>
+            <Field hint={t.settings.decimalHint}>
+              <FieldLabel>{t.settings.decimalPlaces}</FieldLabel>
               <Select name="decimalPlaces" defaultValue="3">
                 {[0, 1, 2, 3].map((places) => (
                   <option key={places} value={places}>
@@ -249,7 +249,7 @@ export function UnitForm() {
           </div>
 
           <Button type="submit" disabled={pending}>
-            {pending ? "যোগ হচ্ছে…" : bn.actions.addNew}
+            {pending ? t.settings.adding : t.actions.addNew}
           </Button>
         </form>
       )}
@@ -258,33 +258,34 @@ export function UnitForm() {
 }
 
 export function CategoryForm() {
+  const t = useT();
   const [state, action, pending] = useActionState<SettingsState, FormData>(
     createCategoryAction,
     {},
   );
 
   return (
-    <AddPanel label="খাত যোগ করুন">
+    <AddPanel label={t.settings.addCategory}>
       {() => (
         <form action={action} className="space-y-4">
-          <Feedback state={state} done="খাত যোগ হয়েছে" />
+          <Feedback state={state} done={t.settings.categoryAdded} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
-              <FieldLabel required>আয় না ব্যয়</FieldLabel>
+              <FieldLabel required>{t.settings.incomeOrExpense}</FieldLabel>
               <Select name="type" defaultValue="expense">
-                <option value="expense">{bn.transactionType.expense}</option>
-                <option value="income">{bn.transactionType.income}</option>
+                <option value="expense">{t.transactionType.expense}</option>
+                <option value="income">{t.transactionType.income}</option>
               </Select>
             </Field>
-            <Field hint="নতুন এন্ট্রিতে খাতের তালিকায় দেখাবে">
-              <FieldLabel required>খাতের নাম</FieldLabel>
-              <Input name="nameBn" required placeholder="গুদাম ভাড়া" />
+            <Field hint={t.settings.categoryHint}>
+              <FieldLabel required>{t.settings.categoryName}</FieldLabel>
+              <Input name="nameBn" required placeholder={t.settings.categoryNamePlaceholder} />
             </Field>
           </div>
 
           <Button type="submit" disabled={pending}>
-            {pending ? "যোগ হচ্ছে…" : bn.actions.addNew}
+            {pending ? t.settings.adding : t.actions.addNew}
           </Button>
         </form>
       )}
@@ -293,24 +294,25 @@ export function CategoryForm() {
 }
 
 export function ProductCategoryForm() {
+  const t = useT();
   const [state, action, pending] = useActionState<SettingsState, FormData>(
     createProductCategoryAction,
     {},
   );
 
   return (
-    <AddPanel label="পণ্যের ক্যাটাগরি যোগ করুন">
+    <AddPanel label={t.settings.addProductCategory}>
       {() => (
         <form action={action} className="flex flex-wrap items-end gap-3">
           <Field className="min-w-[14rem] flex-1">
-            <FieldLabel required>নাম</FieldLabel>
-            <Input name="nameBn" required placeholder="কাগজ" />
+            <FieldLabel required>{t.settings.nameColumn}</FieldLabel>
+            <Input name="nameBn" required placeholder={t.settings.productCategoryPlaceholder} />
           </Field>
           <Button type="submit" disabled={pending}>
-            {pending ? "যোগ হচ্ছে…" : bn.actions.addNew}
+            {pending ? t.settings.adding : t.actions.addNew}
           </Button>
           <div className="w-full">
-            <Feedback state={state} done="ক্যাটাগরি যোগ হয়েছে" />
+            <Feedback state={state} done={t.settings.productCategoryAdded} />
           </div>
         </form>
       )}
@@ -356,6 +358,7 @@ export function RecipeForm({
   };
   onDone?: () => void;
 }) {
+  const t = useT();
   const [state, setState] = useState<SettingsState>({});
   const [pending, start] = useTransition();
 
@@ -402,17 +405,17 @@ export function RecipeForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Feedback state={state} done="রেসিপি সংরক্ষিত হয়েছে" />
+      <Feedback state={state} done={t.settings.recipeSaved} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
-          <FieldLabel required>{bn.fields.outputProduct}</FieldLabel>
+          <FieldLabel required>{t.fields.outputProduct}</FieldLabel>
           <Select
             value={outputProductId}
             onChange={(event) => setOutputProductId(event.target.value)}
             required
           >
-            <option value="">— নির্বাচন করুন —</option>
+            <option value="">{t.settings.choosePrompt}</option>
             {products.map((product) => (
               <option key={product.id} value={product.id}>
                 {product.nameBn}
@@ -421,8 +424,8 @@ export function RecipeForm({
           </Select>
         </Field>
 
-        <Field hint="খালি রাখলে উৎপাদিত পণ্যের নামেই চিনবেন">
-          <FieldLabel>{bn.fields.recipe} নাম</FieldLabel>
+        <Field hint={t.settings.recipeNameHint}>
+          <FieldLabel>{t.settings.recipeNameLabel(t.fields.recipe)}</FieldLabel>
           <Input value={nameBn} onChange={(event) => setNameBn(event.target.value)} />
         </Field>
       </div>
@@ -430,9 +433,9 @@ export function RecipeForm({
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="font-medium">{bn.fields.inputProduct}</p>
+            <p className="font-medium">{t.fields.inputProduct}</p>
             <p className="text-xs text-muted-foreground">
-              এক ব্যাচে যত লাগে — দাম নয়, শুধু পরিমাণ
+              {t.settings.recipeInputsHint}
             </p>
           </div>
           <Button
@@ -447,19 +450,19 @@ export function RecipeForm({
             }
           >
             <Plus className="size-4" aria-hidden />
-            {bn.actions.addNew}
+            {t.actions.addNew}
           </Button>
         </div>
 
         {rows.map((row, index) => (
           <div key={row.key} className="grid gap-3 sm:grid-cols-[2fr_1fr_auto]">
             <Field>
-              <FieldLabel required>{bn.fields.product}</FieldLabel>
+              <FieldLabel required>{t.fields.product}</FieldLabel>
               <Select
                 value={row.productId}
                 onChange={(event) => update(row.key, { productId: event.target.value })}
               >
-                <option value="">— নির্বাচন করুন —</option>
+                <option value="">{t.settings.choosePrompt}</option>
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.nameBn}
@@ -470,7 +473,7 @@ export function RecipeForm({
 
             <Field>
               <FieldLabel required>
-                {bn.fields.quantity}
+                {t.fields.quantity}
                 {row.productId ? ` (${unitOf(row.productId)})` : ""}
               </FieldLabel>
               <Input
@@ -484,7 +487,7 @@ export function RecipeForm({
             <div className="flex items-end pb-1">
               <button
                 type="button"
-                aria-label={`কাঁচামাল ${index + 1} মুছুন`}
+                aria-label={t.settings.removeInput(String(index + 1))}
                 disabled={rows.length === 1}
                 onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
                 className="flex size-11 items-center justify-center text-muted-foreground hover:text-debit disabled:opacity-40"
@@ -497,8 +500,8 @@ export function RecipeForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field hint="৫০০ কেজি থেকে ৪৫০ কেজি পেলে ৯০">
-          <FieldLabel>{bn.fields.yield} (%)</FieldLabel>
+        <Field hint={t.settings.yieldHint}>
+          <FieldLabel>{t.fields.yield} (%)</FieldLabel>
           <Input
             inputMode="decimal"
             value={yieldPercent}
@@ -506,13 +509,13 @@ export function RecipeForm({
           />
         </Field>
         <Field>
-          <FieldLabel>{bn.fields.description}</FieldLabel>
+          <FieldLabel>{t.fields.description}</FieldLabel>
           <Textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
         </Field>
       </div>
 
       <Button type="submit" disabled={pending}>
-        {pending ? "সংরক্ষণ হচ্ছে…" : bn.actions.saveShort}
+        {pending ? t.settings.saving : t.actions.saveShort}
       </Button>
     </form>
   );
@@ -520,14 +523,17 @@ export function RecipeForm({
 
 /** The add-panel wrapper, so a new recipe starts from a button like the rest. */
 export function AddRecipePanel({ products }: { products: RecipeProduct[] }) {
+  const t = useT();
+
   return (
-    <AddPanel label="রেসিপি যোগ করুন">
+    <AddPanel label={t.settings.addRecipe}>
       {(close) => <RecipeForm products={products} onDone={close} />}
     </AddPanel>
   );
 }
 
 export function DeactivateRecipeButton({ id, name }: { id: string; name: string }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
 
@@ -537,7 +543,7 @@ export function DeactivateRecipeButton({ id, name }: { id: string; name: string 
         type="button"
         disabled={pending}
         onClick={() => {
-          if (!window.confirm(`${name} বন্ধ করবেন? নতুন এন্ট্রিতে আর দেখাবে না।`)) return;
+          if (!window.confirm(t.settings.confirmDisableWallet(name))) return;
           start(async () => {
             const result = await deactivateRecipeAction(id);
             if (result.error) setError(result.error);
@@ -545,7 +551,7 @@ export function DeactivateRecipeButton({ id, name }: { id: string; name: string 
         }}
         className="-mx-2 min-h-11 px-2 text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
       >
-        {pending ? "…" : "বন্ধ করুন"}
+        {pending ? "…" : t.actions.close}
       </button>
       {error ? <span className="text-xs text-debit">{error}</span> : null}
     </span>
@@ -573,6 +579,7 @@ export function DeactivateButton({
   disabled?: boolean;
   disabledReason?: string;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
 
@@ -590,7 +597,7 @@ export function DeactivateButton({
         type="button"
         disabled={pending}
         onClick={() => {
-          if (!window.confirm(`${name} বন্ধ করবেন? তালিকা থেকে সরে যাবে, হিসাব থাকবে।`)) return;
+          if (!window.confirm(t.settings.confirmDisableCategory(name))) return;
           start(async () => {
             const result = await deactivateAction(target, id);
             if (result.error) setError(result.error);
@@ -598,7 +605,7 @@ export function DeactivateButton({
         }}
         className="-mx-2 min-h-11 px-2 text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
       >
-        {pending ? "…" : "বন্ধ করুন"}
+        {pending ? "…" : t.actions.close}
       </button>
       {error ? <span className="text-xs text-debit">{error}</span> : null}
     </span>

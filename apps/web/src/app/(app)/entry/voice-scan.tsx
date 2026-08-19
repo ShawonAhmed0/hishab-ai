@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { Camera, Mic, Sparkles, Square } from "lucide-react";
-import { bn, normalizeDigits, type TransactionType } from "@hishabai/shared";
+import { normalizeDigits, type Dictionary, type TransactionType } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldLabel, Textarea } from "@/components/ui/field";
@@ -108,6 +109,7 @@ function parse(
   parties: PartyOption[],
   products: ProductOption[],
   source: "voice" | "scan",
+  t: Dictionary,
 ): { draft: ParsedDraft; understood: Understood[] } {
   const type = readType(text);
   const party = matchByName(text, parties, (p) => p.name);
@@ -145,26 +147,31 @@ function parse(
     ];
   }
 
+  const unknown = t.entry.voiceNotUnderstood;
   const understood: Understood[] = [
-    { label: bn.fields.type, value: type ? bn.transactionType[type] : "বোঝা যায়নি", confident: Boolean(type) },
-    { label: bn.fields.party, value: party?.name ?? "বোঝা যায়নি", confident: Boolean(party) },
-    { label: bn.fields.product, value: product?.nameBn ?? "বোঝা যায়নি", confident: Boolean(product) },
     {
-      label: bn.fields.quantity,
-      value: quantity ? `${quantity.quantity} ${quantity.unit}` : "বোঝা যায়নি",
+      label: t.fields.type,
+      value: type ? t.transactionType[type] : unknown,
+      confident: Boolean(type),
+    },
+    { label: t.fields.party, value: party?.name ?? unknown, confident: Boolean(party) },
+    { label: t.fields.product, value: product?.nameBn ?? unknown, confident: Boolean(product) },
+    {
+      label: t.fields.quantity,
+      value: quantity ? `${quantity.quantity} ${quantity.unit}` : unknown,
       confident: Boolean(quantity),
     },
     {
-      label: bn.fields.grandTotal,
-      value: total !== undefined ? `৳ ${total.toLocaleString("en-IN")}` : "বোঝা যায়নি",
+      label: t.fields.grandTotal,
+      value: total !== undefined ? `৳ ${total.toLocaleString("en-IN")}` : unknown,
       confident: total !== undefined,
     },
     {
-      label: bn.fields.paidAmount,
-      value: paid !== undefined ? `৳ ${paid.toLocaleString("en-IN")}` : "বোঝা যায়নি",
+      label: t.fields.paidAmount,
+      value: paid !== undefined ? `৳ ${paid.toLocaleString("en-IN")}` : unknown,
       confident: paid !== undefined,
     },
-    { label: bn.fields.memoNo, value: memoNo ?? "বোঝা যায়নি", confident: Boolean(memoNo) },
+    { label: t.fields.memoNo, value: memoNo ?? unknown, confident: Boolean(memoNo) },
   ];
 
   return { draft, understood };
@@ -181,6 +188,7 @@ export function VoiceScanPanel({
   products: ProductOption[];
   onDraft: (draft: ParsedDraft) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [text, setText] = React.useState("");
   const [listening, setListening] = React.useState(false);
@@ -242,10 +250,10 @@ export function VoiceScanPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="size-4 text-accent" aria-hidden />
-          বলে বা ছবি তুলে এন্ট্রি
+          {t.entry.voiceTitle}
         </CardTitle>
         <Button type="button" variant="ghost" size="sm" onClick={() => setOpen((v) => !v)}>
-          {open ? bn.actions.close : "চালু করুন"}
+          {open ? t.actions.close : t.entry.voiceOpen}
         </Button>
       </CardHeader>
 
@@ -259,31 +267,31 @@ export function VoiceScanPanel({
               disabled={!speechAvailable}
             >
               {listening ? <Square className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}
-              {listening ? "থামান" : "বলুন"}
+              {listening ? t.entry.voiceStop : t.entry.voiceStart}
             </Button>
 
             <Button type="button" variant="secondary" disabled>
               <Camera className="size-4" aria-hidden />
-              মেমো স্ক্যান
+              {t.entry.scanMemo}
               <Badge tone="neutral" className="ml-1">
-                শীঘ্রই
+                {t.entry.comingSoon}
               </Badge>
             </Button>
           </div>
 
           {!speechAvailable ? (
             <p className="text-xs text-muted-foreground">
-              এই ব্রাউজারে ভয়েস কাজ করছে না — নিচে লিখেও দিতে পারেন।
+              {t.entry.voiceUnavailable}
             </p>
           ) : null}
 
-          <Field hint="যেমন: মায়ের দোয়া ট্রেডার্সকে ৫০০ কেজি পেপার বিক্রি করেছি, মেমো ১২৫, মোট ৮০ হাজার টাকা, ৫০ হাজার টাকা পেয়েছি">
-            <FieldLabel>যা বলেছেন</FieldLabel>
+          <Field hint={t.entry.voiceExample}>
+            <FieldLabel>{t.entry.whatYouSaid}</FieldLabel>
             <Textarea
               rows={3}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="বাংলা বা বাংলিশে স্বাভাবিকভাবে লিখুন…"
+              placeholder={t.entry.voicePlaceholder}
             />
           </Field>
 
@@ -291,15 +299,15 @@ export function VoiceScanPanel({
             type="button"
             variant="accent"
             disabled={text.trim().length === 0}
-            onClick={() => setPreview(parse(text, parties, products, "voice"))}
+            onClick={() => setPreview(parse(text, parties, products, "voice", t))}
           >
             <Sparkles className="size-4" aria-hidden />
-            বুঝে নিন
+            {t.entry.voiceParse}
           </Button>
 
           {preview ? (
             <div className="rounded-lg border border-accent bg-accent-soft p-3">
-              <p className="mb-2 text-sm font-medium">{bn.messages.reviewBeforeSave}</p>
+              <p className="mb-2 text-sm font-medium">{t.messages.reviewBeforeSave}</p>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
                 {preview.understood.map((item) => (
                   <div key={item.label}>
@@ -319,14 +327,14 @@ export function VoiceScanPanel({
                     setOpen(false);
                   }}
                 >
-                  ফর্মে বসান
+                  {t.entry.voiceApply}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setPreview(null)}>
-                  {bn.actions.cancel}
+                  {t.actions.cancel}
                 </Button>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                ফর্মে বসানোর পর নিজে দেখে তারপর সংরক্ষণ করুন — এটি নিজে থেকে সংরক্ষণ করবে না।
+                {t.entry.voiceReviewNotice}
               </p>
             </div>
           ) : null}

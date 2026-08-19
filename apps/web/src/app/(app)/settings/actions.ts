@@ -14,6 +14,7 @@ import {
   updateCompany,
   updateRecipe,
 } from "@hishabai/core";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
 export interface SettingsState {
@@ -46,18 +47,18 @@ async function run(
   } catch (error) {
     if (error instanceof PermissionError) return { error: error.messageBn, section };
     if (error instanceof ZodError) {
-      return { error: error.issues[0]?.message ?? "তথ্য সঠিক নয়", section };
+      return { error: error.issues[0]?.message ?? (await dict()).settings.invalidInput, section };
     }
     // A duplicate unit symbol is the common one, and the constraint name is no
     // use to anybody reading the screen.
     if (error instanceof Error && /unique|duplicate/i.test(error.message)) {
-      return { error: "এই নামে বা সংক্ষিপ্ত রূপে একটি এন্ট্রি আগে থেকেই আছে", section };
+      return { error: (await dict()).settings.duplicateNameOrAbbreviation, section };
     }
     if (error instanceof Error && /যাবে না/.test(error.message)) {
       return { error: error.message, section };
     }
     console.error(`settings:${section} failed`, error);
-    return { error: "সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।", section };
+    return { error: (await dict()).messages.errorGeneric, section };
   }
 }
 

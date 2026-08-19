@@ -23,7 +23,6 @@ import {
   ZERO_QTY,
   absMoney,
   addMoney,
-  bn,
   formatMoney,
   formatQty,
   money,
@@ -34,11 +33,13 @@ import {
   scaleQty,
   subMoney,
   subQty,
+  type Dictionary,
   type Money,
   type Qty,
   type TransactionType,
 } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { MoneyText } from "@/components/ui/money";
@@ -212,8 +213,8 @@ const emptyJournalRow = (): JournalRowState => ({
 });
 
 /** The database hands quantities over at full 6dp; nobody wants to read that. */
-const stockHint = (product: ProductOption) =>
-  `স্টক ${formatQty(qtyFromDb(product.quantity), { unit: product.unitSymbol })}`;
+const stockHint = (product: ProductOption, t: Dictionary) =>
+  t.entry.stockIs(formatQty(qtyFromDb(product.quantity), { unit: product.unitSymbol }));
 
 /** First one wins, so a locally added row loses to the server's copy of it. */
 function dedupeById<T extends { id: string }>(rows: T[]): T[] {
@@ -276,6 +277,7 @@ function StockRows({
   quantityHint,
   minRows = 1,
 }: StockRowsProps) {
+  const t = useT();
   const update = (key: string, patch: Partial<SimpleLineState>) =>
     setRows((current) =>
       current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
@@ -290,13 +292,13 @@ function StockRows({
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => setRows((c) => [...c, emptySimple()])}>
           <Plus className="size-4" aria-hidden />
-          {bn.actions.addNew}
+          {t.actions.addNew}
         </Button>
       </div>
 
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-          কিছু যোগ করা হয়নি।
+          {t.entry.nothingAdded}
         </p>
       ) : null}
 
@@ -311,12 +313,12 @@ function StockRows({
               fieldId={`${errorPrefix}.${index}.productId`}
               error={fieldErrors[`${errorPrefix}.${index}.productId`]}
             >
-              <FieldLabel required>{bn.fields.product}</FieldLabel>
+              <FieldLabel required>{t.fields.product}</FieldLabel>
               <Select
                 value={row.productId}
                 onChange={(e) => update(row.key, { productId: e.target.value })}
               >
-                <option value="">— নির্বাচন করুন —</option>
+                <option value="">{t.entry.choosePrompt}</option>
                 {products.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.nameBn}
@@ -353,7 +355,7 @@ function StockRows({
             </Field>
 
             <Field>
-              <FieldLabel>{bn.fields.description}</FieldLabel>
+              <FieldLabel>{t.fields.description}</FieldLabel>
               <Input
                 value={row.note}
                 onChange={(e) => update(row.key, { note: e.target.value })}
@@ -366,7 +368,7 @@ function StockRows({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`${title} — লাইন ${index + 1} মুছুন`}
+                aria-label={t.entry.removeTitledLine(title, String(index + 1))}
                 disabled={rows.length <= minRows}
                 onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
               >
@@ -390,6 +392,7 @@ interface JournalRowsProps {
 }
 
 function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRowsProps) {
+  const t = useT();
   const update = (key: string, patch: Partial<JournalRowState>) =>
     setRows((current) =>
       current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
@@ -404,7 +407,7 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => setRows((c) => [...c, emptyJournalRow()])}>
           <Plus className="size-4" aria-hidden />
-          {bn.actions.addNew}
+          {t.actions.addNew}
         </Button>
       </div>
 
@@ -414,12 +417,12 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
           className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1.4fr_auto]"
         >
           <Field>
-            <FieldLabel required>হিসাব</FieldLabel>
+            <FieldLabel required>{t.entry.account}</FieldLabel>
             <Select
               value={row.accountId}
               onChange={(e) => update(row.key, { accountId: e.target.value })}
             >
-              <option value="">— নির্বাচন করুন —</option>
+              <option value="">{t.entry.choosePrompt}</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.code} — {account.nameBn}
@@ -429,7 +432,7 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
           </Field>
 
           <Field>
-            <FieldLabel required>{bn.fields.amount}</FieldLabel>
+            <FieldLabel required>{t.fields.amount}</FieldLabel>
             <Input
               numeric
               value={row.amount}
@@ -439,7 +442,7 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
           </Field>
 
           <Field>
-            <FieldLabel>{bn.fields.description}</FieldLabel>
+            <FieldLabel>{t.fields.description}</FieldLabel>
             <Input
               value={row.narration}
               onChange={(e) => update(row.key, { narration: e.target.value })}
@@ -451,7 +454,7 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
               type="button"
               variant="ghost"
               size="icon"
-              aria-label={`${title} — লাইন ${index + 1} মুছুন`}
+              aria-label={t.entry.removeTitledLine(title, String(index + 1))}
               disabled={rows.length === 1}
               onClick={() => setRows((c) => c.filter((item) => item.key !== row.key))}
             >
@@ -462,7 +465,7 @@ function JournalRows({ title, hint, rows, setRows, accounts, total }: JournalRow
       ))}
 
       <p className="text-right text-sm text-muted-foreground">
-        মোট <MoneyText value={total} size="sm" />
+        {t.entry.totalIs} <MoneyText value={total} size="sm" />
       </p>
     </div>
   );
@@ -481,6 +484,7 @@ export function EntryForm({
   canManageParties,
   canManageProducts,
 }: Props) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
 
@@ -847,8 +851,8 @@ export function EntryForm({
 
       if (outcome.ok) {
         toast.success(
-          `${bn.messages.saved} — ${outcome.voucherNo}`,
-          `সর্বমোট ${formatMoney(money(outcome.total))}`,
+          `${t.messages.saved} — ${outcome.voucherNo}`,
+          t.entry.savedTotal(formatMoney(money(outcome.total))),
         );
         for (const warning of outcome.warnings) toast.show({ tone: "info", title: warning });
         changeType(type);
@@ -875,7 +879,7 @@ export function EntryForm({
   function NewProductPanel() {
     return (
       <div className="rounded-md border border-border bg-surface-sunken p-4">
-        <p className="mb-3 font-medium">নতুন পণ্য</p>
+        <p className="mb-3 font-medium">{t.masterData.newProduct}</p>
         <ProductFields
           units={units}
           categories={productCategories}
@@ -897,21 +901,21 @@ export function EntryForm({
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{bn.nav.newEntry}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.nav.newEntry}</h1>
         <p className="text-sm text-muted-foreground">
-          একবার লিখুন — হিসাব, স্টক আর বকেয়া নিজে থেকেই ঠিক হয়ে যাবে
+          {t.entry.motto}
         </p>
       </div>
 
       {/* ---- 1. what happened ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>{bn.fields.type}</CardTitle>
+          <CardTitle>{t.fields.type}</CardTitle>
         </CardHeader>
         <CardBody className="space-y-3">
           <div
             role="radiogroup"
-            aria-label={bn.fields.type}
+            aria-label={t.fields.type}
             className="grid grid-cols-2 gap-2 sm:grid-cols-3"
           >
             {[...PRIMARY_TYPES, ...(showMore ? MORE_TYPES : [])].map((option) => {
@@ -934,11 +938,11 @@ export function EntryForm({
                   <span className="flex items-center gap-2">
                     <Icon className={cn("size-4", active ? "text-primary" : "text-subtle-foreground")} aria-hidden />
                     <span className={cn("font-medium", active && "text-primary")}>
-                      {bn.transactionType[option]}
+                      {t.transactionType[option]}
                     </span>
                   </span>
                   <span className="text-xs leading-snug text-muted-foreground">
-                    {bn.transactionTypeHint[option]}
+                    {t.transactionTypeHint[option]}
                   </span>
                 </button>
               );
@@ -954,14 +958,14 @@ export function EntryForm({
             className="-mx-2 flex min-h-11 cursor-pointer items-center gap-1 px-2 text-sm text-primary hover:underline"
           >
             <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} aria-hidden />
-            {showMore ? "কম দেখান" : "আরও ধরন দেখান"}
+            {showMore ? t.entry.showFewerTypes : t.entry.showMoreTypes}
           </button>
         </CardBody>
       </Card>
 
       {summaryErrors.length > 0 || (result && !result.ok) ? (
         <ErrorSummary
-          title={result && !result.ok ? result.error : bn.messages.errorTitle}
+          title={result && !result.ok ? result.error : t.messages.errorTitle}
           errors={summaryErrors}
         />
       ) : null}
@@ -971,7 +975,7 @@ export function EntryForm({
       {/* ---- 2. the details ---- */}
       <Card>
         <CardHeader>
-          <CardTitle>বিস্তারিত</CardTitle>
+          <CardTitle>{t.entry.details}</CardTitle>
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -979,7 +983,7 @@ export function EntryForm({
               fieldId="date"
               error={fieldErrors["date"]}
             >
-              <FieldLabel required>{bn.fields.date}</FieldLabel>
+              <FieldLabel required>{t.fields.date}</FieldLabel>
               <Input
                 type="date"
                 value={date}
@@ -994,12 +998,12 @@ export function EntryForm({
                 error={fieldErrors["partyId"]}
                 hint={
                   selectedParty
-                    ? `${bn.due.previousDue}: ${formatMoney(previousDue)}`
+                    ? `${t.due.previousDue}: ${formatMoney(previousDue)}`
                     : undefined
                 }
               >
                 <FieldLabel required>
-                  {VENDOR_SIDE.includes(type) ? bn.fields.vendor : bn.fields.customer}
+                  {VENDOR_SIDE.includes(type) ? t.fields.vendor : t.fields.customer}
                 </FieldLabel>
                 <div className="flex gap-2">
                   <Select
@@ -1008,7 +1012,7 @@ export function EntryForm({
                     className="flex-1"
                     required
                   >
-                    <option value="">— নির্বাচন করুন —</option>
+                    <option value="">{t.entry.choosePrompt}</option>
                     {partyOptions.map((party) => (
                       <option key={party.id} value={party.id}>
                         {party.name}
@@ -1023,7 +1027,9 @@ export function EntryForm({
                     variant="secondary"
                     size="icon"
                     aria-label={
-                      VENDOR_SIDE.includes(type) ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"
+                      VENDOR_SIDE.includes(type)
+                        ? t.masterData.newVendor
+                        : t.masterData.newCustomer
                     }
                     onClick={() => setAddingParty((open) => !open)}
                   >
@@ -1039,13 +1045,13 @@ export function EntryForm({
                 fieldId="categoryAccountId"
                 error={fieldErrors["categoryAccountId"]}
               >
-                <FieldLabel required>{bn.fields.category}</FieldLabel>
+                <FieldLabel required>{t.fields.category}</FieldLabel>
                 <Select
                   value={categoryAccountId}
                   onChange={(e) => setCategoryAccountId(e.target.value)}
                   required
                 >
-                  <option value="">— নির্বাচন করুন —</option>
+                  <option value="">{t.entry.choosePrompt}</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.nameBn}
@@ -1056,11 +1062,11 @@ export function EntryForm({
             ) : null}
 
             <Field>
-              <FieldLabel>{bn.fields.memoNo}</FieldLabel>
+              <FieldLabel>{t.fields.memoNo}</FieldLabel>
               <Input
                 value={memoNo}
                 onChange={(e) => setMemoNo(e.target.value)}
-                placeholder="১২৫"
+                placeholder={t.entry.ratePlaceholder}
               />
             </Field>
           </div>
@@ -1068,7 +1074,9 @@ export function EntryForm({
           {addingParty && canManageParties && NEEDS_PARTY.includes(type) ? (
             <div className="rounded-md border border-border bg-surface-sunken p-4">
               <p className="mb-3 font-medium">
-                {VENDOR_SIDE.includes(type) ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"}
+                {VENDOR_SIDE.includes(type)
+                  ? t.masterData.newVendor
+                  : t.masterData.newCustomer}
               </p>
               <PartyFields
                 defaultType={VENDOR_SIDE.includes(type) ? "vendor" : "customer"}
@@ -1087,7 +1095,7 @@ export function EntryForm({
       {NEEDS_LINES.includes(type) ? (
         <Card>
           <CardHeader>
-            <CardTitle>পণ্য</CardTitle>
+            <CardTitle>{t.entry.products}</CardTitle>
             <span className="flex gap-1">
               {canManageProducts ? (
                 <Button
@@ -1097,7 +1105,7 @@ export function EntryForm({
                   onClick={() => setAddingProduct((open) => !open)}
                 >
                   <Plus className="size-4" aria-hidden />
-                  নতুন পণ্য
+                  {t.masterData.newProduct}
                 </Button>
               ) : null}
               <Button
@@ -1107,7 +1115,7 @@ export function EntryForm({
                 onClick={() => setLines((c) => [...c, emptyLine()])}
               >
                 <Plus className="size-4" aria-hidden />
-                লাইন
+                {t.entry.lines}
               </Button>
             </span>
           </CardHeader>
@@ -1125,12 +1133,12 @@ export function EntryForm({
                     fieldId={`lines.${index}.productId`}
                     error={fieldErrors[`lines.${index}.productId`]}
                   >
-                    <FieldLabel required>{bn.fields.product}</FieldLabel>
+                    <FieldLabel required>{t.fields.product}</FieldLabel>
                     <Select
                       value={line.productId}
                       onChange={(e) => updateLine(line.key, { productId: e.target.value })}
                     >
-                      <option value="">— নির্বাচন করুন —</option>
+                      <option value="">{t.entry.choosePrompt}</option>
                       {products.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.nameBn}
@@ -1142,10 +1150,10 @@ export function EntryForm({
                   <Field
                     fieldId={`lines.${index}.quantity`}
                     error={fieldErrors[`lines.${index}.quantity`]}
-                    hint={product ? stockHint(product) : undefined}
+                    hint={product ? stockHint(product, t) : undefined}
                   >
                     <FieldLabel required>
-                      {bn.fields.quantity}
+                      {t.fields.quantity}
                       {product ? ` (${product.unitSymbol})` : ""}
                     </FieldLabel>
                     <Input
@@ -1161,7 +1169,7 @@ export function EntryForm({
                     error={fieldErrors[`lines.${index}.rate`]}
                     hint={amount > 0n ? formatMoney(amount) : undefined}
                   >
-                    <FieldLabel required>{bn.fields.rate}</FieldLabel>
+                    <FieldLabel required>{t.fields.rate}</FieldLabel>
                     <Input
                       numeric
                       value={line.rate}
@@ -1175,7 +1183,7 @@ export function EntryForm({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={`লাইন ${index + 1} মুছুন`}
+                      aria-label={t.entry.removeLine(String(index + 1))}
                       disabled={lines.length === 1}
                       onClick={() =>
                         setLines((c) => c.filter((item) => item.key !== line.key))
@@ -1191,19 +1199,19 @@ export function EntryForm({
             {NEEDS_TRADE_COSTS.includes(type) ? (
               <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-4">
                 <Field>
-                  <FieldLabel>{bn.fields.transportCost}</FieldLabel>
+                  <FieldLabel>{t.fields.transportCost}</FieldLabel>
                   <Input numeric value={transportCost} onChange={(e) => setTransportCost(e.target.value)} placeholder="0" />
                 </Field>
                 <Field>
-                  <FieldLabel>{bn.fields.laborCost}</FieldLabel>
+                  <FieldLabel>{t.fields.laborCost}</FieldLabel>
                   <Input numeric value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" />
                 </Field>
                 <Field>
-                  <FieldLabel>{bn.fields.otherCost}</FieldLabel>
+                  <FieldLabel>{t.fields.otherCost}</FieldLabel>
                   <Input numeric value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" />
                 </Field>
                 <Field>
-                  <FieldLabel>{bn.fields.discount}</FieldLabel>
+                  <FieldLabel>{t.fields.discount}</FieldLabel>
                   <Input numeric value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
                 </Field>
               </div>
@@ -1216,7 +1224,7 @@ export function EntryForm({
       {type === "production" ? (
         <Card>
           <CardHeader>
-            <CardTitle>{bn.transactionType.production}</CardTitle>
+            <CardTitle>{t.transactionType.production}</CardTitle>
             {canManageProducts ? (
               <Button
                 type="button"
@@ -1225,7 +1233,7 @@ export function EntryForm({
                 onClick={() => setAddingProduct((open) => !open)}
               >
                 <Plus className="size-4" aria-hidden />
-                নতুন পণ্য
+                {t.masterData.newProduct}
               </Button>
             ) : null}
           </CardHeader>
@@ -1233,24 +1241,24 @@ export function EntryForm({
             {addingProduct && canManageProducts ? <NewProductPanel /> : null}
             {recipes.length > 0 ? (
               <div className="grid gap-3 rounded-lg bg-surface-sunken p-3 sm:grid-cols-[2fr_1fr]">
-                <Field hint="রেসিপি বেছে নিলে কাঁচামাল নিজে থেকেই বসে যাবে — পরে বদলানো যাবে">
-                  <FieldLabel>{bn.fields.recipe}</FieldLabel>
+                <Field hint={t.entry.recipeHint}>
+                  <FieldLabel>{t.fields.recipe}</FieldLabel>
                   <Select
                     value={recipeId}
                     onChange={(e) => applyRecipe(e.target.value, batchCount)}
                   >
-                    <option value="">— রেসিপি ছাড়া —</option>
+                    <option value="">{t.entry.withoutRecipe}</option>
                     {recipes.map((recipe) => (
                       <option key={recipe.id} value={recipe.id}>
                         {recipe.nameBn ??
                           products.find((p) => p.id === recipe.outputProductId)?.nameBn ??
-                          "রেসিপি"}
+                          t.fields.recipe}
                       </option>
                     ))}
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel>{bn.fields.batchCount}</FieldLabel>
+                  <FieldLabel>{t.fields.batchCount}</FieldLabel>
                   <Input
                     numeric
                     value={batchCount}
@@ -1265,25 +1273,25 @@ export function EntryForm({
             ) : null}
 
             <StockRows
-              title={bn.fields.inputProduct}
-              hint="যা ব্যবহার করা হয়েছে — দর লাগবে না, চলতি গড় মূল্যেই ধরা হবে"
+              title={t.fields.inputProduct}
+              hint={t.entry.inputsHint}
               rows={prodInputs}
               setRows={setProdInputs}
               products={products}
-              quantityLabel={bn.fields.quantity}
+              quantityLabel={t.fields.quantity}
               errorPrefix="inputs"
               fieldErrors={fieldErrors}
-              quantityHint={(_row, product) => (product ? stockHint(product) : undefined)}
+              quantityHint={(_row, product) => (product ? stockHint(product, t) : undefined)}
             />
 
             <div className="border-t border-border pt-4">
               <StockRows
-                title={bn.fields.outputProduct}
-                hint="যা তৈরি হয়েছে — কাঁচামালের খরচ পরিমাণ অনুপাতে ভাগ হয়ে যাবে"
+                title={t.fields.outputProduct}
+                hint={t.entry.outputsHint}
                 rows={prodOutputs}
                 setRows={setProdOutputs}
                 products={products}
-                quantityLabel={bn.fields.quantity}
+                quantityLabel={t.fields.quantity}
                 errorPrefix="outputs"
                 fieldErrors={fieldErrors}
               />
@@ -1291,13 +1299,13 @@ export function EntryForm({
 
             <div className="border-t border-border pt-4">
               <StockRows
-                title={bn.fields.wastage}
-                hint="নষ্ট হওয়া কাঁচামাল — উপরের কাঁচামালের তালিকা থেকেই হতে হবে"
+                title={t.fields.wastage}
+                hint={t.entry.wastageHint}
                 rows={wastage}
                 setRows={setWastage}
                 products={inputProducts}
-                quantityLabel={bn.fields.quantity}
-                notePlaceholder="কারণ"
+                quantityLabel={t.fields.quantity}
+                notePlaceholder={t.entry.reason}
                 errorPrefix="wastage"
                 fieldErrors={fieldErrors}
                 minRows={0}
@@ -1306,11 +1314,11 @@ export function EntryForm({
 
             <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel>{bn.fields.laborCost}</FieldLabel>
+                <FieldLabel>{t.fields.laborCost}</FieldLabel>
                 <Input numeric value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" />
               </Field>
               <Field>
-                <FieldLabel>{bn.fields.otherCost}</FieldLabel>
+                <FieldLabel>{t.fields.otherCost}</FieldLabel>
                 <Input numeric value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" />
               </Field>
             </div>
@@ -1322,8 +1330,10 @@ export function EntryForm({
                 role="status"
                 className="rounded-md border border-due bg-due-soft p-3 text-sm text-due"
               >
-                লেবার ও অন্যান্য খরচ {formatMoney(conversionCost)} — নিচে ঠিক এই পরিমাণ
-                পেমেন্ট মাধ্যম থেকে দিতে হবে। এখন দেওয়া আছে {formatMoney(paidTotal)}।
+                {t.entry.conversionCostNotice(
+                  formatMoney(conversionCost),
+                  formatMoney(paidTotal),
+                )}
               </p>
             ) : null}
           </CardBody>
@@ -1336,24 +1346,26 @@ export function EntryForm({
           <CardBody className="space-y-4">
             {addingProduct && canManageProducts ? <NewProductPanel /> : null}
             <StockRows
-              title={bn.transactionType.stock_adjustment}
-              hint="গুদামে গুনে যা পাওয়া গেল সেটাই লিখুন — কমবেশি হিসাব নিজে করে নেবে"
+              title={t.transactionType.stock_adjustment}
+              hint={t.entry.countHint}
               rows={adjustments}
               setRows={setAdjustments}
               products={products}
-              quantityLabel={bn.fields.countedQuantity}
-              notePlaceholder="কারণ"
+              quantityLabel={t.fields.countedQuantity}
+              notePlaceholder={t.entry.reason}
               errorPrefix="adjustments"
               fieldErrors={fieldErrors}
               quantityHint={(row, product) => {
                 if (!product) return undefined;
                 const onHand = qtyFromDb(product.quantity);
-                if (row.quantity === "") return stockHint(product);
+                if (row.quantity === "") return stockHint(product, t);
                 const delta = subQty(qty(row.quantity), onHand);
-                if (delta === ZERO_QTY) return "স্টকের সঙ্গে মিলে গেছে";
+                if (delta === ZERO_QTY) return t.entry.countMatches;
                 return delta > 0n
-                  ? `${formatQty(delta)} ${product.unitSymbol} বেশি পাওয়া গেছে`
-                  : `${formatQty((-delta) as Qty)} ${product.unitSymbol} কম পাওয়া গেছে`;
+                  ? t.entry.countSurplus(`${formatQty(delta)} ${product.unitSymbol}`)
+                  : t.entry.countShortfall(
+                      `${formatQty((-delta) as Qty)} ${product.unitSymbol}`,
+                    );
               }}
             />
           </CardBody>
@@ -1364,12 +1376,12 @@ export function EntryForm({
       {type === "other" ? (
         <Card>
           <CardHeader>
-            <CardTitle>{bn.transactionType.other}</CardTitle>
+            <CardTitle>{t.transactionType.other}</CardTitle>
           </CardHeader>
           <CardBody className="space-y-5">
             <JournalRows
-              title="কোথা থেকে"
-              hint="টাকাটা যেখান থেকে এসেছে"
+              title={t.entry.fromWhere}
+              hint={t.entry.fromWhereHint}
               rows={sources}
               setRows={setSources}
               accounts={postingAccounts}
@@ -1377,8 +1389,8 @@ export function EntryForm({
             />
             <div className="border-t border-border pt-4">
               <JournalRows
-                title="কোথায়"
-                hint="টাকাটা যেখানে গেছে"
+                title={t.entry.toWhere}
+                hint={t.entry.toWhereHint}
                 rows={destinations}
                 setRows={setDestinations}
                 accounts={postingAccounts}
@@ -1391,7 +1403,7 @@ export function EntryForm({
                 role="status"
                 className="rounded-md border border-due bg-due-soft p-3 text-sm text-due"
               >
-                দুই দিকের অঙ্ক মিলছে না — পার্থক্য {formatMoney(absMoney(journalDifference))}।
+                {t.entry.journalUnbalanced(formatMoney(absMoney(journalDifference)))}
               </p>
             ) : null}
           </CardBody>
@@ -1405,7 +1417,7 @@ export function EntryForm({
         <Card>
           <CardBody>
             <Field>
-              <FieldLabel>{bn.fields.description}</FieldLabel>
+              <FieldLabel>{t.fields.description}</FieldLabel>
               <Textarea
                 rows={2}
                 value={description}
@@ -1417,7 +1429,7 @@ export function EntryForm({
       ) : (
       <Card>
         <CardHeader>
-          <CardTitle>{bn.fields.paymentMethod}</CardTitle>
+          <CardTitle>{t.fields.paymentMethod}</CardTitle>
           {NEEDS_LINES.includes(type) || type === "production" ? (
             <Button
               type="button"
@@ -1431,7 +1443,7 @@ export function EntryForm({
               }
             >
               <Plus className="size-4" aria-hidden />
-              {bn.actions.addNew}
+              {t.actions.addNew}
             </Button>
           ) : null}
         </CardHeader>
@@ -1445,7 +1457,7 @@ export function EntryForm({
                 fieldId={`payments.${index}.financialAccountId`}
                 error={fieldErrors[`payments.${index}.financialAccountId`]}
               >
-                <FieldLabel required={!NEEDS_LINES.includes(type)}>মাধ্যম</FieldLabel>
+                <FieldLabel required={!NEEDS_LINES.includes(type)}>{t.entry.method}</FieldLabel>
                 <Select
                   value={payment.financialAccountId}
                   onChange={(e) =>
@@ -1469,7 +1481,7 @@ export function EntryForm({
                 error={fieldErrors[`payments.${index}.amount`]}
               >
                 <FieldLabel required={!NEEDS_LINES.includes(type)}>
-                  {bn.fields.paidAmount}
+                  {t.fields.paidAmount}
                 </FieldLabel>
                 <Input
                   numeric
@@ -1484,7 +1496,7 @@ export function EntryForm({
               </Field>
 
               <Field>
-                <FieldLabel>{bn.fields.handledBy}</FieldLabel>
+                <FieldLabel>{t.fields.handledBy}</FieldLabel>
                 <Input
                   value={payment.handledByName}
                   onChange={(e) =>
@@ -1494,7 +1506,7 @@ export function EntryForm({
                       ),
                     )
                   }
-                  placeholder="নাম"
+                  placeholder={t.fields.name}
                 />
               </Field>
 
@@ -1503,7 +1515,7 @@ export function EntryForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  aria-label={`পেমেন্ট ${index + 1} মুছুন`}
+                  aria-label={t.entry.removePayment(String(index + 1))}
                   disabled={payments.length === 1}
                   onClick={() => setPayments((c) => c.filter((p) => p.key !== payment.key))}
                 >
@@ -1514,7 +1526,7 @@ export function EntryForm({
           ))}
 
           <Field>
-            <FieldLabel>{bn.fields.description}</FieldLabel>
+            <FieldLabel>{t.fields.description}</FieldLabel>
             <Textarea
               rows={2}
               value={description}
@@ -1534,33 +1546,33 @@ export function EntryForm({
           {NO_PARTY_TOTALS.includes(type) ? (
             <p className="text-sm text-muted-foreground">
               {type === "production"
-                ? "কাঁচামালের খরচ উৎপাদিত পণ্যে চলে যাবে — কোনো বকেয়া তৈরি হবে না।"
+                ? t.entry.productionNoDue
                 : type === "stock_adjustment"
-                  ? "স্টকের কমবেশি সমন্বয় খাতে যাবে — কোনো বকেয়া তৈরি হবে না।"
-                  : "দুই দিক সমান হলেই এন্ট্রি সংরক্ষণ হবে।"}
+                  ? t.entry.adjustmentNoDue
+                  : t.entry.bothSidesMustMatch}
             </p>
           ) : (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
               <div>
-                <dt className="text-muted-foreground">{bn.due.previousDue}</dt>
+                <dt className="text-muted-foreground">{t.due.previousDue}</dt>
                 <dd>
                   <MoneyText value={previousDue} size="sm" />
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">{bn.due.currentBill}</dt>
+                <dt className="text-muted-foreground">{t.due.currentBill}</dt>
                 <dd>
                   <MoneyText value={total} size="sm" />
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">{bn.due.payment}</dt>
+                <dt className="text-muted-foreground">{t.due.payment}</dt>
                 <dd>
                   <MoneyText value={paidTotal} size="sm" tone="credit" />
                 </dd>
               </div>
               <div>
-                <dt className="font-medium">{bn.due.newDue}</dt>
+                <dt className="font-medium">{t.due.newDue}</dt>
                 <dd>
                   <MoneyText
                     value={addMoney(previousDue, due)}
@@ -1574,15 +1586,15 @@ export function EntryForm({
 
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => changeType(type)}>
-              {bn.actions.clear}
+              {t.actions.clear}
             </Button>
             <Button type="submit" size="lg" loading={pending} className="sm:min-w-52">
-              {bn.actions.save}
+              {t.actions.save}
             </Button>
           </div>
 
           <p className="text-xs text-subtle-foreground">
-            উপরের অঙ্কগুলো শুধু দেখানোর জন্য — সংরক্ষণের সময় সার্ভার নিজে হিসাব করে নেবে।
+            {t.entry.serverRecomputes}
           </p>
         </CardBody>
       </Card>

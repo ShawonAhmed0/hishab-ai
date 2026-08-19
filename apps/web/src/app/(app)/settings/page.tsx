@@ -1,10 +1,11 @@
 import { Building2, Layers, Ruler, Tags, Wallet, Wrench } from "lucide-react";
 import { getSettings } from "@hishabai/core";
-import { bn, formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { requireSession, sessionWithData } from "@/lib/session";
 import { can } from "@hishabai/core";
 import {
@@ -18,10 +19,12 @@ import {
   WalletForm,
 } from "./settings-forms";
 
-export const metadata = { title: bn.nav.settings };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.settings };
+}
 
 export default async function SettingsPage() {
-  const { session, data } = await sessionWithData(getSettings);
+  const [{ session, data }, t] = await Promise.all([sessionWithData(getSettings), dict()]);
 
   // The nav already hides this page without the permission, but a typed URL
   // reaches it anyway — so the forms are gated here rather than only there.
@@ -30,16 +33,14 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{bn.nav.settings}</h1>
-        <p className="text-sm text-muted-foreground">
-          কোম্পানির তথ্য, পেমেন্ট মাধ্যম, একক ও খাত
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t.nav.settings}</h1>
+        <p className="text-sm text-muted-foreground">{t.settings.hint}</p>
       </div>
 
       {!editable ? (
         <Card>
           <CardBody className="text-sm text-muted-foreground">
-            সেটিংস দেখতে পারছেন, কিন্তু পরিবর্তন করতে অ্যাডমিন অনুমতি লাগবে।
+            {t.settings.readOnlyNotice}
           </CardBody>
         </Card>
       ) : null}
@@ -49,7 +50,7 @@ export default async function SettingsPage() {
           <CardTitle>
             <span className="inline-flex items-center gap-2">
               <Building2 className="size-4 text-primary" aria-hidden />
-              কোম্পানির তথ্য
+              {t.settings.companyProfile}
             </span>
           </CardTitle>
         </CardHeader>
@@ -58,10 +59,13 @@ export default async function SettingsPage() {
             <CompanyForm company={data.company} />
           ) : (
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Detail label="নাম" value={data.company.nameBn ?? data.company.name} />
-              <Detail label="ব্যবসার ধরন" value={data.company.businessType} />
-              <Detail label={bn.fields.phone} value={data.company.phone} />
-              <Detail label={bn.fields.address} value={data.company.address} />
+              <Detail
+                label={t.fields.name}
+                value={data.company.nameBn ?? data.company.name}
+              />
+              <Detail label={t.settings.businessType} value={data.company.businessType} />
+              <Detail label={t.fields.phone} value={data.company.phone} />
+              <Detail label={t.fields.address} value={data.company.address} />
             </dl>
           )}
         </CardBody>
@@ -72,21 +76,21 @@ export default async function SettingsPage() {
           <CardTitle>
             <span className="inline-flex items-center gap-2">
               <Wallet className="size-4 text-primary" aria-hidden />
-              {bn.fields.paymentMethod}
+              {t.fields.paymentMethod}
             </span>
           </CardTitle>
           <span className="text-xs text-muted-foreground">
-            ব্যালেন্স খাতা থেকে আসে, হাতে বদলানো যায় না
+            {t.settings.walletsBalanceNote}
           </span>
         </CardHeader>
 
         <TableScroll narrow>
           <THead>
             <TR>
-              <TH>নাম</TH>
-              <TH>ধরন</TH>
-              <TH numeric>প্রারম্ভিক</TH>
-              <TH numeric>বর্তমান ব্যালেন্স</TH>
+              <TH>{t.settings.nameColumn}</TH>
+              <TH>{t.settings.kindColumn}</TH>
+              <TH numeric>{t.settings.openingColumn}</TH>
+              <TH numeric>{t.settings.currentBalanceColumn}</TH>
               {editable ? <TH /> : null}
             </TR>
           </THead>
@@ -97,12 +101,12 @@ export default async function SettingsPage() {
                   <span className="font-medium">{wallet.nameBn}</span>
                   {wallet.isDefault ? (
                     <Badge tone="neutral" className="ml-2">
-                      ডিফল্ট
+                      {t.settings.isDefault}
                     </Badge>
                   ) : null}
                   {!wallet.isActive ? (
                     <Badge tone="neutral" className="ml-2">
-                      বন্ধ
+                      {t.settings.disabled}
                     </Badge>
                   ) : null}
                   {wallet.bankName || wallet.accountNumber ? (
@@ -113,8 +117,8 @@ export default async function SettingsPage() {
                   ) : null}
                 </TD>
                 <TD className="text-muted-foreground">
-                  {bn.financialAccountKind[wallet.kind]}
-                  {wallet.mfsProvider ? ` · ${bn.mfsProvider[wallet.mfsProvider]}` : ""}
+                  {t.financialAccountKind[wallet.kind]}
+                  {wallet.mfsProvider ? ` · ${t.mfsProvider[wallet.mfsProvider]}` : ""}
                 </TD>
                 <TD numeric>
                   <MoneyText
@@ -134,7 +138,7 @@ export default async function SettingsPage() {
                         id={wallet.id}
                         name={wallet.nameBn}
                         disabled={wallet.isDefault}
-                        {...(wallet.isDefault ? { disabledReason: "ডিফল্ট মাধ্যম" } : {})}
+                        {...(wallet.isDefault ? { disabledReason: t.settings.defaultMethod } : {})}
                       />
                     ) : null}
                   </TD>
@@ -157,7 +161,7 @@ export default async function SettingsPage() {
             <CardTitle>
               <span className="inline-flex items-center gap-2">
                 <Tags className="size-4 text-primary" aria-hidden />
-                আয়-ব্যয়ের খাত
+                {t.settings.categories}
               </span>
             </CardTitle>
           </CardHeader>
@@ -165,8 +169,8 @@ export default async function SettingsPage() {
           <TableScroll narrow>
             <THead>
               <TR>
-                <TH>খাত</TH>
-                <TH>ধরন</TH>
+                <TH>{t.settings.categoryColumn}</TH>
+                <TH>{t.settings.kindColumn}</TH>
                 {editable ? <TH /> : null}
               </TR>
             </THead>
@@ -181,7 +185,7 @@ export default async function SettingsPage() {
                   </TD>
                   <TD>
                     <Badge tone={category.type === "income" ? "credit" : "debit"}>
-                      {bn.transactionType[category.type]}
+                      {t.transactionType[category.type]}
                     </Badge>
                   </TD>
                   {editable ? (
@@ -191,7 +195,7 @@ export default async function SettingsPage() {
                         id={category.id}
                         name={category.nameBn}
                         disabled={category.isSystem}
-                        {...(category.isSystem ? { disabledReason: "সিস্টেম খাত" } : {})}
+                        {...(category.isSystem ? { disabledReason: t.settings.systemCategory } : {})}
                       />
                     </TD>
                   ) : null}
@@ -213,7 +217,7 @@ export default async function SettingsPage() {
               <CardTitle>
                 <span className="inline-flex items-center gap-2">
                   <Ruler className="size-4 text-primary" aria-hidden />
-                  একক
+                  {t.fields.unit}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -221,9 +225,9 @@ export default async function SettingsPage() {
             <TableScroll narrow>
               <THead>
                 <TR>
-                  <TH>নাম</TH>
-                  <TH>সংক্ষিপ্ত</TH>
-                  <TH numeric>পণ্য</TH>
+                  <TH>{t.settings.nameColumn}</TH>
+                  <TH>{t.settings.abbreviationColumn}</TH>
+                  <TH numeric>{t.settings.productsColumn}</TH>
                   {editable ? <TH /> : null}
                 </TR>
               </THead>
@@ -243,7 +247,11 @@ export default async function SettingsPage() {
                           name={unit.nameBn}
                           disabled={unit.productCount > 0}
                           {...(unit.productCount > 0
-                            ? { disabledReason: `${unit.productCount} টি পণ্যে ব্যবহৃত` }
+                            ? {
+                                disabledReason: t.settings.usedInProducts(
+                                  String(unit.productCount),
+                                ),
+                              }
                             : {})}
                         />
                       </TD>
@@ -265,7 +273,7 @@ export default async function SettingsPage() {
               <CardTitle>
                 <span className="inline-flex items-center gap-2">
                   <Layers className="size-4 text-primary" aria-hidden />
-                  পণ্যের ক্যাটাগরি
+                  {t.settings.productCategories}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -303,18 +311,18 @@ export default async function SettingsPage() {
           <CardTitle>
             <span className="inline-flex items-center gap-2">
               <Wrench className="size-4 text-primary" aria-hidden />
-              {bn.fields.recipe}
+              {t.fields.recipe}
             </span>
           </CardTitle>
           <span className="text-xs text-muted-foreground">
-            উৎপাদন এন্ট্রিতে কাঁচামাল নিজে থেকেই বসাতে
+            {t.settings.recipesHint}
           </span>
         </CardHeader>
 
         <CardBody className="space-y-3">
           {data.recipes.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              কোনো রেসিপি নেই। রেসিপি ছাড়াও উৎপাদন এন্ট্রি করা যায় — এটি শুধু টাইপ করা কমায়।
+              {t.settings.noRecipes}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -328,7 +336,7 @@ export default async function SettingsPage() {
                       {recipe.nameBn ?? recipe.outputProductNameBn}
                       {recipe.expectedYieldPercent ? (
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {bn.fields.yield}{" "}
+                          {t.fields.yield}{" "}
                           {formatPercent(moneyFromDb(recipe.expectedYieldPercent))}
                         </span>
                       ) : null}

@@ -3,8 +3,9 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
-import { PRODUCT_KINDS, bn, type ProductKind } from "@hishabai/shared";
+import { PRODUCT_KINDS, type ProductKind } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import {
   createPartyAction,
@@ -38,6 +39,7 @@ function Disclosure({
   label: string;
   children: (close: () => void) => React.ReactNode;
 }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
 
   if (!open) {
@@ -57,7 +59,7 @@ function Disclosure({
           type="button"
           onClick={() => setOpen(false)}
           className="-m-2 flex size-11 items-center justify-center text-muted-foreground hover:text-foreground"
-          aria-label={bn.actions.close}
+          aria-label={t.actions.close}
         >
           <X className="size-4" aria-hidden />
         </button>
@@ -123,6 +125,7 @@ export function PartyFields({
   onCancel?: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = React.useTransition();
   const { result, setResult, fieldErrors, summary } = useCreateResult<CreatedParty>();
 
@@ -162,25 +165,25 @@ export function PartyFields({
           fieldId="name"
           error={fieldErrors["name"]}
         >
-          <FieldLabel required>{bn.fields.name}</FieldLabel>
+          <FieldLabel required>{t.fields.name}</FieldLabel>
           <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="মায়ের দোয়া ট্রেডার্স"
+            placeholder={t.masterData.partyNamePlaceholder}
             autoFocus
             required
           />
         </Field>
 
         <Field>
-          <FieldLabel required>ধরন</FieldLabel>
+          <FieldLabel required>{t.masterData.typeLabel}</FieldLabel>
           <Select
             value={type}
             onChange={(event) => setType(event.target.value as typeof type)}
           >
-            <option value="customer">{bn.fields.customer}</option>
-            <option value="vendor">{bn.fields.vendor}</option>
-            <option value="both">{bn.fields.party}</option>
+            <option value="customer">{t.fields.customer}</option>
+            <option value="vendor">{t.fields.vendor}</option>
+            <option value="both">{t.fields.party}</option>
           </Select>
         </Field>
 
@@ -188,7 +191,7 @@ export function PartyFields({
           fieldId="phone"
           error={fieldErrors["phone"]}
         >
-          <FieldLabel>{bn.fields.phone}</FieldLabel>
+          <FieldLabel>{t.fields.phone}</FieldLabel>
           <Input
             inputMode="tel"
             value={phone}
@@ -202,11 +205,11 @@ export function PartyFields({
           error={fieldErrors["openingBalance"]}
           hint={
             type === "vendor"
-              ? "আগে থেকে যত টাকা পাওনা আছে"
-              : "আগে থেকে যত টাকা বকেয়া আছে"
+              ? t.masterData.openingPayableHint
+              : t.masterData.openingReceivableHint
           }
         >
-          <FieldLabel>{bn.fields.openingBalance}</FieldLabel>
+          <FieldLabel>{t.fields.openingBalance}</FieldLabel>
           <Input
             inputMode="decimal"
             value={openingBalance}
@@ -219,9 +222,9 @@ export function PartyFields({
           <Field
             fieldId="creditLimit"
             error={fieldErrors["creditLimit"]}
-            hint="এর বেশি বাকি পড়লে বিক্রির সময় সতর্ক করা হবে — বিক্রি আটকাবে না"
+            hint={t.masterData.creditLimitHint}
           >
-            <FieldLabel>{bn.fields.creditLimit}</FieldLabel>
+            <FieldLabel>{t.fields.creditLimit}</FieldLabel>
             <Input
               inputMode="decimal"
               value={creditLimit}
@@ -233,7 +236,7 @@ export function PartyFields({
       </div>
 
       <Field>
-        <FieldLabel>{bn.fields.address}</FieldLabel>
+        <FieldLabel>{t.fields.address}</FieldLabel>
         <Textarea
           rows={2}
           value={address}
@@ -243,11 +246,11 @@ export function PartyFields({
 
       <div className="flex gap-2">
         <Button type="button" loading={pending} onClick={submit}>
-          {bn.actions.saveShort}
+          {t.actions.saveShort}
         </Button>
         {onCancel ? (
           <Button type="button" variant="secondary" onClick={onCancel}>
-            {bn.actions.close}
+            {t.actions.close}
           </Button>
         ) : null}
       </div>
@@ -256,8 +259,12 @@ export function PartyFields({
 }
 
 export function AddPartyPanel({ type }: { type: "customer" | "vendor" }) {
+  const t = useT();
+
   return (
-    <Disclosure label={type === "vendor" ? "নতুন ভেন্ডর" : "নতুন কাস্টমার"}>
+    <Disclosure
+      label={type === "vendor" ? t.masterData.newVendor : t.masterData.newCustomer}
+    >
       {(close) => <PartyFields defaultType={type} onCancel={close} />}
     </Disclosure>
   );
@@ -279,6 +286,7 @@ export function ProductFields({
   onCancel?: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = React.useTransition();
   const { result, setResult, fieldErrors, summary } = useCreateResult<CreatedProduct>();
 
@@ -331,31 +339,31 @@ export function ProductFields({
           fieldId="nameBn"
           error={fieldErrors["nameBn"]}
         >
-          <FieldLabel required>{bn.fields.product}</FieldLabel>
+          <FieldLabel required>{t.fields.product}</FieldLabel>
           <Input
             value={nameBn}
             onChange={(event) => setNameBn(event.target.value)}
-            placeholder="অফসেট পেপার"
+            placeholder={t.masterData.productNamePlaceholder}
             autoFocus
             required
           />
         </Field>
 
         <Field>
-          <FieldLabel required>ধরন</FieldLabel>
+          <FieldLabel required>{t.masterData.typeLabel}</FieldLabel>
           <Select value={kind} onChange={(event) => setKind(event.target.value as ProductKind)}>
             {PRODUCT_KINDS.map((option) => (
               <option key={option} value={option}>
-                {bn.productKind[option]}
+                {t.productKind[option]}
               </option>
             ))}
           </Select>
         </Field>
 
-        <Field error={fieldErrors["unitId"]} hint="কেজি, পিস, রোল — সেটিংস থেকে যোগ করা যায়">
-          <FieldLabel required>{bn.fields.unit}</FieldLabel>
+        <Field error={fieldErrors["unitId"]} hint={t.masterData.unitHint}>
+          <FieldLabel required>{t.fields.unit}</FieldLabel>
           <Select value={unitId} onChange={(event) => setUnitId(event.target.value)} required>
-            <option value="">— নির্বাচন করুন —</option>
+            <option value="">{t.masterData.choosePrompt}</option>
             {units.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.nameBn} ({option.symbol})
@@ -365,9 +373,9 @@ export function ProductFields({
         </Field>
 
         <Field>
-          <FieldLabel>ক্যাটাগরি</FieldLabel>
+          <FieldLabel>{t.masterData.categoryLabel}</FieldLabel>
           <Select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-            <option value="">— নেই —</option>
+            <option value="">{t.masterData.nonePrompt}</option>
             {categories.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.nameBn}
@@ -380,7 +388,7 @@ export function ProductFields({
           fieldId="purchasePrice"
           error={fieldErrors["purchasePrice"]}
         >
-          <FieldLabel>{bn.fields.purchasePrice}</FieldLabel>
+          <FieldLabel>{t.fields.purchasePrice}</FieldLabel>
           <Input
             inputMode="decimal"
             value={purchasePrice}
@@ -393,7 +401,7 @@ export function ProductFields({
           fieldId="salePrice"
           error={fieldErrors["salePrice"]}
         >
-          <FieldLabel>{bn.fields.salePrice}</FieldLabel>
+          <FieldLabel>{t.fields.salePrice}</FieldLabel>
           <Input
             inputMode="decimal"
             value={salePrice}
@@ -402,8 +410,8 @@ export function ProductFields({
           />
         </Field>
 
-        <Field hint="এর নিচে নামলে বিজ্ঞপ্তি পাবেন">
-          <FieldLabel>{bn.fields.minStock}</FieldLabel>
+        <Field hint={t.masterData.minStockHint}>
+          <FieldLabel>{t.fields.minStock}</FieldLabel>
           <Input
             inputMode="decimal"
             value={minStockLevel}
@@ -416,12 +424,10 @@ export function ProductFields({
           fieldId="openingQuantity"
           error={fieldErrors["openingQuantity"]}
           hint={
-            unit
-              ? `আজ গুদামে যত ${unit.symbol} আছে — খাতায় প্রারম্ভিক স্টক হিসেবে বসবে`
-              : undefined
+            unit ? t.masterData.openingStockHint(unit.symbol) : undefined
           }
         >
-          <FieldLabel>প্রারম্ভিক স্টক</FieldLabel>
+          <FieldLabel>{t.masterData.openingStock}</FieldLabel>
           <Input
             inputMode="decimal"
             value={openingQuantity}
@@ -431,8 +437,8 @@ export function ProductFields({
         </Field>
 
         {openingQuantity ? (
-          <Field hint="খালি রাখলে ক্রয় মূল্য ধরা হবে">
-            <FieldLabel>প্রারম্ভিক স্টকের দর</FieldLabel>
+          <Field hint={t.masterData.openingStockRateHint}>
+            <FieldLabel>{t.masterData.openingStockRate}</FieldLabel>
             <Input
               inputMode="decimal"
               value={openingRate}
@@ -445,11 +451,11 @@ export function ProductFields({
 
       <div className="flex gap-2">
         <Button type="button" loading={pending} onClick={submit}>
-          {bn.actions.saveShort}
+          {t.actions.saveShort}
         </Button>
         {onCancel ? (
           <Button type="button" variant="secondary" onClick={onCancel}>
-            {bn.actions.close}
+            {t.actions.close}
           </Button>
         ) : null}
       </div>
@@ -464,8 +470,10 @@ export function AddProductPanel({
   units: UnitChoice[];
   categories: CategoryChoice[];
 }) {
+  const t = useT();
+
   return (
-    <Disclosure label="নতুন পণ্য">
+    <Disclosure label={t.masterData.newProduct}>
       {(close) => <ProductFields units={units} categories={categories} onCancel={close} />}
     </Disclosure>
   );
