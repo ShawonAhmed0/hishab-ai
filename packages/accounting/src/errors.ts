@@ -29,7 +29,11 @@ export type PostingErrorCode =
   | "INVALID_AMOUNT"
   | "PRODUCTION_COST_UNPAID"
   | "WASTAGE_NOT_AN_INPUT"
-  | "EMPTY_TRANSACTION";
+  | "EMPTY_TRANSACTION"
+  | "INSUFFICIENT_FUNDS"
+  | "OVER_CREDIT_LIMIT"
+  | "RISKY_PARTY"
+  | "NEGATIVE_CAPITAL";
 
 export class PostingError extends Error {
   readonly code: PostingErrorCode;

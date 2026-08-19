@@ -30,13 +30,16 @@ import {
   money,
   moneyFromDb,
   multiplyRate,
+  percentOfMoney,
   qty,
   qtyFromDb,
   scaleQty,
   subMoney,
   subQty,
   type Dictionary,
+  type DiscountType,
   type Money,
+  type OverridableRule,
   type Qty,
   type TransactionType,
 } from "@hishabai/shared";
@@ -520,7 +523,10 @@ export function EntryForm({
   const [transportCost, setTransportCost] = React.useState("");
   const [laborCost, setLaborCost] = React.useState("");
   const [otherCost, setOtherCost] = React.useState("");
+  // R3.4: what the "other cost" actually was. Unset keeps the old posting.
+  const [otherCostAccountId, setOtherCostAccountId] = React.useState("");
   const [discount, setDiscount] = React.useState("");
+  const [discountType, setDiscountType] = React.useState<DiscountType>("amount");
   const [payments, setPayments] = React.useState<PaymentState[]>([
     {
       key: newKey(),
@@ -557,6 +563,10 @@ export function EntryForm({
   // only for as long as the dialog is open.
   const [blockedPayload, setBlockedPayload] = React.useState<unknown>(null);
   const [pin, setPin] = React.useState("");
+  // Every rule the person has been shown and agreed to on this entry. Sent
+  // with the PIN so the server relaxes those and nothing else — a rule they
+  // have not seen comes back as a fresh refusal and a fresh dialog.
+  const [overrideRules, setOverrideRules] = React.useState<OverridableRule[]>([]);
 
   // The probable duplicate — spec R2.2. Separate from `blockedPayload`
   // because it is a different kind of dialog: a question with a link in it,
@@ -588,12 +598,19 @@ export function EntryForm({
     [payments],
   );
 
+  // Preview only — the server resolves the percentage against its own subtotal
+  // and discards whatever this worked out to.
+  const discountAmount = React.useMemo<Money>(() => {
+    const value = money(discount || "0");
+    return discountType === "percent" ? percentOfMoney(subtotal, value) : value;
+  }, [discount, discountType, subtotal]);
+
   const total = React.useMemo<Money>(() => {
     if (NEEDS_CATEGORY.includes(type) || type === "customer_payment" || type === "vendor_payment") {
       return paidTotal;
     }
-    return subMoney(addMoney(subtotal, charges), money(discount || "0"));
-  }, [type, subtotal, charges, discount, paidTotal]);
+    return subMoney(addMoney(subtotal, charges), discountAmount);
+  }, [type, subtotal, charges, discountAmount, paidTotal]);
 
   const due = subMoney(total, paidTotal);
 
@@ -647,7 +664,9 @@ export function EntryForm({
     setTransportCost("");
     setLaborCost("");
     setOtherCost("");
+    setOtherCostAccountId("");
     setDiscount("");
+    setDiscountType("amount");
     setSource("manual");
     setRecipeId("");
     setBatchCount("1");
@@ -806,6 +825,8 @@ export function EntryForm({
           transportCost: transportCost || "0",
           laborCost: laborCost || "0",
           otherCost: otherCost || "0",
+          ...(otherCostAccountId ? { otherCostAccountId } : {}),
+          discountType,
           discount: discount || "0",
         };
       case "sale_return":
@@ -865,7 +886,10 @@ export function EntryForm({
    */
   function save(
     payload: unknown,
-    options: { override?: { pin: string }; confirmDuplicate?: boolean } = {},
+    options: {
+      override?: { pin: string; rules: OverridableRule[] };
+      confirmDuplicate?: boolean;
+    } = {},
   ) {
     setResult(null);
 
@@ -877,6 +901,7 @@ export function EntryForm({
         setBlockedPayload(null);
         setDuplicatePayload(null);
         setPin("");
+        setOverrideRules([]);
         toast.success(
           `${t.messages.saved} — ${outcome.voucherNo}`,
           t.entry.savedTotal(formatMoney(money(outcome.total))),
@@ -889,9 +914,16 @@ export function EntryForm({
 
       if (outcome.canOverride) {
         setBlockedPayload(payload);
+        if (outcome.blockedRule) {
+          const rule = outcome.blockedRule;
+          setOverrideRules((current) =>
+            current.includes(rule) ? current : [...current, rule],
+          );
+        }
       } else {
         setBlockedPayload(null);
         setPin("");
+        setOverrideRules([]);
       }
 
       setDuplicatePayload(outcome.duplicate ? payload : null);
@@ -1248,13 +1280,62 @@ export function EntryForm({
                   <FieldLabel>{t.fields.laborCost}</FieldLabel>
                   <Input numeric value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" />
                 </Field>
-                <Field>
+                {/*
+                  R3.4. Naming it moves it: expensed to this খাত on a purchase
+                  instead of going into the goods, billed to it on a sale.
+                */}
+                <Field hint={otherCost ? t.entry.otherCostHint : undefined}>
                   <FieldLabel>{t.fields.otherCost}</FieldLabel>
-                  <Input numeric value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" />
+                  <div className="flex gap-2">
+                    <Input
+                      numeric
+                      value={otherCost}
+                      onChange={(e) => setOtherCost(e.target.value)}
+                      placeholder="0"
+                    />
+                    <Select
+                      aria-label={t.entry.otherCostCategory}
+                      className="w-40 shrink-0"
+                      value={otherCostAccountId}
+                      onChange={(e) => setOtherCostAccountId(e.target.value)}
+                    >
+                      <option value="">{t.entry.otherCostUnnamed}</option>
+                      {(VENDOR_SIDE.includes(type) ? expenseCategories : incomeCategories).map(
+                        (category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.nameBn}
+                          </option>
+                        ),
+                      )}
+                    </Select>
+                  </div>
                 </Field>
-                <Field>
+                {/* R3.4: how the discount is expressed, then the figure. */}
+                <Field
+                  hint={
+                    discountType === "percent" && discountAmount > 0n
+                      ? t.entry.discountWorksOutTo(formatMoney(discountAmount))
+                      : undefined
+                  }
+                >
                   <FieldLabel>{t.fields.discount}</FieldLabel>
-                  <Input numeric value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
+                  <div className="flex gap-2">
+                    <Select
+                      aria-label={t.entry.discountType}
+                      className="w-32 shrink-0"
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value as DiscountType)}
+                    >
+                      <option value="amount">{t.entry.discountAmount}</option>
+                      <option value="percent">{t.entry.discountPercent}</option>
+                    </Select>
+                    <Input
+                      numeric
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
                 </Field>
               </div>
             ) : null}
@@ -1705,6 +1786,7 @@ export function EntryForm({
           if (!next) {
             setBlockedPayload(null);
             setPin("");
+            setOverrideRules([]);
           }
         }}
         blocking
@@ -1724,6 +1806,7 @@ export function EntryForm({
               onClick={() => {
                 setBlockedPayload(null);
                 setPin("");
+                setOverrideRules([]);
               }}
             >
               {t.actions.cancel}
@@ -1733,7 +1816,9 @@ export function EntryForm({
               loading={pending}
               disabled={pin.trim().length < 4}
               onClick={() => {
-                if (blockedPayload !== null) save(blockedPayload, { override: { pin } });
+                if (blockedPayload !== null) {
+                  save(blockedPayload, { override: { pin, rules: overrideRules } });
+                }
               }}
             >
               {t.override.submit}
@@ -1754,7 +1839,7 @@ export function EntryForm({
               if (event.key === "Enter") {
                 event.preventDefault();
                 if (blockedPayload !== null && pin.trim().length >= 4) {
-                  save(blockedPayload, { override: { pin } });
+                  save(blockedPayload, { override: { pin, rules: overrideRules } });
                 }
               }
             }}

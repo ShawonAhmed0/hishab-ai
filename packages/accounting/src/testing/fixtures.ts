@@ -14,6 +14,7 @@ import {
   type Money,
   type Qty,
 } from "@hishabai/shared";
+import type { AccountType } from "@hishabai/shared";
 import type {
   ControlAccounts,
   FinancialAccountRef,
@@ -76,10 +77,49 @@ export const CONTROL_ACCOUNTS: ControlAccounts = {
   stock_adjustment: ID.stockAdjustment,
 };
 
+/** Funded, so a test has to opt into being short rather than opt out. */
 export const WALLETS: ReadonlyMap<string, FinancialAccountRef> = new Map([
-  [ID.cashWallet, { id: ID.cashWallet, accountId: ID.cashGl, kind: "cash", nameBn: "নগদ" }],
-  [ID.bankWallet, { id: ID.bankWallet, accountId: ID.bankGl, kind: "bank", nameBn: "ব্যাংক" }],
-  [ID.bkashWallet, { id: ID.bkashWallet, accountId: ID.bkashGl, kind: "mfs", nameBn: "বিকাশ" }],
+  [
+    ID.cashWallet,
+    { id: ID.cashWallet, accountId: ID.cashGl, kind: "cash", nameBn: "নগদ", balance: money("1000000") },
+  ],
+  [
+    ID.bankWallet,
+    { id: ID.bankWallet, accountId: ID.bankGl, kind: "bank", nameBn: "ব্যাংক", balance: money("1000000") },
+  ],
+  [
+    ID.bkashWallet,
+    { id: ID.bkashWallet, accountId: ID.bkashGl, kind: "mfs", nameBn: "বিকাশ", balance: money("1000000") },
+  ],
+]);
+
+/** A wallet with a stated balance, for the R3.1 cases. */
+export function wallet(id: string, balance: Money): FinancialAccountRef {
+  const base = WALLETS.get(id);
+  if (!base) throw new Error(`unknown wallet fixture ${id}`);
+  return { ...base, balance };
+}
+
+/**
+ * Every account the engine can post to, by type — spec R3.3.
+ *
+ * The control accounts are fixed; a test that names its own খাত adds it.
+ */
+export const ACCOUNT_TYPES: ReadonlyMap<string, AccountType> = new Map([
+  [ID.receivable, "asset"],
+  [ID.payable, "liability"],
+  [ID.inventory, "asset"],
+  [ID.cashGl, "asset"],
+  [ID.bankGl, "asset"],
+  [ID.bkashGl, "asset"],
+  [ID.sales, "income"],
+  [ID.salesReturn, "income"],
+  [ID.otherIncome, "income"],
+  [ID.cogs, "expense"],
+  [ID.wastage, "expense"],
+  [ID.stockAdjustment, "expense"],
+  [ID.rentExpense, "expense"],
+  [ID.serviceIncome, "income"],
 ]);
 
 export interface ProductSeed {
@@ -149,6 +189,9 @@ export function makeContext(
     date: "2026-08-16",
     accounts: CONTROL_ACCOUNTS,
     financialAccounts: WALLETS,
+    accountTypes: ACCOUNT_TYPES,
+    // Solvent by default, so a test has to opt into being broke.
+    equity: money("1000000"),
     allowNegativeStock: false,
     ...rest,
     products,

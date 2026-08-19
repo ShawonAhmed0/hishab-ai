@@ -323,6 +323,13 @@ export const onboarding = {
  */
 export const entry = {
   motto: "একবার লিখুন — হিসাব, স্টক আর বকেয়া নিজে থেকেই ঠিক হয়ে যাবে",
+  discountType: "ছাড়ের ধরন",
+  discountAmount: "টাকায়",
+  discountPercent: "শতাংশ",
+  discountWorksOutTo: (amount: string) => `ছাড় দাঁড়াচ্ছে ${amount}`,
+  otherCostCategory: "অন্যান্য খরচের খাত",
+  otherCostUnnamed: "খাত ছাড়া",
+  otherCostHint: "খাত বেছে নিলে খরচটি সেই খাতে যাবে — পণ্যের দামে যোগ হবে না",
   showMoreTypes: "আরও ধরন দেখান",
   showFewerTypes: "কম দেখান",
   details: "বিস্তারিত",
@@ -946,6 +953,14 @@ export const blocked = {
   duplicateMemo: (memoNo: string, voucher: string) =>
     `${memoNo} নম্বর চালান আগেই আছে — ${voucher}।`,
   duplicateMemoNumber: (memoNo: string) => `${memoNo} নম্বর চালান আগেই আছে।`,
+  insufficientFunds: (wallet: string, available: string, requested: string) =>
+    `${wallet} — এত টাকা নেই। বর্তমান ব্যালেন্স ${available}, দেওয়া হচ্ছে ${requested}।`,
+  overCreditLimit: (party: string, limit: string, projected: string) =>
+    `${party} — ক্রেডিট সীমা ${limit} ছাড়িয়ে যাচ্ছে। এই বিলের পর বকেয়া দাঁড়াবে ${projected}।`,
+  riskyParty: (party: string) =>
+    `${party} — অনেক দিনের পুরনো বকেয়া আছে, তাই নতুন বাকিতে বিক্রয় করা যাবে না।`,
+  negativeCapital: (available: string, requested: string) =>
+    `ব্যবসার মূলধন ঋণাত্মক হয়ে যাবে। বর্তমান মূলধন ${available}, এই এন্ট্রিতে কমছে ${requested}।`,
 } as const;
 
 /**
@@ -979,6 +994,7 @@ export const override = {
   notAdmin: "শুধু অ্যাডমিন এই বাধা এড়াতে পারেন।",
   notOverridable: "এই বাধাটি এড়ানো যায় না।",
   recorded: "নিয়ম এড়ানো হয়েছে — হিসাবের খাতায় লেখা হয়েছে।",
+  recordedRule: (rule: string) => `নিয়ম এড়ানো হয়েছে — ${rule}`,
   setTitle: "ওভাররাইড PIN",
   setDescription:
     "স্টক না থাকা সত্ত্বেও বিক্রয়ের মতো এন্ট্রি সংরক্ষণ করতে এই PIN লাগবে। শুধু অ্যাডমিনের জন্য।",

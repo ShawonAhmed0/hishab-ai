@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { normalizeDigits, parseFixed } from "./decimal";
-import { TRANSACTION_SOURCES } from "./types";
+import { DISCOUNT_TYPES, TRANSACTION_SOURCES } from "./types";
 
 /**
  * Every id the client sends is a uuid it picked from a dropdown, so the only
@@ -95,6 +95,28 @@ const tradeCosts = {
   transportCost: moneyString.default("0"),
   laborCost: moneyString.default("0"),
   otherCost: moneyString.default("0"),
+  /**
+   * Spec R3.4. What the "other cost" actually was, chosen from the chart of
+   * accounts, and it *posts* there rather than decorating the entry:
+   *
+   *   - on a purchase it is expensed to this account instead of being
+   *     capitalised into the goods, because "other" is by definition the
+   *     bucket that is neither freight nor labour, and burying an unnamed lump
+   *     in stock valuation is how stock value drifts from reality;
+   *   - on a sale it is the income account the charge is billed to, instead of
+   *     the generic অন্যান্য আয়.
+   *
+   * Left unset, both behave exactly as they did before — freight and labour
+   * are untouched either way, since those are textbook product costs.
+   */
+  otherCostAccountId: uuid.optional(),
+  /**
+   * Spec R3.4. `discountType` says what `discount` means — a flat ৳ figure, or
+   * a percentage of the subtotal that the *server* resolves. The client never
+   * sends the resolved figure: a browser that computed 10% of the wrong
+   * subtotal would otherwise have its answer believed.
+   */
+  discountType: z.enum(DISCOUNT_TYPES).default("amount"),
   discount: moneyString.default("0"),
 };
 

@@ -18,10 +18,12 @@ import {
   money,
   moneyToDb,
   multiplyRate,
+  percentOfMoney,
   qty,
   subMoney,
   subQty,
   sumMoney,
+  type DiscountType,
   type LineInput,
   type Money,
   type PaymentInput,
@@ -60,6 +62,8 @@ export function postTransaction(
         "Transaction produced no journal lines.",
       );
     }
+    assertCapitalSurvives(journalLines, context);
+
     const result: PostingResult = {
       type: input.type,
       journalLines,
@@ -104,11 +108,22 @@ type Build = (
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Wallet by wallet, in the order the user listed them — spec R3.1.
+ *
+ * Running, not per-payment: two ৳6,000 payments out of a wallet holding
+ * ৳10,000 are individually fine and together are not, and it is the second one
+ * the message has to name.
+ *
+ * Money coming *in* is never checked. A wallet cannot be made too full.
+ */
 function resolvePayments(
   context: PostingContext,
   payments: readonly PaymentInput[],
   direction: "in" | "out",
 ): PaymentDraft[] {
+  const remaining = new Map<string, Money>();
+
   return payments.map((payment) => {
     const wallet = context.financialAccounts.get(payment.financialAccountId);
     if (!wallet) {
@@ -118,10 +133,29 @@ function resolvePayments(
         `Unknown financial account ${payment.financialAccountId}`,
       );
     }
+
+    const amount = money(payment.amount);
+    if (direction === "out" && !context.allowOverdraft) {
+      const available = remaining.get(wallet.id) ?? wallet.balance;
+      if (cmpMoney(amount, available) > 0) {
+        throw new PostingError(
+          "INSUFFICIENT_FUNDS",
+          {
+            rule: "insufficientFunds",
+            wallet: wallet.nameBn,
+            available: formatMoney(available),
+            requested: formatMoney(amount),
+          },
+          `Wallet ${wallet.id} holds ${moneyToDb(available)}, paying out ${moneyToDb(amount)}`,
+        );
+      }
+      remaining.set(wallet.id, subMoney(available, amount));
+    }
+
     const draft: PaymentDraft = {
       financialAccountId: wallet.id,
       accountId: wallet.accountId,
-      amount: money(payment.amount),
+      amount,
       direction,
     };
     if (payment.handledByUserId) draft.handledByUserId = payment.handledByUserId;
@@ -147,6 +181,20 @@ function assertPaymentWithinTotal(paid: Money, total: Money): void {
       "Payment exceeds transaction total.",
     );
   }
+}
+
+/**
+ * The taka a discount actually comes to — spec R3.4.
+ *
+ * A percentage is resolved here, against the subtotal the engine computed, and
+ * never against whatever the browser thought the subtotal was.
+ */
+function resolveDiscount(
+  input: { discountType?: DiscountType; discount: string },
+  subtotal: Money,
+): Money {
+  const value = money(input.discount);
+  return input.discountType === "percent" ? percentOfMoney(subtotal, value) : value;
 }
 
 function assertNonNegativeTotal(total: Money, discount: Money): void {
@@ -195,7 +243,7 @@ function postSaleSide(
   const charges = isReturn
     ? ZERO
     : addMoney(money(input.transportCost), money(input.laborCost), money(input.otherCost));
-  const discount = isReturn ? ZERO : money(input.discount);
+  const discount = isReturn ? ZERO : resolveDiscount(input, subtotal);
   const total = subMoney(addMoney(subtotal, charges), discount);
   assertNonNegativeTotal(total, discount);
 
@@ -217,7 +265,8 @@ function postSaleSide(
     // receipt as two separate movements (spec §13).
     journal.debit(accounts.receivable, total, { partyId: input.partyId });
     journal.credit(accounts.sales, subMoney(subtotal, discount));
-    journal.credit(accounts.other_income, charges, {
+    // R3.4: billed to the খাত the user picked, when they picked one.
+    journal.credit(input.otherCostAccountId ?? accounts.other_income, charges, {
       narration: "পরিবহন/লেবার/অন্যান্য আদায়",
     });
     for (const payment of payments) {
@@ -226,27 +275,35 @@ function postSaleSide(
     }
   }
 
-  // ক্রেডিট সীমা. A warning rather than a refusal: the limit is the
-  // shopkeeper's own note to themselves, and they are standing at the counter
-  // with the customer in front of them. Telling them is the useful part.
+  // ক্রেডিট সীমা — spec R3.2. A refusal since Phase 3, where it used to be a
+  // warning. Only when the entry actually leaves something owing: a ৳16,000
+  // sale paid for in full at the counter puts nothing on the limit.
   const { party } = context;
-  if (!isReturn && party?.creditLimit != null && party.creditLimit > ZERO) {
-    const after = addMoney(party.receivable, netReceivable);
-    if (cmpMoney(after, party.creditLimit) > 0) {
-      warnings.push({
-        code: "OVER_CREDIT_LIMIT",
-        reason: {
-          rule: "overCreditLimit",
-          party: party.name,
-          limit: formatMoney(party.creditLimit),
-          projected: formatMoney(after),
-        },
-        details: {
-          partyId: party.id,
-          creditLimit: moneyToDb(party.creditLimit),
-          projected: moneyToDb(after),
-        },
-      });
+  if (!isReturn && party && netReceivable > ZERO && !context.allowOverCredit) {
+    // The red band takes precedence and needs no limit to be set. A party
+    // whose oldest bill has been unpaid this long is not a credit question.
+    if (party.ageing === "risky") {
+      throw new PostingError(
+        "RISKY_PARTY",
+        { rule: "riskyParty", party: party.name },
+        `Party ${party.id} is in the risky ageing band`,
+      );
+    }
+
+    if (party.creditLimit != null && party.creditLimit > ZERO) {
+      const after = addMoney(party.receivable, netReceivable);
+      if (cmpMoney(after, party.creditLimit) > 0) {
+        throw new PostingError(
+          "OVER_CREDIT_LIMIT",
+          {
+            rule: "overCreditLimit",
+            party: party.name,
+            limit: formatMoney(party.creditLimit),
+            projected: formatMoney(after),
+          },
+          `Party ${party.id} would owe ${moneyToDb(after)} against a limit of ${moneyToDb(party.creditLimit)}`,
+        );
+      }
     }
   }
 
@@ -318,7 +375,7 @@ function postPurchaseSide(
   const charges = isReturn
     ? ZERO
     : addMoney(money(input.transportCost), money(input.laborCost), money(input.otherCost));
-  const discount = isReturn ? ZERO : money(input.discount);
+  const discount = isReturn ? ZERO : resolveDiscount(input, subtotal);
   const total = subMoney(addMoney(subtotal, charges), discount);
   assertNonNegativeTotal(total, discount);
 
@@ -344,8 +401,14 @@ function postPurchaseSide(
       narration: "ক্রয় ফেরতে মূল্য পার্থক্য",
     });
   } else {
+    // R3.4. Freight and labour stay in the goods; a named "other" cost is a
+    // period cost and leaves the stock valuation alone. What the vendor is
+    // owed is `total` either way — only the debit side splits.
+    const expensed = input.otherCostAccountId ? money(input.otherCost) : ZERO;
+    const capitalised = subMoney(total, expensed);
+
     const quantities = input.lines.map((line) => qty(line.quantity));
-    const shares = allocateMoney(total, allocationWeights(amounts, quantities));
+    const shares = allocateMoney(capitalised, allocationWeights(amounts, quantities));
 
     for (const [index, line] of input.lines.entries()) {
       const share = shares[index] ?? ZERO;
@@ -353,7 +416,12 @@ function postPurchaseSide(
       stock.in(line.productId, quantity, share, "purchase");
     }
 
-    journal.debit(accounts.inventory, total);
+    journal.debit(accounts.inventory, capitalised);
+    if (expensed !== ZERO) {
+      journal.debit(input.otherCostAccountId!, expensed, {
+        narration: "ক্রয়ের অন্যান্য খরচ",
+      });
+    }
     journal.credit(accounts.payable, total, { partyId: input.partyId });
     for (const payment of payments) {
       journal.debit(accounts.payable, payment.amount, { partyId: input.partyId });
@@ -639,3 +707,46 @@ function postManualEntry(
 
 /** Re-exported for callers that persist drafts. */
 export type { JournalLineDraft };
+
+/**
+ * The business cannot be worth less than nothing — spec R3.3.
+ *
+ * Net equity is `equity + income − expenses`, which is the same arithmetic on
+ * both sides: every one of those is credit-normal once an expense is read as a
+ * negative, so the delta this entry makes is `Σ(credit − debit)` over its own
+ * lines on accounts of those three types. The current figure comes from
+ * `journal_lines`, never from a balance column.
+ *
+ * Checked here, in `build`, because every posting path funnels through it —
+ * there is no entry type that gets to skip this.
+ */
+function assertCapitalSurvives(
+  journalLines: readonly JournalLineDraft[],
+  context: PostingContext,
+): void {
+  if (context.allowNegativeCapital) return;
+
+  let delta = ZERO;
+  for (const line of journalLines) {
+    const type = context.accountTypes.get(line.accountId);
+    if (type !== "equity" && type !== "income" && type !== "expense") continue;
+    delta = addMoney(delta, subMoney(line.credit, line.debit));
+  }
+
+  // Only a fall can break it. An entry that leaves equity where it was, or
+  // raises it, is never the reason the number is negative.
+  if (delta >= ZERO) return;
+
+  const after = addMoney(context.equity, delta);
+  if (after >= ZERO) return;
+
+  throw new PostingError(
+    "NEGATIVE_CAPITAL",
+    {
+      rule: "negativeCapital",
+      available: formatMoney(context.equity),
+      requested: formatMoney(-delta as Money),
+    },
+    `Entry would take capital from ${moneyToDb(context.equity)} to ${moneyToDb(after)}`,
+  );
+}

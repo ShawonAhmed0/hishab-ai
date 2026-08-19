@@ -1,0 +1,2 @@
+ALTER TABLE "transactions" ADD COLUMN "discount_type" varchar(10) DEFAULT 'amount' NOT NULL;--> statement-breakpoint
+ALTER TABLE "transactions" ADD COLUMN "discount_value" numeric(18, 4) DEFAULT '0' NOT NULL;

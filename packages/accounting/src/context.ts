@@ -7,6 +7,7 @@
  */
 import type {
   AccountSubtype,
+  AccountType,
   FinancialAccountKind,
   Money,
   ProductKind,
@@ -39,6 +40,13 @@ export interface FinancialAccountRef {
   accountId: string;
   kind: FinancialAccountKind;
   nameBn: string;
+  /**
+   * What is in the wallet before this entry — spec R3.1.
+   *
+   * Read from `financial_accounts.balance`, which is trigger-maintained from
+   * `journal_lines`. Never assigned; see CLAUDE.md.
+   */
+  balance: Money;
 }
 
 export interface ProductState {
@@ -63,12 +71,23 @@ export interface ProductState {
  * `creditLimit` is null when no limit was set, which is not the same as a
  * limit of zero — the second would mean "no credit at all".
  */
+/**
+ * How long this party's oldest unpaid charge has been sitting — spec R5.2.
+ *
+ * Derived on read from `journal_lines`, never stored: a band held in a column
+ * is stale the morning after it is written, which is the cache mistake in a
+ * new place.
+ */
+export type AgeingBand = "healthy" | "slow" | "risky";
+
 export interface PartyState {
   id: string;
   name: string;
   /** Outstanding before this transaction. */
   receivable: Money;
   creditLimit: Money | null;
+  /** R3.2: a party in the red band takes no new credit at all. */
+  ageing: AgeingBand;
 }
 
 export interface PostingContext {
@@ -82,12 +101,29 @@ export interface PostingContext {
   /** The party the entry names, when it names one. */
   party?: PartyState;
   /**
+   * The type of every account this entry could touch, so the engine can tell
+   * which of its own lines move equity — spec R3.3. Control accounts and the
+   * খাত the client chose; everything else the engine does not post to.
+   */
+  accountTypes: ReadonlyMap<string, AccountType>;
+  /**
+   * Net equity before this entry: equity + income − expenses, summed from
+   * `journal_lines`. Never a cached balance column.
+   */
+  equity: Money;
+  /**
    * Selling stock the books have never received is refused (spec R1.1/R1.3),
    * so this defaults to false. It is set true in exactly two places: a
    * cancellation, which must always be postable no matter what stock has done
    * since, and an entry an admin has authorised with their override PIN.
    */
   allowNegativeStock?: boolean;
+  /** R3.1 — an admin authorised paying out of a wallet that cannot cover it. */
+  allowOverdraft?: boolean;
+  /** R3.2 — an admin authorised a sale past the limit, or to a risky party. */
+  allowOverCredit?: boolean;
+  /** R3.3 — an admin authorised an entry that drives capital negative. */
+  allowNegativeCapital?: boolean;
 }
 
 export interface JournalLineDraft {

@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 100 passing instead of 175. Check the count.
+skip** and you get 129 passing instead of 213. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -229,9 +229,31 @@ exactly two places — `reverseTransaction`, because a cancellation must always 
 postable no matter what stock has done since, and an entry an admin has
 authorised. Everything else refuses.
 
-A breached **ক্রেডিট সীমা is still a warning**, unchanged. It is the
-shopkeeper's own note to themselves about a customer standing in front of them,
-and nothing goes missing when it is exceeded.
+Phase 3 extended the same treatment to four more rules, each with its own
+`allow…` flag on `PostingContext` and each off by default:
+
+| Rule | Refuses when | Reads |
+|---|---|---|
+| `negativeStock` | the books never received it | `product_stock`, by trigger |
+| `insufficientFunds` | the wallet cannot cover a payment out | `financial_accounts.balance`, by trigger |
+| `overCreditLimit` | the sale takes the party past their limit | `party_balances`, by trigger |
+| `riskyParty` | their oldest unpaid bill is in the red band | `journal_lines`, on read |
+| `negativeCapital` | the entry leaves equity below zero | `journal_lines`, on read |
+
+`insufficientFunds` is checked **per wallet, running** — two ৳6,000 payments
+out of ৳10,000 are each fine and together are not, and it is the second one the
+message names. Money coming *in* is never checked; a wallet cannot be too full.
+
+`negativeCapital` is checked in `build`, which every posting path funnels
+through, so no entry type gets to skip it. The delta is `Σ(credit − debit)`
+over the entry's own lines on equity, income and expense accounts — those three
+are the same arithmetic once an expense is read as a negative. An entry that
+raises equity, or moves none at all, is never refused: a purchase is asset for
+liability and an insolvent company can still record one.
+
+The credit limit **used to be a warning** and is now a refusal, and only when
+the entry actually leaves something owing — a bill paid in full at the counter
+puts nothing on the limit.
 
 ### The override
 
@@ -244,6 +266,13 @@ alone is not one of them:
 3. an `audit_logs` row with `action = 'override'` records the rule and the
    values, written inside the posting transaction so an entry that rolls back
    leaves no claim behind.
+
+The request names **which rules** it authorises, and the server relaxes those
+and nothing else. An admin who was told "the wallet does not hold this" and
+typed their PIN has authorised *that*; if the entry then turns out to bankrupt
+the company they are told and asked again. One dialog, one rule, one audit row
+— `relaxationsFor` is where that mapping lives, and there is deliberately no
+blanket "allow everything".
 
 The PIN is scrypt-hashed in `override_credentials`, which is a table of its own
 rather than a column on `company_members` — `membership_visibility` shows every
@@ -268,6 +297,57 @@ be the `NAV_ITEMS` mistake in a new place; `messageBn` is a getter over the
 Bengali dictionary, for logs and audit summaries that have no request locale.
 Adding a rule to `BlockedReason` without a case in `blockedMessage` is a compile
 error at the `never`.
+
+## Naming a cost moves it
+
+Spec R3.4. পরিবহন and লেবার on a purchase are **capitalised into the goods** —
+landed cost, deliberately, and `transaction_lines.allocated_cost` exists for it.
+That has not changed and should not: they are textbook product costs.
+
+`otherCostAccountId` is different. "Other" is by definition the bucket that is
+neither, and an unnamed lump buried in stock valuation is how stock value drifts
+away from what the godown is actually worth. So when the user names it:
+
+- **on a purchase** it is expensed to that খাত instead of going into the goods.
+  What the vendor is owed is unchanged — only the debit side splits, and the
+  stock movement is written at the capitalised figure alone;
+- **on a sale** it is the income খাত the charge is billed to, instead of the
+  generic অন্যান্য আয়.
+
+Leave it unset and both behave exactly as before. It is a third client-chosen
+id, so `collectAccountIds` proves it against a company-scoped read like the
+other two — see "RLS does not check the ids you *write*".
+
+A discount is the same shape: `discountType` says whether `discount` is taka or
+a percentage, and the **server** resolves a percentage against its own subtotal.
+`transactions.discount` holds the taka it came to; `discount_value` and
+`discount_type` hold what the user actually typed, so a reprinted invoice still
+says "10%" rather than a figure nobody at the counter recognises.
+
+## Ageing is derived, every time
+
+`packages/core/src/ageing.ts`. A party's band is computed from `journal_lines`
+on read and stored nowhere: a band in a column is right the day it is written
+and wrong the morning after, which is the cache mistake in its fourth costume.
+
+`transactions.due_amount` is no use here either — it is a posting-time snapshot
+never revisited when the payment lands, so ageing it would report every bill as
+unpaid for ever.
+
+Settlement is **FIFO**: a payment pays off the oldest bill, so what is still
+outstanding is the *newest* set of charges. The age that matters is the date at
+which the running total of charges, counted newest first, first covers the
+outstanding balance. That is what the window function in `loadAgeing` computes,
+and the band boundaries are a pure function beside it so they can be tested at
+the day.
+
+The thresholds live in `companies.settings` (`creditPolicyFrom`), because "30
+days" is a trading convention rather than a fact. `creditPeriodDays` defaults to
+**0**, so out of the box "overdue" means "outstanding" and the bands fire at 30
+and 60 days from the bill itself — which is what those numbers read as to a
+shopkeeper. Anything malformed in that jsonb falls back to the default rather
+than throwing: a bad settings blob must not be able to stop every entry in the
+company.
 
 ## The same entry, twice
 

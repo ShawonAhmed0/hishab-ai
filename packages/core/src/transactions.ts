@@ -51,6 +51,7 @@ import {
   isOverridable,
   type AuditAction,
   type BlockedReason,
+  type OverridableRule,
   type Money,
   type TransactionInput,
   type TransactionStatus,
@@ -128,13 +129,13 @@ async function postWithOverrides(
   },
 ): Promise<{ result: PostingResult; overrides: BlockedReason[] }> {
   const overrides: BlockedReason[] = [];
-  let allowNegativeStock = false;
+  const relaxed = new Set<OverridableRule>();
 
   for (;;) {
     try {
       const result = postTransaction(args.input, {
         ...args.context,
-        allowNegativeStock,
+        ...relaxationsFor(relaxed),
       });
       return { result, overrides };
     } catch (error) {
@@ -143,7 +144,10 @@ async function postWithOverrides(
         !(error instanceof PostingError) ||
         !isOverridable(error.reason.rule) ||
         !override ||
-        overrides.some((done) => done.rule === error.reason.rule)
+        // Only the rules the person was shown and agreed to. A rule they have
+        // not seen is a fresh refusal, and they get asked about it.
+        !override.rules.includes(error.reason.rule) ||
+        relaxed.has(error.reason.rule)
       ) {
         throw error;
       }
@@ -154,9 +158,25 @@ async function postWithOverrides(
         transactionId: args.transactionId,
       });
       overrides.push(error.reason);
-      if (error.reason.rule === "negativeStock") allowNegativeStock = true;
+      relaxed.add(error.reason.rule);
     }
   }
+}
+
+/**
+ * One flag per rule, and never a blanket "allow everything".
+ *
+ * An admin who authorised selling stock they do not have has not thereby
+ * authorised paying out of an empty wallet, so each relaxation is turned on by
+ * the rule that was actually overridden and by nothing else.
+ */
+function relaxationsFor(relaxed: ReadonlySet<OverridableRule>) {
+  return {
+    allowNegativeStock: relaxed.has("negativeStock"),
+    allowOverdraft: relaxed.has("insufficientFunds"),
+    allowOverCredit: relaxed.has("overCreditLimit") || relaxed.has("riskyParty"),
+    allowNegativeCapital: relaxed.has("negativeCapital"),
+  };
 }
 
 /**
@@ -289,7 +309,13 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
     transportCost: "transportCost" in input ? moneyToDb(money(input.transportCost)) : "0",
     laborCost: "laborCost" in input ? moneyToDb(money(input.laborCost)) : "0",
     otherCost: "otherCost" in input ? moneyToDb(money(input.otherCost)) : "0",
-    discount: "discount" in input ? moneyToDb(money(input.discount)) : "0",
+    otherCostAccountId:
+      "otherCostAccountId" in input ? (input.otherCostAccountId ?? null) : null,
+    // The engine's figure, not the input's: on a percentage discount the input
+    // holds "10" and the taka it works out to is what the books record.
+    discount: moneyToDb(result.totals.discount),
+    discountType: "discountType" in input ? input.discountType : "amount",
+    discountValue: "discount" in input ? moneyToDb(money(input.discount)) : "0",
     total: moneyToDb(result.totals.total),
     paidAmount: moneyToDb(result.totals.paid),
     dueAmount: moneyToDb(result.totals.due),

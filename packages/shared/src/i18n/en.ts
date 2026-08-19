@@ -297,6 +297,16 @@ export const en: Dictionary = {
 
   entry: {
     motto: "Write it once — the books, the stock and the dues sort themselves out",
+    discountType: "Discount type",
+    // "Flat", not "Taka": the formatter owns the ৳ sign, and a currency word
+    // in a label doubles it up. The spec's own wording is "flat amount".
+    discountAmount: "Flat",
+    discountPercent: "Percent",
+    discountWorksOutTo: (amount: string) => `Discount comes to ${amount}`,
+    otherCostCategory: "Other cost category",
+    otherCostUnnamed: "No category",
+    otherCostHint:
+      "Pick a category and the cost posts there instead of being added to what the goods cost",
     showMoreTypes: "Show more types",
     showFewerTypes: "Show fewer",
     details: "Details",
@@ -867,6 +877,14 @@ export const en: Dictionary = {
     duplicateMemo: (memoNo: string, voucher: string) =>
       `Chalan number ${memoNo} already exists — ${voucher}.`,
     duplicateMemoNumber: (memoNo: string) => `Chalan number ${memoNo} already exists.`,
+    insufficientFunds: (wallet: string, available: string, requested: string) =>
+      `${wallet} does not hold that much. Balance: ${available}, paying out: ${requested}.`,
+    overCreditLimit: (party: string, limit: string, projected: string) =>
+      `${party} is going past their credit limit of ${limit}. After this bill they would owe ${projected}.`,
+    riskyParty: (party: string) =>
+      `${party} has dues long overdue, so no new credit sale can be made to them.`,
+    negativeCapital: (available: string, requested: string) =>
+      `This would leave the business with negative capital. Capital now: ${available}, this entry reduces it by ${requested}.`,
   },
 
   duplicate: {
@@ -900,6 +918,7 @@ export const en: Dictionary = {
     notAdmin: "Only an admin can override this.",
     notOverridable: "This block cannot be overridden.",
     recorded: "Rule overridden — written to the audit log.",
+    recordedRule: (rule: string) => `Overridden — ${rule}`,
     setTitle: "Override PIN",
     setDescription:
       "This PIN is what lets you save an entry a rule blocked — a sale of stock the books have not received, for instance. Admins only.",

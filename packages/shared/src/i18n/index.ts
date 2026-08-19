@@ -88,6 +88,14 @@ export function blockedMessage(reason: BlockedReason, t: Dictionary): string {
       return t.blocked.duplicateMemo(reason.memoNo, reason.voucher);
     case "duplicateMemoNumber":
       return t.blocked.duplicateMemoNumber(reason.memoNo);
+    case "insufficientFunds":
+      return t.blocked.insufficientFunds(reason.wallet, reason.available, reason.requested);
+    case "overCreditLimit":
+      return t.blocked.overCreditLimit(reason.party, reason.limit, reason.projected);
+    case "riskyParty":
+      return t.blocked.riskyParty(reason.party);
+    case "negativeCapital":
+      return t.blocked.negativeCapital(reason.available, reason.requested);
     default: {
       const exhaustive: never = reason;
       return exhaustive;

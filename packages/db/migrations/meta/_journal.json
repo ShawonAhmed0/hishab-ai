@@ -15,6 +15,20 @@
       "when": 1787161312923,
       "tag": "0001_override_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787169708582,
+      "tag": "0002_discount_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787170116812,
+      "tag": "0003_other_cost_account",
+      "breakpoints": true
     }
   ]
 }

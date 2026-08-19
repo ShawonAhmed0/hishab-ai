@@ -88,6 +88,20 @@ export function allocateMoney(total: Money, weights: readonly bigint[]): Money[]
   return allocate(total, weights) as Money[];
 }
 
+/**
+ * A percentage of an amount — spec R3.4's percentage discount.
+ *
+ * `percent` is itself a `Money`, because that is what the 1e4 scale is for:
+ * 12.5% arrives as `money("12.5")` and keeps four decimal places of precision
+ * rather than being rounded to a whole percent on the way in.
+ *
+ * Rounds the way `scaleMoney` does, so a discount and the total it came off
+ * still add back up.
+ */
+export function percentOfMoney(amount: Money, percent: Money): Money {
+  return scaleMoney(amount, percent, 100n * MONEY_UNIT);
+}
+
 export function divideMoney(a: Money, divisor: bigint): Money {
   return divRound(a, divisor) as Money;
 }

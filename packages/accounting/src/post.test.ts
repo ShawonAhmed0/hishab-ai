@@ -15,6 +15,7 @@ import {
   type TransactionInput,
 } from "@hishabai/shared";
 import { postTransaction } from "./post";
+import type { PartyState } from "./context";
 import { reverseTransaction } from "./reverse";
 import { PostingError } from "./errors";
 import {
@@ -24,6 +25,7 @@ import {
   netOn,
   product,
   totalOf,
+  wallet,
 } from "./testing/fixtures";
 
 const parse = (input: unknown): TransactionInput => transactionInputSchema.parse(input);
@@ -1012,5 +1014,354 @@ describe("validation at the schema boundary", () => {
     });
     const result = postTransaction(input, makeContext());
     expect(moneyToDb(result.totals.total)).toBe("80000.0000");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 — the financial checkpoints
+// ---------------------------------------------------------------------------
+
+describe("R3.1 — the wallet has to hold it", () => {
+  const expense = (amounts: string[]) =>
+    parse({
+      ...base,
+      type: "expense",
+      categoryAccountId: ID.rentExpense,
+      payments: amounts.map((amount) => ({
+        financialAccountId: ID.cashWallet,
+        amount,
+      })),
+    });
+
+  const withCash = (balance: string) =>
+    makeContext({
+      financialAccounts: new Map([[ID.cashWallet, wallet(ID.cashWallet, money(balance))]]),
+    });
+
+  it("refuses a payment the wallet cannot cover, and says by how much", () => {
+    try {
+      postTransaction(expense(["15000"]), withCash("10000"));
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).code).toBe("INSUFFICIENT_FUNDS");
+      expect((error as PostingError).reason).toEqual({
+        rule: "insufficientFunds",
+        wallet: "নগদ",
+        available: "৳ 10,000.00",
+        requested: "৳ 15,000.00",
+      });
+    }
+  });
+
+  it("counts two payments out of one wallet together, not separately", () => {
+    // ৳6,000 twice is fine line by line and is not fine in total. It is the
+    // second one the refusal has to name.
+    try {
+      postTransaction(expense(["6000", "6000"]), withCash("10000"));
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).reason).toMatchObject({
+        rule: "insufficientFunds",
+        available: "৳ 4,000.00",
+        requested: "৳ 6,000.00",
+      });
+    }
+  });
+
+  it("says nothing about money coming in — a wallet cannot be too full", () => {
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "income",
+        categoryAccountId: ID.serviceIncome,
+        payments: [{ financialAccountId: ID.cashWallet, amount: "99999" }],
+      }),
+      withCash("0"),
+    );
+    expectBalanced(result.journalLines);
+  });
+
+  it("lets an authorised entry overdraw", () => {
+    const result = postTransaction(expense(["15000"]), {
+      ...withCash("10000"),
+      allowOverdraft: true,
+    });
+    expect(moneyToDb(result.totals.total)).toBe("15000.0000");
+  });
+});
+
+describe("R3.2 — ক্রেডিট সীমা refuses, where it used to warn", () => {
+  const customer = (over: Partial<PartyState> = {}): PartyState => ({
+    id: ID.customer,
+    name: "মায়ের দোয়া ট্রেডার্স",
+    receivable: money("20000"),
+    creditLimit: money("50000"),
+    ageing: "healthy",
+    ...over,
+  });
+
+  const creditSale = parse({
+    ...base,
+    type: "sale",
+    partyId: ID.customer,
+    lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "500", rate: "160" }],
+    payments: [],
+  });
+
+  it("refuses the sale that takes them past the limit", () => {
+    try {
+      postTransaction(creditSale, makeContext({ party: customer() }));
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).reason).toEqual({
+        rule: "overCreditLimit",
+        party: "মায়ের দোয়া ট্রেডার্স",
+        limit: "৳ 50,000.00",
+        projected: "৳ 1,00,000.00",
+      });
+    }
+  });
+
+  it("counts the payment, not the bill", () => {
+    // Paid in full at the counter: nothing is owed, so nothing is on credit.
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "sale",
+        partyId: ID.customer,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "500", rate: "160" }],
+        payments: [{ financialAccountId: ID.cashWallet, amount: "80000" }],
+      }),
+      makeContext({ party: customer() }),
+    );
+    expect(moneyToDb(result.totals.due)).toBe("0.0000");
+  });
+
+  it("refuses a party in the red band whatever their limit says", () => {
+    // Room to spare on the limit, and it makes no difference.
+    try {
+      postTransaction(
+        creditSale,
+        makeContext({
+          party: customer({ receivable: ZERO, creditLimit: money("500000"), ageing: "risky" }),
+        }),
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).reason).toEqual({
+        rule: "riskyParty",
+        party: "মায়ের দোয়া ট্রেডার্স",
+      });
+    }
+  });
+
+  it("lets a risky party pay cash", () => {
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "sale",
+        partyId: ID.customer,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "500", rate: "160" }],
+        payments: [{ financialAccountId: ID.cashWallet, amount: "80000" }],
+      }),
+      makeContext({ party: customer({ ageing: "risky" }) }),
+    );
+    expect(moneyToDb(result.totals.due)).toBe("0.0000");
+  });
+
+  it("says nothing about a sale return to a party over their limit", () => {
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "sale_return",
+        partyId: ID.customer,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "10", rate: "160" }],
+        payments: [],
+      }),
+      makeContext({ party: customer({ receivable: money("900000"), ageing: "risky" }) }),
+    );
+    expectBalanced(result.journalLines);
+  });
+});
+
+describe("R3.3 — the business cannot be worth less than nothing", () => {
+  const rent = (amount: string) =>
+    parse({
+      ...base,
+      type: "expense",
+      categoryAccountId: ID.rentExpense,
+      payments: [{ financialAccountId: ID.cashWallet, amount }],
+    });
+
+  it("refuses the expense that takes capital below zero", () => {
+    try {
+      postTransaction(rent("30000"), makeContext({ equity: money("25000") }));
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PostingError).code).toBe("NEGATIVE_CAPITAL");
+      expect((error as PostingError).reason).toEqual({
+        rule: "negativeCapital",
+        available: "৳ 25,000.00",
+        requested: "৳ 30,000.00",
+      });
+    }
+  });
+
+  it("allows the expense that lands exactly on zero", () => {
+    const result = postTransaction(rent("25000"), makeContext({ equity: money("25000") }));
+    expectBalanced(result.journalLines);
+  });
+
+  it("never blocks an entry that raises capital", () => {
+    // Already negative — an income entry is the way back out, not a further
+    // offence, so it must not be caught by the guard.
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "income",
+        categoryAccountId: ID.serviceIncome,
+        payments: [{ financialAccountId: ID.cashWallet, amount: "5000" }],
+      }),
+      makeContext({ equity: money("-40000") }),
+    );
+    expectBalanced(result.journalLines);
+  });
+
+  it("ignores an entry that moves no equity at all", () => {
+    // A purchase is asset for liability. It has no equity consequence, so an
+    // insolvent company can still record one.
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "purchase",
+        partyId: ID.vendor,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "10", rate: "100" }],
+        payments: [],
+      }),
+      makeContext({ equity: money("-40000") }),
+    );
+    expectBalanced(result.journalLines);
+  });
+
+  it("lets an authorised entry go negative", () => {
+    const result = postTransaction(rent("30000"), {
+      ...makeContext({ equity: money("25000") }),
+      allowNegativeCapital: true,
+    });
+    expect(moneyToDb(result.totals.total)).toBe("30000.0000");
+  });
+});
+
+describe("R3.4 — a discount can be a percentage", () => {
+  const sale = (discountType: "amount" | "percent", discount: string) =>
+    parse({
+      ...base,
+      type: "sale",
+      partyId: ID.customer,
+      lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "500", rate: "160" }],
+      discountType,
+      discount,
+      payments: [],
+    });
+
+  it("resolves the percentage against the server's own subtotal", () => {
+    // 10% of ৳80,000.
+    const result = postTransaction(sale("percent", "10"), makeContext());
+    expect(moneyToDb(result.totals.discount)).toBe("8000.0000");
+    expect(moneyToDb(result.totals.total)).toBe("72000.0000");
+    expectBalanced(result.journalLines);
+  });
+
+  it("keeps the fractional part of a fractional percent", () => {
+    // 12.5% of ৳80,000. Rounded to a whole percent on the way in this would
+    // be ৳400 out.
+    const result = postTransaction(sale("percent", "12.5"), makeContext());
+    expect(moneyToDb(result.totals.discount)).toBe("10000.0000");
+  });
+
+  it("still takes a flat figure, and defaults to one", () => {
+    expect(moneyToDb(postTransaction(sale("amount", "5000"), makeContext()).totals.discount))
+      .toBe("5000.0000");
+
+    const noType = parse({
+      ...base,
+      type: "sale",
+      partyId: ID.customer,
+      lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "500", rate: "160" }],
+      discount: "5000",
+      payments: [],
+    });
+    expect(moneyToDb(postTransaction(noType, makeContext()).totals.discount)).toBe("5000.0000");
+  });
+
+  it("refuses a percentage over 100 the same way it refuses too large a figure", () => {
+    expect(() => postTransaction(sale("percent", "150"), makeContext())).toThrow(
+      /INVALID_AMOUNT/,
+    );
+  });
+});
+
+describe("R3.4 — naming the other cost changes where it posts", () => {
+  const purchase = (otherCostAccountId?: string) =>
+    parse({
+      ...base,
+      type: "purchase",
+      partyId: ID.vendor,
+      lines: [{ productId: ID.jumbo, unitId: ID.unitKg, quantity: "100", rate: "100" }],
+      transportCost: "500",
+      otherCost: "2000",
+      ...(otherCostAccountId ? { otherCostAccountId } : {}),
+      payments: [],
+    });
+
+  it("capitalises an unnamed cost, exactly as before", () => {
+    const result = postTransaction(purchase(), makeContext());
+    // ৳10,000 goods + ৳500 freight + ৳2,000 other, all into the goods.
+    expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("12500.0000");
+    expect(moneyToDb(result.stockMovements[0]!.value)).toBe("12500.0000");
+    expectBalanced(result.journalLines);
+  });
+
+  it("expenses a named one, and leaves the stock valuation alone", () => {
+    const result = postTransaction(purchase(ID.rentExpense), makeContext());
+
+    // Freight is still a product cost; the named ৳2,000 is not.
+    expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("10500.0000");
+    expect(moneyToDb(result.stockMovements[0]!.value)).toBe("10500.0000");
+    expect(moneyToDb(netOn(result.journalLines, ID.rentExpense))).toBe("2000.0000");
+
+    // What the vendor is owed does not change — only the debit side splits.
+    expect(moneyToDb(netOn(result.journalLines, ID.payable))).toBe("-12500.0000");
+    expect(moneyToDb(result.totals.total)).toBe("12500.0000");
+    expectBalanced(result.journalLines);
+  });
+
+  it("counts an expensed cost against capital, since it is now an expense", () => {
+    expect(() =>
+      postTransaction(purchase(ID.rentExpense), makeContext({ equity: money("1500") })),
+    ).toThrow(/NEGATIVE_CAPITAL/);
+
+    // Unnamed, the same purchase moves no equity at all.
+    const capitalised = postTransaction(purchase(), makeContext({ equity: money("1500") }));
+    expectBalanced(capitalised.journalLines);
+  });
+
+  it("bills a sale's charges to the খাত the user picked", () => {
+    const result = postTransaction(
+      parse({
+        ...base,
+        type: "sale",
+        partyId: ID.customer,
+        lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "100", rate: "160" }],
+        transportCost: "300",
+        otherCostAccountId: ID.serviceIncome,
+        payments: [],
+      }),
+      makeContext(),
+    );
+
+    expect(moneyToDb(netOn(result.journalLines, ID.serviceIncome))).toBe("-300.0000");
+    expect(moneyToDb(netOn(result.journalLines, ID.otherIncome))).toBe("0.0000");
+    expectBalanced(result.journalLines);
   });
 });

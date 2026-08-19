@@ -18,6 +18,7 @@ import {
   isOverridable,
   moneyToDb,
   warnedMessage,
+  type OverridableRule,
 } from "@hishabai/shared";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
@@ -47,6 +48,12 @@ export interface EntryFailure {
    * on the retry regardless of what comes back here.
    */
   canOverride?: boolean;
+  /**
+   * The rule that refused, when an admin may push past it. The browser sends
+   * it back with the PIN, so the override authorises the rule the person was
+   * actually shown and nothing else — a second rule is a second dialog.
+   */
+  blockedRule?: OverridableRule;
   /** Why the PIN attempt itself failed, when one was made. */
   overrideError?: OverrideError["kind"];
   /**
@@ -67,7 +74,10 @@ export type EntryResult = EntrySuccess | EntryFailure;
  */
 export async function createEntryAction(
   rawInput: unknown,
-  options: { override?: { pin: string }; confirmDuplicate?: boolean } = {},
+  options: {
+    override?: { pin: string; rules: OverridableRule[] };
+    confirmDuplicate?: boolean;
+  } = {},
 ): Promise<EntryResult> {
   const session = await requireSession();
 
@@ -89,7 +99,9 @@ export async function createEntryAction(
       previousDue: moneyToDb(result.previousDue),
       newDue: moneyToDb(addMoney(result.previousDue, result.totals.due)),
       warnings: [
-        ...result.overrides.map(() => t.override.recorded),
+        ...result.overrides.map((reason) =>
+          t.override.recordedRule(blockedMessage(reason, t)),
+        ),
         ...result.warnings.map((w) => warnedMessage(w.reason, t)),
       ],
     };
@@ -111,13 +123,19 @@ export async function createEntryAction(
     // renders in whichever language this request is being served in.
     if (error instanceof PostingError) {
       const t = await dict();
-      return {
-        ok: false,
-        error: blockedMessage(error.reason, t),
-        // Only an admin may push past one, and only some rules may be pushed
-        // past at all. Both are checked again on the retry.
-        canOverride: isOverridable(error.reason.rule) && session.role === "admin",
-      };
+      const message = blockedMessage(error.reason, t);
+      const rule = error.reason.rule;
+      // Only an admin may push past one, and only some rules may be pushed
+      // past at all. Both are checked again on the retry.
+      if (isOverridable(rule)) {
+        return {
+          ok: false,
+          error: message,
+          canOverride: session.role === "admin",
+          blockedRule: rule,
+        };
+      }
+      return { ok: false, error: message };
     }
 
     // The PIN itself was wrong, missing, or the role was not admin. The entry

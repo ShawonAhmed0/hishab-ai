@@ -91,9 +91,18 @@ export class OverrideError extends Error {
   }
 }
 
-/** What the client sends alongside an entry it wants pushed through. */
+/**
+ * What the client sends alongside an entry it wants pushed through.
+ *
+ * `rules` is the list the person has actually been shown and agreed to, not a
+ * blanket permission. An admin who was told "the wallet does not hold this"
+ * and typed their PIN has authorised *that*; if the same entry then turns out
+ * to bankrupt the company, they get told and asked again. One PIN, one dialog,
+ * one rule — and the audit log has a row for each.
+ */
 export interface OverrideRequest {
   pin: string;
+  rules: readonly OverridableRule[];
 }
 
 /**

@@ -61,7 +61,21 @@ export const transactions = pgTable(
     transportCost: moneyColumn("transport_cost").notNull().default(ZERO_NUMERIC),
     laborCost: moneyColumn("labor_cost").notNull().default(ZERO_NUMERIC),
     otherCost: moneyColumn("other_cost").notNull().default(ZERO_NUMERIC),
+    /**
+     * R3.4. Where the "other cost" was posted, when the user named it —
+     * expensed on a purchase, billed as income on a sale. Null keeps the old
+     * behaviour: capitalised into the goods, or credited to অন্যান্য আয়.
+     */
+    otherCostAccountId: uuid("other_cost_account_id").references(() => accounts.id),
+    /** What the discount came to in taka — resolved by the server. */
     discount: moneyColumn("discount").notNull().default(ZERO_NUMERIC),
+    /**
+     * How it was expressed, and the figure the user typed — spec R3.4. Kept
+     * so a reprinted invoice still reads "10%" rather than a taka figure
+     * nobody at the counter recognises.
+     */
+    discountType: varchar("discount_type", { length: 10 }).notNull().default("amount"),
+    discountValue: moneyColumn("discount_value").notNull().default(ZERO_NUMERIC),
     total: moneyColumn("total").notNull().default(ZERO_NUMERIC),
     paidAmount: moneyColumn("paid_amount").notNull().default(ZERO_NUMERIC),
     dueAmount: moneyColumn("due_amount").notNull().default(ZERO_NUMERIC),

@@ -24,7 +24,7 @@ import {
   withTenant,
   withUser,
 } from "@hishabai/db";
-import { money, moneyToDb, subMoney } from "@hishabai/shared";
+import { money, moneyToDb, subMoney, todayIso } from "@hishabai/shared";
 import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
 import { createFinancialAccount } from "./companies";
 import { getDashboard } from "./dashboard";
@@ -50,6 +50,7 @@ import { getNotifications, markAllNotificationsRead } from "./notifications";
 import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./duplicates";
+import { loadAgeing } from "./ageing";
 import type { Session } from "./session";
 
 const hasDatabase = Boolean(process.env["DATABASE_URL"]);
@@ -958,6 +959,27 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
     });
   });
 
+  // X.2. R3.4 adds a third id the client picks, so it gets the same proof as
+  // the other two rather than inheriting their trust.
+  it("refuses a purchase whose cost খাত belongs to another company", async () => {
+    const strayAccountId = await accountBySubtype(rival, "operating_expense");
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "purchase",
+        date: "2026-08-18",
+        source: "manual",
+        partyId: await seedParty(tenant, "খাতের ভেন্ডর", "vendor"),
+        lines: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "1", rate: "100" }],
+        otherCost: "50",
+        otherCostAccountId: strayAccountId,
+        payments: [],
+      }),
+    ).rejects.toMatchObject({
+      messageBn: expect.stringContaining("এই কোম্পানির নয়"),
+    });
+  });
+
   it("refuses a sale billed to another company's party", async () => {
     const strayPartyId = await seedParty(rival, "অন্য কোম্পানির কাস্টমার");
 
@@ -1416,12 +1438,10 @@ describeDb("ক্রেডিট সীমা", () => {
     await closeDb();
   }, 60_000);
 
-  it("warns when a sale takes the customer past their limit, and posts anyway", async () => {
-    // The limit is the shopkeeper's own note to themselves, and they are at
-    // the counter with the customer in front of them. Refusing the sale would
-    // be the app overruling the person who set the limit; telling them is the
-    // useful part. It was collected, stored, shown on the ledger — and checked
-    // by nothing at all.
+  // Spec R3.2. This reverses what Phase 1 left alone: the limit used to warn
+  // and post. It now refuses, and the refusal reads off the real receivable,
+  // which is derived from journal_lines by trigger.
+  it("refuses the sale that takes the customer past their limit", async () => {
     const partyId = await createParty(tenant.session, {
       name: "সীমিত কাস্টমার",
       type: "customer",
@@ -1436,29 +1456,26 @@ describeDb("ক্রেডিট সীমা", () => {
       lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
       payments: [],
     });
-    expect(under.warnings.map((w) => w.code)).not.toContain("OVER_CREDIT_LIMIT");
+    expect(under.voucherNo).toMatch(/^SALE-\d{6}$/);
 
-    const over = await createTransaction(tenant.session, {
-      type: "sale",
-      date: "2026-08-17",
-      source: "manual",
-      partyId,
-      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
-      payments: [],
+    await expect(
+      createTransaction(tenant.session, {
+        type: "sale",
+        date: "2026-08-17",
+        source: "manual",
+        partyId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+        payments: [],
+      }),
+    ).rejects.toMatchObject({
+      code: "OVER_CREDIT_LIMIT",
+      reason: {
+        rule: "overCreditLimit",
+        party: "সীমিত কাস্টমার",
+        limit: "৳ 10,000.00",
+        projected: "৳ 16,000.00",
+      },
     });
-
-    const warning = over.warnings.find((w) => w.code === "OVER_CREDIT_LIMIT");
-    expect(warning).toBeDefined();
-    expect(warning?.reason).toMatchObject({
-      rule: "overCreditLimit",
-      party: "সীমিত কাস্টমার",
-    });
-    // Warned, not refused — the voucher exists.
-    expect(over.voucherNo).toMatch(/^SALE-\d{6}$/);
-
-    // And it is kept, so whoever opens the books tomorrow still sees it.
-    const view = await getNotifications(tenant.session);
-    expect(view.notifications.some((n) => n.type === "OVER_CREDIT_LIMIT")).toBe(true);
   });
 
   it("says nothing about a customer with no limit set", async () => {
@@ -1667,7 +1684,7 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
             lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
             payments: [],
           },
-          { override: { pin: PIN } },
+          { override: { pin: PIN, rules: ["negativeStock"] } },
         ),
       ).rejects.toMatchObject({ name: "OverrideError", kind: "no_pin" });
     });
@@ -1693,7 +1710,7 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
             lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
             payments: [],
           },
-          { override: { pin: "9999" } },
+          { override: { pin: "9999", rules: ["negativeStock"] } },
         ),
       ).rejects.toMatchObject({ name: "OverrideError", kind: "wrong_pin" });
 
@@ -1714,7 +1731,7 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
             lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "160" }],
             payments: [],
           },
-          { override: { pin: PIN } },
+          { override: { pin: PIN, rules: ["negativeStock"] } },
         ),
       ).rejects.toMatchObject({ name: "OverrideError", kind: "not_admin" });
     });
@@ -1732,7 +1749,7 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
           lines: [{ productId, unitId: tenant.unitKgId, quantity: "25", rate: "160" }],
           payments: [],
         },
-        { override: { pin: PIN } },
+        { override: { pin: PIN, rules: ["negativeStock"] } },
       );
 
       expect(sale.overrides).toEqual([
@@ -1777,7 +1794,7 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
           lines: [{ productId, unitId: tenant.unitKgId, quantity: "15", rate: "160" }],
           payments: [],
         },
-        { override: { pin: "৪৮২১" } },
+        { override: { pin: "৪৮২১", rules: ["negativeStock"] } },
       );
       expect(sale.overrides).toHaveLength(1);
     });
@@ -1974,5 +1991,337 @@ describeDb("একই এন্ট্রি দুবার", () => {
         ),
       ).rejects.toMatchObject({ name: "DuplicateMemoError" });
     });
+  });
+});
+
+/**
+ * Spec R3.1, R3.2 and R3.3. All three read numbers the database derives —
+ * `financial_accounts.balance` and the equity sum over `journal_lines` — so
+ * they can only be proven against the real triggers.
+ */
+describeDb("টাকার হিসাবের বাধা", () => {
+  let tenant: Tenant;
+  let customerId: string;
+  let productId: string;
+
+  const PIN = "7788";
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Funds");
+    customerId = await seedParty(tenant, "টাকার কাস্টমার", "customer");
+    productId = await createProduct(tenant.session, {
+      nameBn: "টাকার পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "80",
+      openingQuantity: "10000",
+      openingRate: "50",
+    });
+    await updateOverridePin(tenant.session, PIN);
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  async function walletBalance(): Promise<string> {
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ balance: string }>(sql`
+        select balance::text as balance from financial_accounts
+         where id = ${tenant.cashWalletId}::uuid
+      `),
+    );
+    return (rows as unknown as { balance: string }[])[0]!.balance;
+  }
+
+  function spend(amount: string, date: string, categoryAccountId: string) {
+    return createTransaction(tenant.session, {
+      type: "expense",
+      date,
+      source: "manual",
+      categoryAccountId,
+      payments: [{ financialAccountId: tenant.cashWalletId, amount }],
+    });
+  }
+
+  async function expenseAccount(): Promise<string> {
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ id: string }>(sql`
+        select id from accounts
+         where company_id = ${tenant.companyId}::uuid
+           and type = 'expense' and is_category = true
+         limit 1
+      `),
+    );
+    return (rows as unknown as { id: string }[])[0]!.id;
+  }
+
+  it("refuses to pay out of a wallet that does not hold it", async () => {
+    // The wallet starts empty, and the balance it reads is the one the
+    // trigger maintains — nothing here assigns it.
+    expect(await walletBalance()).toBe("0.0000");
+
+    await expect(spend("5000", "2026-08-16", await expenseAccount())).rejects.toMatchObject({
+      code: "INSUFFICIENT_FUNDS",
+      reason: { rule: "insufficientFunds", available: "৳ 0.00", requested: "৳ 5,000.00" },
+    });
+  });
+
+  it("lets the same payment through once the money is actually there", async () => {
+    // Cash sale: ৳80,000 in, through the journal like everything else.
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-16",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "1000", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "80000" }],
+    });
+    expect(await walletBalance()).toBe("80000.0000");
+
+    const paid = await spend("5000", "2026-08-17", await expenseAccount());
+    expect(paid.voucherNo).toMatch(/^EXP/);
+    expect(await walletBalance()).toBe("75000.0000");
+  });
+
+  it("takes an admin's PIN to overdraw, and records it", async () => {
+    const category = await expenseAccount();
+
+    const overdrawn = await createTransaction(
+      tenant.session,
+      {
+        type: "expense",
+        date: "2026-08-18",
+        source: "manual",
+        categoryAccountId: category,
+        // Overdraws the ৳75,000 in the wallet without touching the capital
+        // guard — one override authorises one rule, and this test is about that one.
+        payments: [{ financialAccountId: tenant.cashWalletId, amount: "100000" }],
+      },
+      { override: { pin: PIN, rules: ["insufficientFunds"] } },
+    );
+
+    expect(overdrawn.overrides.map((o) => o.rule)).toEqual(["insufficientFunds"]);
+
+    const rows = await withTenant(tenant.session, (tx) =>
+      tx.execute<{ after: Record<string, string> }>(sql`
+        select after from audit_logs
+         where company_id = ${tenant.companyId}::uuid
+           and action = 'override'
+           and entity_id = ${overdrawn.transactionId}::uuid
+      `),
+    );
+    const audit = rows as unknown as { after: Record<string, string> }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.after["rule"]).toBe("insufficientFunds");
+  });
+
+  /**
+   * R3.3. One override authorises one rule: the entry above was allowed to
+   * overdraw, and that says nothing about whether it may also bankrupt the
+   * company — so this one has to be refused on its own terms first.
+   */
+  it("refuses the expense that drives capital negative", async () => {
+    const category = await expenseAccount();
+
+    await expect(spend("99999999", "2026-08-19", category)).rejects.toMatchObject({
+      code: "INSUFFICIENT_FUNDS",
+    });
+
+    // Funded, so the only thing left to refuse it is the capital guard.
+    await expect(
+      createTransaction(
+        tenant.session,
+        {
+          type: "expense",
+          date: "2026-08-19",
+          source: "manual",
+          categoryAccountId: category,
+          payments: [{ financialAccountId: tenant.cashWalletId, amount: "99999999" }],
+        },
+        { override: { pin: PIN, rules: ["insufficientFunds"] } },
+      ),
+    ).rejects.toMatchObject({
+      code: "NEGATIVE_CAPITAL",
+      reason: { rule: "negativeCapital" },
+    });
+  });
+});
+
+/**
+ * Spec R5.2 and the half of R3.2 that depends on it.
+ */
+describeDb("বকেয়ার বয়স", () => {
+  let tenant: Tenant;
+  let productId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Ageing");
+    productId = await createProduct(tenant.session, {
+      nameBn: "বয়সের পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "80",
+      openingQuantity: "100000",
+      openingRate: "50",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  // Counted back from *Dhaka's* today, which is what the ageing uses. Building
+  // these from `Date.now()` in UTC makes every date one day out for the six
+  // hours a day Dhaka is already tomorrow.
+  const iso = (daysAgo: number): string =>
+    new Date(Date.parse(`${todayIso()}T00:00:00Z`) - daysAgo * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+  async function ageOf(partyId: string) {
+    return withTenant(tenant.session, async (tx) => {
+      const found = await loadAgeing(tx, tenant.companyId, [partyId]);
+      return found.get(partyId)!;
+    });
+  }
+
+  it("reads the age off journal_lines, not off due_amount", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "পুরনো বকেয়ার কাস্টমার",
+      type: "customer",
+    });
+
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(75),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+      payments: [],
+    });
+
+    const aged = await ageOf(partyId);
+    expect(aged.oldestUnpaid).toBe(iso(75));
+    expect(aged.daysOverdue).toBe(75);
+    expect(aged.band).toBe("risky");
+  });
+
+  /**
+   * The reason `transactions.due_amount` cannot be used: it is a posting-time
+   * snapshot, never revisited when the payment lands. Reading it here would
+   * report this party as 75 days overdue for ever.
+   */
+  it("clears the moment the journal says it was paid", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "পরে দেওয়া কাস্টমার",
+      type: "customer",
+    });
+
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(75),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+      payments: [],
+    });
+    expect((await ageOf(partyId)).band).toBe("risky");
+
+    await createTransaction(tenant.session, {
+      type: "customer_payment",
+      date: iso(1),
+      source: "manual",
+      partyId,
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "8000" }],
+    });
+
+    expect(await ageOf(partyId)).toEqual({
+      oldestUnpaid: null,
+      daysOverdue: 0,
+      band: "healthy",
+    });
+  });
+
+  /** FIFO: a payment settles the oldest bill, so what is left is the newest. */
+  it("ages the oldest bill a payment has not reached", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "আংশিক দেওয়া কাস্টমার",
+      type: "customer",
+    });
+
+    // Newest first, on purpose: post the 90-day-old bill first and the party
+    // is already in the red band by the time the second sale is entered, and
+    // R3.2 refuses it. Ageing reads dates, not the order they were typed in.
+    for (const daysAgo of [10, 90]) {
+      await createTransaction(tenant.session, {
+        type: "sale",
+        date: iso(daysAgo),
+        source: "manual",
+        partyId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "100", rate: "80" }],
+        payments: [],
+      });
+    }
+
+    // Enough to clear the older bill exactly.
+    await createTransaction(tenant.session, {
+      type: "customer_payment",
+      date: iso(1),
+      source: "manual",
+      partyId,
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "8000" }],
+    });
+
+    const aged = await ageOf(partyId);
+    expect(aged.oldestUnpaid).toBe(iso(10));
+    expect(aged.band).toBe("healthy");
+  });
+
+  it("refuses a new credit sale to a party in the red band", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "লাল কাস্টমার",
+      type: "customer",
+      creditLimit: "10000000",
+    });
+
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(80),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+      payments: [],
+    });
+
+    // Room to spare on the limit, and it makes no difference.
+    await expect(
+      createTransaction(tenant.session, {
+        type: "sale",
+        date: iso(0),
+        source: "manual",
+        partyId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+        payments: [],
+      }),
+    ).rejects.toMatchObject({
+      code: "RISKY_PARTY",
+      reason: { rule: "riskyParty", party: "লাল কাস্টমার" },
+    });
+
+    // Cash is always welcome.
+    const cash = await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(0),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "800" }],
+    });
+    expect(cash.voucherNo).toMatch(/^SALE/);
   });
 });

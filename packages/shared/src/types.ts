@@ -181,6 +181,16 @@ export const AUDIT_ACTIONS = [
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
+/**
+ * How a discount was expressed — spec R3.4.
+ *
+ * A percentage is stored as what the user chose, not as the taka it worked out
+ * to, so a reprinted invoice still says "10%" rather than a figure nobody
+ * recognises. The taka is derived from the subtotal by the server.
+ */
+export const DISCOUNT_TYPES = ["amount", "percent"] as const;
+export type DiscountType = (typeof DISCOUNT_TYPES)[number];
+
 export const NOTIFICATION_SEVERITIES = ["info", "warning", "critical"] as const;
 export type NotificationSeverity = (typeof NOTIFICATION_SEVERITIES)[number];
 
@@ -228,7 +238,15 @@ export type BlockedReason =
   /** The same, lost to a race — the unique index caught it, so there is no
    * voucher number to name: the transaction that would have told us is the
    * one that just aborted. */
-  | { rule: "duplicateMemoNumber"; memoNo: string };
+  | { rule: "duplicateMemoNumber"; memoNo: string }
+  /** R3.1 — the wallet does not hold what the entry proposes to pay out. */
+  | { rule: "insufficientFunds"; wallet: string; available: string; requested: string }
+  /** R3.2 — the sale takes the party past the limit their shopkeeper set. */
+  | { rule: "overCreditLimit"; party: string; limit: string; projected: string }
+  /** R3.2 — a party whose oldest unpaid bill is in the red band. */
+  | { rule: "riskyParty"; party: string }
+  /** R3.3 — the entry would leave the business worth less than nothing. */
+  | { rule: "negativeCapital"; available: string; requested: string };
 
 export type BlockedRule = BlockedReason["rule"];
 
@@ -250,9 +268,65 @@ export type WarnedReason =
  * journal or a product that does not exist is a bug or a typo, not a business
  * judgement the shopkeeper is entitled to make.
  */
-export const OVERRIDABLE_RULES = ["negativeStock"] as const;
+export const OVERRIDABLE_RULES = [
+  "negativeStock",
+  "insufficientFunds",
+  "overCreditLimit",
+  "riskyParty",
+  "negativeCapital",
+] as const;
 export type OverridableRule = (typeof OVERRIDABLE_RULES)[number];
 
 export function isOverridable(rule: BlockedRule): rule is OverridableRule {
   return (OVERRIDABLE_RULES as readonly string[]).includes(rule);
+}
+
+// ---------------------------------------------------------------------------
+// Credit policy
+// ---------------------------------------------------------------------------
+
+/**
+ * When a party's unpaid bill stops being ordinary — spec R5.2.
+ *
+ * Per company, in `companies.settings`, because "30 days" is a trading
+ * convention rather than a fact: a mill selling to wholesalers and a shop
+ * selling over a counter do not mean the same thing by it.
+ *
+ * `creditPeriodDays` defaults to 0, so out of the box "overdue" means
+ * "outstanding" and the bands fire at 30 and 60 days from the bill itself —
+ * which is what those numbers read as to a shopkeeper. A business that
+ * actually grants terms sets it, and everything shifts by that much.
+ */
+export interface CreditPolicy {
+  creditPeriodDays: number;
+  slowPayerDays: number;
+  riskyDays: number;
+}
+
+export const DEFAULT_CREDIT_POLICY: CreditPolicy = {
+  creditPeriodDays: 0,
+  slowPayerDays: 30,
+  riskyDays: 60,
+};
+
+/**
+ * Reads the policy out of whatever is in the settings column.
+ *
+ * Total: the column is jsonb and nothing constrains its shape, so anything
+ * unrecognised falls back to the default rather than throwing. A malformed
+ * settings blob must not be able to stop every entry in the company.
+ */
+export function creditPolicyFrom(settings: unknown): CreditPolicy {
+  const raw = (settings ?? {}) as Record<string, unknown>;
+  const read = (key: keyof CreditPolicy): number => {
+    const value = raw[key];
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 3650
+      ? value
+      : DEFAULT_CREDIT_POLICY[key];
+  };
+  return {
+    creditPeriodDays: read("creditPeriodDays"),
+    slowPayerDays: read("slowPayerDays"),
+    riskyDays: read("riskyDays"),
+  };
 }
