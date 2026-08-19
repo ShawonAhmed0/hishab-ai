@@ -307,7 +307,10 @@ function StockRows({
             key={row.key}
             className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1.4fr_auto]"
           >
-            <Field error={fieldErrors[`${errorPrefix}.${index}.productId`]}>
+            <Field
+              fieldId={`${errorPrefix}.${index}.productId`}
+              error={fieldErrors[`${errorPrefix}.${index}.productId`]}
+            >
               <FieldLabel required>{bn.fields.product}</FieldLabel>
               <Select
                 value={row.productId}
@@ -323,6 +326,14 @@ function StockRows({
             </Field>
 
             <Field
+              // স্টক সমন্বয় calls it countedQuantity and everything else calls
+              // it quantity; one box, so whichever the server names is the one
+              // its link has to land on.
+              fieldId={
+                fieldErrors[`${errorPrefix}.${index}.countedQuantity`]
+                  ? `${errorPrefix}.${index}.countedQuantity`
+                  : `${errorPrefix}.${index}.quantity`
+              }
               error={
                 fieldErrors[`${errorPrefix}.${index}.quantity`] ??
                 fieldErrors[`${errorPrefix}.${index}.countedQuantity`]
@@ -964,7 +975,10 @@ export function EntryForm({
         </CardHeader>
         <CardBody className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field error={fieldErrors["date"]}>
+            <Field
+              fieldId="date"
+              error={fieldErrors["date"]}
+            >
               <FieldLabel required>{bn.fields.date}</FieldLabel>
               <Input
                 type="date"
@@ -976,6 +990,7 @@ export function EntryForm({
 
             {NEEDS_PARTY.includes(type) ? (
               <Field
+                fieldId="partyId"
                 error={fieldErrors["partyId"]}
                 hint={
                   selectedParty
@@ -1020,7 +1035,10 @@ export function EntryForm({
             ) : null}
 
             {NEEDS_CATEGORY.includes(type) ? (
-              <Field error={fieldErrors["categoryAccountId"]}>
+              <Field
+                fieldId="categoryAccountId"
+                error={fieldErrors["categoryAccountId"]}
+              >
                 <FieldLabel required>{bn.fields.category}</FieldLabel>
                 <Select
                   value={categoryAccountId}
@@ -1103,7 +1121,10 @@ export function EntryForm({
                   key={line.key}
                   className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1fr_auto]"
                 >
-                  <Field error={fieldErrors[`lines.${index}.productId`]}>
+                  <Field
+                    fieldId={`lines.${index}.productId`}
+                    error={fieldErrors[`lines.${index}.productId`]}
+                  >
                     <FieldLabel required>{bn.fields.product}</FieldLabel>
                     <Select
                       value={line.productId}
@@ -1119,6 +1140,7 @@ export function EntryForm({
                   </Field>
 
                   <Field
+                    fieldId={`lines.${index}.quantity`}
                     error={fieldErrors[`lines.${index}.quantity`]}
                     hint={product ? stockHint(product) : undefined}
                   >
@@ -1135,6 +1157,7 @@ export function EntryForm({
                   </Field>
 
                   <Field
+                    fieldId={`lines.${index}.rate`}
                     error={fieldErrors[`lines.${index}.rate`]}
                     hint={amount > 0n ? formatMoney(amount) : undefined}
                   >
@@ -1418,7 +1441,10 @@ export function EntryForm({
               key={payment.key}
               className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1.2fr_auto]"
             >
-              <Field error={fieldErrors[`payments.${index}.financialAccountId`]}>
+              <Field
+                fieldId={`payments.${index}.financialAccountId`}
+                error={fieldErrors[`payments.${index}.financialAccountId`]}
+              >
                 <FieldLabel required={!NEEDS_LINES.includes(type)}>মাধ্যম</FieldLabel>
                 <Select
                   value={payment.financialAccountId}
@@ -1438,7 +1464,10 @@ export function EntryForm({
                 </Select>
               </Field>
 
-              <Field error={fieldErrors[`payments.${index}.amount`]}>
+              <Field
+                fieldId={`payments.${index}.amount`}
+                error={fieldErrors[`payments.${index}.amount`]}
+              >
                 <FieldLabel required={!NEEDS_LINES.includes(type)}>
                   {bn.fields.paidAmount}
                 </FieldLabel>

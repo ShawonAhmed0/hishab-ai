@@ -158,7 +158,10 @@ export function PartyFields({
       {result && !result.ok ? <ErrorSummary title={result.error} errors={summary} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={fieldErrors["name"]}>
+        <Field
+          fieldId="name"
+          error={fieldErrors["name"]}
+        >
           <FieldLabel required>{bn.fields.name}</FieldLabel>
           <Input
             value={name}
@@ -181,7 +184,10 @@ export function PartyFields({
           </Select>
         </Field>
 
-        <Field error={fieldErrors["phone"]}>
+        <Field
+          fieldId="phone"
+          error={fieldErrors["phone"]}
+        >
           <FieldLabel>{bn.fields.phone}</FieldLabel>
           <Input
             inputMode="tel"
@@ -192,6 +198,7 @@ export function PartyFields({
         </Field>
 
         <Field
+          fieldId="openingBalance"
           error={fieldErrors["openingBalance"]}
           hint={
             type === "vendor"
@@ -210,6 +217,7 @@ export function PartyFields({
 
         {type !== "vendor" ? (
           <Field
+            fieldId="creditLimit"
             error={fieldErrors["creditLimit"]}
             hint="এর বেশি বাকি পড়লে বিক্রির সময় সতর্ক করা হবে — বিক্রি আটকাবে না"
           >
@@ -319,7 +327,10 @@ export function ProductFields({
       {result && !result.ok ? <ErrorSummary title={result.error} errors={summary} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field error={fieldErrors["nameBn"]}>
+        <Field
+          fieldId="nameBn"
+          error={fieldErrors["nameBn"]}
+        >
           <FieldLabel required>{bn.fields.product}</FieldLabel>
           <Input
             value={nameBn}
@@ -365,7 +376,10 @@ export function ProductFields({
           </Select>
         </Field>
 
-        <Field error={fieldErrors["purchasePrice"]}>
+        <Field
+          fieldId="purchasePrice"
+          error={fieldErrors["purchasePrice"]}
+        >
           <FieldLabel>{bn.fields.purchasePrice}</FieldLabel>
           <Input
             inputMode="decimal"
@@ -375,7 +389,10 @@ export function ProductFields({
           />
         </Field>
 
-        <Field error={fieldErrors["salePrice"]}>
+        <Field
+          fieldId="salePrice"
+          error={fieldErrors["salePrice"]}
+        >
           <FieldLabel>{bn.fields.salePrice}</FieldLabel>
           <Input
             inputMode="decimal"
@@ -396,6 +413,7 @@ export function ProductFields({
         </Field>
 
         <Field
+          fieldId="openingQuantity"
           error={fieldErrors["openingQuantity"]}
           hint={
             unit

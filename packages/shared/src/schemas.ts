@@ -10,7 +10,12 @@ import { z } from "zod";
 import { parseFixed } from "./decimal";
 import { TRANSACTION_SOURCES } from "./types";
 
-const uuid = z.string().uuid();
+/**
+ * Every id the client sends is a uuid it picked from a dropdown, so the only
+ * way this fails is an empty selection — and zod's own "Invalid uuid" is not
+ * something to show a shopkeeper reading an all-Bengali screen.
+ */
+const uuid = z.string().uuid("নির্বাচন করুন");
 
 /** ISO calendar date, no time — a ledger date is a day, not an instant. */
 export const isoDate = z

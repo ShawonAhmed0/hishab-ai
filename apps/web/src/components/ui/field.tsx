@@ -34,14 +34,25 @@ export function Field({
   children,
   error,
   hint,
+  fieldId,
   className,
 }: {
   children: React.ReactNode;
   error?: string | undefined;
   hint?: string | undefined;
+  /**
+   * The server's own path for this field — "partyId", "lines.0.quantity".
+   *
+   * `ErrorSummary` links to `#{path}`, and without this the control's id is a
+   * `useId()` string like `«r7»`, so every link in the summary pointed at
+   * nothing. On নতুন এন্ট্রি the summary sits at the top of a form long enough
+   * that jumping to the bad field is the entire point of having one.
+   */
+  fieldId?: string;
   className?: string;
 }) {
-  const id = React.useId();
+  const generatedId = React.useId();
+  const id = fieldId ?? generatedId;
   const value = React.useMemo<FieldContext>(
     () => ({
       id,
@@ -176,14 +187,13 @@ export const Select = React.forwardRef<
       aria-describedby={describedBy(ctx)}
       className={cn(
         controlClass,
-        "cursor-pointer appearance-none bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pr-9",
+        // `.select-chevron` carries the arrow, themed. It was an inline data
+        // URI with the light theme's slate baked into it, which left the arrow
+        // at about 1.9:1 once dark mode existed.
+        "select-chevron cursor-pointer appearance-none pr-9",
         ctx.hasError ? "border-debit" : "border-border-strong",
         className,
       )}
-      style={{
-        backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23526074' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-      }}
       {...props}
     >
       {children}
@@ -206,9 +216,19 @@ export function ErrorSummary({
   errors: { fieldId: string; message: string }[];
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
+  const [reachable, setReachable] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     if (errors.length > 0) ref.current?.focus();
+  }, [errors]);
+
+  // Not every error has a box to jump to: `lines` with no rows at all is a
+  // complaint about the list, not about a field in it. Those are stated rather
+  // than linked, because a link that goes nowhere is worse than plain text.
+  React.useEffect(() => {
+    setReachable(
+      new Set(errors.filter((e) => document.getElementById(e.fieldId)).map((e) => e.fieldId)),
+    );
   }, [errors]);
 
   if (errors.length === 0) return null;
@@ -227,12 +247,16 @@ export function ErrorSummary({
       <ul className="mt-2 space-y-1 text-sm">
         {errors.map((error) => (
           <li key={`${error.fieldId}-${error.message}`}>
-            <a
-              href={`#${error.fieldId}`}
-              className="text-debit underline underline-offset-2 hover:no-underline"
-            >
-              {error.message}
-            </a>
+            {reachable.has(error.fieldId) ? (
+              <a
+                href={`#${error.fieldId}`}
+                className="text-debit underline underline-offset-2 hover:no-underline"
+              >
+                {error.message}
+              </a>
+            ) : (
+              <span className="text-debit">{error.message}</span>
+            )}
           </li>
         ))}
       </ul>

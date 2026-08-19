@@ -13,15 +13,29 @@ export const metadata: Metadata = {
     "বাংলায় ব্যবসার সম্পূর্ণ হিসাব — একবার লিখুন, বাকিটা HishabAI করবে।",
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  // No maximum-scale: pinch-zoom stays available. Bengali readers use it.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f8fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
-  ],
-};
+/**
+ * The browser chrome has to match the page, including when the user has
+ * overruled their OS. A static media pair cannot know about the cookie, so
+ * once a theme is chosen this collapses to the one colour that is true.
+ */
+export async function generateViewport(): Promise<Viewport> {
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+
+  return {
+    width: "device-width",
+    initialScale: 1,
+    // No maximum-scale: pinch-zoom stays available. Bengali readers use it.
+    themeColor:
+      theme === null
+        ? [
+            { media: "(prefers-color-scheme: light)", color: "#f6f8fb" },
+            { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+          ]
+        : theme === "dark"
+          ? "#0b1120"
+          : "#f6f8fb",
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // A chosen theme is rendered by the server so there is no flash; with no
