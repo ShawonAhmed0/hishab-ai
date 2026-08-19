@@ -289,6 +289,104 @@ export const messages = {
   loading: "লোড হচ্ছে…",
   lowStock: "স্টক কমে গেছে",
   reviewBeforeSave: "সংরক্ষণের আগে তথ্যগুলো যাচাই করুন",
+  fixTheFields: "কিছু তথ্য ঠিক নেই। নিচের ঘরগুলো দেখুন।",
+  alreadyExists: "এই নামে বা কোডে একটি এন্ট্রি আগে থেকেই আছে",
+  cancelFailed: "বাতিল করা যায়নি। আবার চেষ্টা করুন।",
+  cancelReasonRequired: "বাতিলের কারণ লিখুন",
+  companyCreateFailed: "কোম্পানি তৈরি করা যায়নি",
+} as const;
+
+/**
+ * Creating a company — the one screen a brand-new user sees first.
+ */
+export const onboarding = {
+  title: "কোম্পানি যোগ করুন",
+  subtitle: "প্রতিটি কোম্পানির হিসাব সম্পূর্ণ আলাদা থাকে",
+  companyName: "কোম্পানির নাম",
+  companyNameHint: "রিপোর্ট ও প্রিন্টে এই নামটি দেখাবে",
+  bengaliName: "বাংলা নাম",
+  bengaliNamePlaceholder: "পেপার স্টার",
+  businessType: "ব্যবসার ধরন",
+  businessTypePlaceholder: "কাগজ ব্যবসা",
+  fiscalYearStart: "হিসাব বছর শুরু",
+  fiscalYearHint: "বাংলাদেশে সাধারণত জুলাই থেকে শুরু হয়",
+  createCompany: "কোম্পানি তৈরি করুন",
+} as const;
+
+/**
+ * The users screen: who can do what, and who did what.
+ */
+export const users = {
+  hint: "কে কী করতে পারবে, আর কে কী করেছে",
+  activeUsers: "সক্রিয় ব্যবহারকারী",
+  people: "জন",
+  recentActivity: "সাম্প্রতিক কার্যক্রম",
+  countSuffix: "টি",
+  needsAdmin: "পরিবর্তন করতে অ্যাডমিন অনুমতি লাগবে",
+  roleColumn: "ভূমিকা",
+  entriesColumn: "এন্ট্রি",
+  joinedColumn: "যোগ হয়েছেন",
+  you: "আপনি",
+  removed: "সরানো হয়েছে",
+  invitedBy: (name: string) => `যোগ করেছেন ${name}`,
+  entryCount: (count: string) => `${count} টি এন্ট্রি`,
+  whatRolesCanDo: "ভূমিকা কী কী করতে পারে",
+  lastThirty: "শেষ ৩০টি",
+  noActivity: "এখনো কোনো কার্যক্রম নেই",
+  system: "সিস্টেম",
+
+  /** Spec §2, in the words the person choosing has to weigh. */
+  roleSummaryAdmin: "সবকিছু — সেটিংস, ব্যবহারকারী ও লাভের রিপোর্টসহ",
+  roleSummaryManager: "এন্ট্রি, বাতিল, কাস্টমার, পণ্য ও রিপোর্ট — সেটিংস ছাড়া",
+  roleSummaryOperator: "শুধু এন্ট্রি করতে পারেন, লাভ-ক্ষতি দেখতে পারেন না",
+
+  addMember: "ব্যবহারকারী যোগ করুন",
+  added: "যোগ করা হয়েছে",
+  phoneHint: "যে নম্বর দিয়ে তিনি HishabAI-এ রেজিস্টার করেছেন",
+  adding: "যোগ হচ্ছে…",
+  confirmRemove: (name: string) => `${name} কে সরাবেন? তাঁর করা এন্ট্রিগুলো থেকে যাবে।`,
+  remove: "সরান",
+  actionFailed: "কাজটি করা যায়নি। আবার চেষ্টা করুন।",
+} as const;
+
+/**
+ * Sign-in, registration and password reset.
+ *
+ * The only screens someone can reach without a session, so they are also the
+ * only place the locale switcher is not available — whatever is in the cookie
+ * from last time is what they get.
+ */
+export const auth = {
+  loginTitle: "লগইন করুন",
+  loginSubtitle: "আপনার ব্যবসার হিসাব দেখতে লগইন করুন",
+  email: "ইমেইল",
+  password: "পাসওয়ার্ড",
+  login: "লগইন",
+  forgotPassword: "পাসওয়ার্ড ভুলে গেছেন?",
+  newAccount: "নতুন অ্যাকাউন্ট",
+
+  registerTitle: "নতুন অ্যাকাউন্ট খুলুন",
+  registerSubtitle: "কয়েক মিনিটেই ব্যবসার হিসাব শুরু করুন",
+  yourName: "আপনার নাম",
+  namePlaceholder: "মোঃ রফিকুল ইসলাম",
+  passwordHint: "অন্তত ৮ অক্ষর",
+  createAccount: "অ্যাকাউন্ট তৈরি করুন",
+  haveAccount: "অ্যাকাউন্ট আছে?",
+
+  resetTitle: "পাসওয়ার্ড রিসেট",
+  resetSubtitle: "ইমেইল দিন, রিসেট লিংক পাঠানো হবে",
+  sendResetLink: "রিসেট লিংক পাঠান",
+  backToLogin: "লগইনে ফিরে যান",
+
+  invalidEmail: "ইমেইল ঠিকানাটি সঠিক নয়",
+  passwordTooShort: "পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে",
+  nameRequired: "আপনার নাম দিন",
+  invalidInput: "তথ্য সঠিক নয়",
+  wrongCredentials: "ইমেইল বা পাসওয়ার্ড মিলছে না",
+  confirmByEmail: "ইমেইলে পাঠানো লিংকে ক্লিক করে অ্যাকাউন্ট নিশ্চিত করুন।",
+  // Deliberately non-committal: saying "no such account" would confirm which
+  // addresses are registered.
+  resetSent: "যদি অ্যাকাউন্ট থেকে থাকে, রিসেট লিংক পাঠানো হয়েছে।",
 } as const;
 
 /**
@@ -663,6 +761,9 @@ export const bn = {
   messages,
   emptyStates,
   shell,
+  auth,
+  onboarding,
+  users,
   masterData,
   transactions,
   reports,

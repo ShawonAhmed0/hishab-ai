@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { PermissionError, addMember, changeMemberRole, removeMember } from "@hishabai/core";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
 export interface UsersState {
@@ -15,13 +16,13 @@ export interface UsersState {
  * see. postgres.js wraps them, so the text is recovered rather than replaced
  * with a generic apology that hides which of the two happened.
  */
-function messageFor(error: unknown): string {
+async function messageFor(error: unknown): Promise<string> {
   if (error instanceof PermissionError) return error.messageBn;
   if (error instanceof Error && /[ঀ-৿]/.test(error.message)) {
     return error.message;
   }
   console.error("users action failed", error);
-  return "কাজটি করা যায়নি। আবার চেষ্টা করুন।";
+  return (await dict()).users.actionFailed;
 }
 
 export async function addMemberAction(
@@ -36,7 +37,7 @@ export async function addMemberAction(
     revalidatePath("/users");
     return { ok: true };
   } catch (error) {
-    return { error: messageFor(error) };
+    return { error: await messageFor(error) };
   }
 }
 
@@ -48,7 +49,7 @@ export async function changeRoleAction(userId: string, role: string): Promise<Us
     revalidatePath("/users");
     return { ok: true };
   } catch (error) {
-    return { error: messageFor(error) };
+    return { error: await messageFor(error) };
   }
 }
 
@@ -60,6 +61,6 @@ export async function removeMemberAction(userId: string): Promise<UsersState> {
     revalidatePath("/users");
     return { ok: true };
   } catch (error) {
-    return { error: messageFor(error) };
+    return { error: await messageFor(error) };
   }
 }

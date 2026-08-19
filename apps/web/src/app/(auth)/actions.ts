@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ensureProfile, resolveSession } from "@hishabai/core";
+import type { Dictionary } from "@hishabai/shared";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { dict } from "@/lib/locale.server";
 import { rememberActiveCompany } from "@/lib/session";
 
 export interface AuthState {
@@ -11,25 +13,33 @@ export interface AuthState {
   notice?: string;
 }
 
-const credentials = z.object({
-  email: z.string().trim().email("ইমেইল ঠিকানাটি সঠিক নয়"),
-  password: z.string().min(8, "পাসওয়ার্ড অন্তত ৮ অক্ষরের হতে হবে"),
-});
+// Built per request rather than at module scope: the messages come from the
+// dictionary, and a module-level schema would freeze whichever locale served
+// the first sign-in the process ever handled.
+function credentials(t: Dictionary) {
+  return z.object({
+    email: z.string().trim().email(t.auth.invalidEmail),
+    password: z.string().min(8, t.auth.passwordTooShort),
+  });
+}
 
-const registration = credentials.extend({
-  fullName: z.string().trim().min(1, "আপনার নাম দিন").max(160),
-});
+function registration(t: Dictionary) {
+  return credentials(t).extend({
+    fullName: z.string().trim().min(1, t.auth.nameRequired).max(160),
+  });
+}
 
-function firstError(error: z.ZodError): string {
-  return error.issues[0]?.message ?? "তথ্য সঠিক নয়";
+function firstError(error: z.ZodError, t: Dictionary): string {
+  return error.issues[0]?.message ?? t.auth.invalidInput;
 }
 
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const parsed = credentials.safeParse({
+  const t = await dict();
+  const parsed = credentials(t).safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
   });
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return { error: firstError(parsed.error, t) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
@@ -37,7 +47,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) {
     // Deliberately vague: saying which half was wrong tells an attacker which
     // addresses are registered.
-    return { error: "ইমেইল বা পাসওয়ার্ড মিলছে না" };
+    return { error: t.auth.wrongCredentials };
   }
 
   // Which company they land in, decided once here rather than rediscovered on
@@ -52,12 +62,13 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const parsed = registration.safeParse({
+  const t = await dict();
+  const parsed = registration(t).safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
     fullName: formData.get("fullName"),
   });
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return { error: firstError(parsed.error, t) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
@@ -69,7 +80,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: error.message };
 
   if (!data.session) {
-    return { notice: "ইমেইলে পাঠানো লিংকে ক্লিক করে অ্যাকাউন্ট নিশ্চিত করুন।" };
+    return { notice: t.auth.confirmByEmail };
   }
 
   await ensureProfile(data.user!.id, parsed.data.fullName);
@@ -80,14 +91,15 @@ export async function requestPasswordReset(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  const t = await dict();
   const email = z.string().trim().email().safeParse(formData.get("email"));
-  if (!email.success) return { error: "ইমেইল ঠিকানাটি সঠিক নয়" };
+  if (!email.success) return { error: t.auth.invalidEmail };
 
   const supabase = await createSupabaseServerClient();
   await supabase.auth.resetPasswordForEmail(email.data);
 
   // Always the same answer, whether or not the address exists.
-  return { notice: "যদি অ্যাকাউন্ট থেকে থাকে, রিসেট লিংক পাঠানো হয়েছে।" };
+  return { notice: t.auth.resetSent };
 }
 
 export async function signOut(): Promise<void> {

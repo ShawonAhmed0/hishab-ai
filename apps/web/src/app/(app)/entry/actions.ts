@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { createTransaction, MissingSetupError, PermissionError } from "@hishabai/core";
 import { PostingError } from "@hishabai/accounting";
 import { addMoney, moneyToDb } from "@hishabai/shared";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
 export interface EntrySuccess {
@@ -63,7 +64,7 @@ export async function createEntryAction(rawInput: unknown): Promise<EntryResult>
       }
       return {
         ok: false,
-        error: "কিছু তথ্য ঠিক নেই। নিচের ঘরগুলো দেখুন।",
+        error: (await dict()).messages.fixTheFields,
         fieldErrors,
       };
     }
@@ -83,6 +84,6 @@ export async function createEntryAction(rawInput: unknown): Promise<EntryResult>
 
     // Anything unexpected: say so plainly rather than leaking internals.
     console.error("createEntryAction failed", error);
-    return { ok: false, error: "সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।" };
+    return { ok: false, error: (await dict()).messages.errorGeneric };
   }
 }

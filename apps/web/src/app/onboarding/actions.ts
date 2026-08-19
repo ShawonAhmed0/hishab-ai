@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createCompany, ensureProfile } from "@hishabai/core";
+import { dict } from "@/lib/locale.server";
 import { rememberActiveCompany } from "@/lib/session";
 import { getAuthUser } from "@/lib/supabase/server";
 
@@ -21,7 +22,7 @@ export async function createCompanyAction(
     user.id,
     (user.user_metadata?.["full_name"] as string | undefined) ??
       user.email?.split("@")[0] ??
-      "ব্যবহারকারী",
+      (await dict()).shell.user,
   );
 
   let companyId: string;
@@ -37,7 +38,9 @@ export async function createCompanyAction(
   } catch (error) {
     return {
       error:
-        error instanceof Error ? error.message : "কোম্পানি তৈরি করা যায়নি",
+        error instanceof Error
+          ? error.message
+          : (await dict()).messages.companyCreateFailed,
     };
   }
 

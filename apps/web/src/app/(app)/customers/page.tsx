@@ -7,6 +7,7 @@ import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 import { AddPartyPanel } from "@/components/master-data/create-forms";

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cancelTransaction, PermissionError } from "@hishabai/core";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
 export interface CancelState {
@@ -22,7 +23,7 @@ export async function cancelTransactionAction(
   const session = await requireSession();
 
   if (reason.trim().length < 3) {
-    return { error: "বাতিলের কারণ লিখুন" };
+    return { error: (await dict()).messages.cancelReasonRequired };
   }
 
   try {
@@ -34,6 +35,6 @@ export async function cancelTransactionAction(
   } catch (error) {
     if (error instanceof PermissionError) return { error: error.messageBn };
     console.error("cancelTransactionAction failed", error);
-    return { error: "বাতিল করা যায়নি। আবার চেষ্টা করুন।" };
+    return { error: (await dict()).messages.cancelFailed };
   }
 }

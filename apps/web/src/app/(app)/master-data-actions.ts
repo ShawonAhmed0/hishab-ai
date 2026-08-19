@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { PermissionError, createParty, createProduct } from "@hishabai/core";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 
 /**
@@ -59,16 +60,16 @@ async function run<T>(fn: () => Promise<T>): Promise<CreateResult<T>> {
       }
       return {
         ok: false,
-        error: "কিছু তথ্য ঠিক নেই। নিচের ঘরগুলো দেখুন।",
+        error: (await dict()).messages.fixTheFields,
         fieldErrors,
       };
     }
     if (error instanceof PermissionError) return { ok: false, error: error.messageBn };
     if (error instanceof Error && /unique|duplicate/i.test(error.message)) {
-      return { ok: false, error: "এই নামে বা কোডে একটি এন্ট্রি আগে থেকেই আছে" };
+      return { ok: false, error: (await dict()).messages.alreadyExists };
     }
     console.error("master data create failed", error);
-    return { ok: false, error: "সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।" };
+    return { ok: false, error: (await dict()).messages.errorGeneric };
   }
 }
 

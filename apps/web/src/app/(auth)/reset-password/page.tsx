@@ -5,9 +5,11 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Field, FieldLabel, Input } from "@/components/ui/field";
+import { useT } from "@/components/locale-provider";
 import { requestPasswordReset, type AuthState } from "../actions";
 
 export default function ResetPasswordPage() {
+  const t = useT();
   const [state, action, pending] = useActionState<AuthState, FormData>(
     requestPasswordReset,
     {},
@@ -17,10 +19,8 @@ export default function ResetPasswordPage() {
     <Card>
       <CardBody className="space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">পাসওয়ার্ড রিসেট</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            ইমেইল দিন, রিসেট লিংক পাঠানো হবে
-          </p>
+          <h2 className="text-lg font-semibold">{t.auth.resetTitle}</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t.auth.resetSubtitle}</p>
         </div>
 
         {state.error ? (
@@ -36,17 +36,17 @@ export default function ResetPasswordPage() {
 
         <form action={action} className="space-y-4">
           <Field>
-            <FieldLabel required>ইমেইল</FieldLabel>
+            <FieldLabel required>{t.auth.email}</FieldLabel>
             <Input name="email" type="email" autoComplete="email" required />
           </Field>
           <Button type="submit" block loading={pending}>
-            রিসেট লিংক পাঠান
+            {t.auth.sendResetLink}
           </Button>
         </form>
 
         <p className="text-center text-sm">
           <Link href="/login" className="text-primary hover:underline">
-            লগইনে ফিরে যান
+            {t.auth.backToLogin}
           </Link>
         </p>
       </CardBody>

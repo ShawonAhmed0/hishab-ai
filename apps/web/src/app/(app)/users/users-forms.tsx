@@ -2,8 +2,9 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { Check, Plus, X } from "lucide-react";
-import { ROLES, bn, type Role } from "@hishabai/shared";
+import { ROLES, type Role } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Input, Select } from "@/components/ui/field";
 import {
   addMemberAction,
@@ -13,6 +14,7 @@ import {
 } from "./actions";
 
 export function AddMemberForm() {
+  const t = useT();
   const [state, action, pending] = useActionState<UsersState, FormData>(addMemberAction, {});
   const [open, setOpen] = useState(false);
 
@@ -20,7 +22,7 @@ export function AddMemberForm() {
     return (
       <Button size="sm" onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        ব্যবহারকারী যোগ করুন
+        {t.users.addMember}
       </Button>
     );
   }
@@ -28,12 +30,12 @@ export function AddMemberForm() {
   return (
     <div className="w-full rounded-md border border-border bg-surface-sunken p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-medium">ব্যবহারকারী যোগ করুন</p>
+        <p className="font-medium">{t.users.addMember}</p>
         <button
           type="button"
           onClick={() => setOpen(false)}
           className="text-muted-foreground hover:text-foreground"
-          aria-label={bn.actions.close}
+          aria-label={t.actions.close}
         >
           <X className="size-4" aria-hidden />
         </button>
@@ -51,22 +53,22 @@ export function AddMemberForm() {
         {state.ok ? (
           <p className="flex items-center gap-1.5 text-sm text-credit">
             <Check className="size-4" aria-hidden />
-            যোগ করা হয়েছে
+            {t.users.added}
           </p>
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field hint="যে নম্বর দিয়ে তিনি HishabAI-এ রেজিস্টার করেছেন">
-            <FieldLabel required>{bn.fields.phone}</FieldLabel>
+          <Field hint={t.users.phoneHint}>
+            <FieldLabel required>{t.fields.phone}</FieldLabel>
             <Input name="phone" required inputMode="tel" placeholder="01712345678" />
           </Field>
 
           <Field>
-            <FieldLabel required>ভূমিকা</FieldLabel>
+            <FieldLabel required>{t.users.roleColumn}</FieldLabel>
             <Select name="role" defaultValue="operator">
               {ROLES.map((role) => (
                 <option key={role} value={role}>
-                  {bn.role[role]}
+                  {t.role[role]}
                 </option>
               ))}
             </Select>
@@ -74,7 +76,7 @@ export function AddMemberForm() {
         </div>
 
         <Button type="submit" disabled={pending}>
-          {pending ? "যোগ হচ্ছে…" : bn.actions.addNew}
+          {pending ? t.users.adding : t.actions.addNew}
         </Button>
       </form>
     </div>
@@ -97,12 +99,13 @@ export function RoleSelect({
   role: Role;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
   const [value, setValue] = useState(role);
 
   if (disabled) {
-    return <span className="text-sm">{bn.role[role]}</span>;
+    return <span className="text-sm">{t.role[role]}</span>;
   }
 
   return (
@@ -127,7 +130,7 @@ export function RoleSelect({
       >
         {ROLES.map((option) => (
           <option key={option} value={option}>
-            {bn.role[option]}
+            {t.role[option]}
           </option>
         ))}
       </select>
@@ -145,6 +148,7 @@ export function RemoveMemberButton({
   name: string;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
 
@@ -156,7 +160,7 @@ export function RemoveMemberButton({
         type="button"
         disabled={pending}
         onClick={() => {
-          if (!window.confirm(`${name} কে সরাবেন? তাঁর করা এন্ট্রিগুলো থেকে যাবে।`)) return;
+          if (!window.confirm(t.users.confirmRemove(name))) return;
           setError(undefined);
           start(async () => {
             const result = await removeMemberAction(userId);
@@ -165,7 +169,7 @@ export function RemoveMemberButton({
         }}
         className="text-sm text-muted-foreground hover:text-debit disabled:opacity-50"
       >
-        {pending ? "…" : "সরান"}
+        {pending ? "…" : t.users.remove}
       </button>
       {error ? <span className="text-xs text-debit">{error}</span> : null}
     </span>

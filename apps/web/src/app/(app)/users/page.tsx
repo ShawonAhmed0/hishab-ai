@@ -1,25 +1,28 @@
 import { History, ShieldCheck, UserCog, Users } from "lucide-react";
 import { can, getUsers } from "@hishabai/core";
-import { ROLES, bn } from "@hishabai/shared";
+import { ROLES, type Dictionary, type Role, type StringKeys } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { CountTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 import { AddMemberForm, RemoveMemberButton, RoleSelect } from "./users-forms";
 
-export const metadata = { title: bn.nav.users };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.users };
+}
 
-/** Spec §2, in the words the person choosing has to weigh. */
-const ROLE_SUMMARY: Record<string, string> = {
-  admin: "সবকিছু — সেটিংস, ব্যবহারকারী ও লাভের রিপোর্টসহ",
-  manager: "এন্ট্রি, বাতিল, কাস্টমার, পণ্য ও রিপোর্ট — সেটিংস ছাড়া",
-  operator: "শুধু এন্ট্রি করতে পারেন, লাভ-ক্ষতি দেখতে পারেন না",
+/** Keys, resolved per request — see the note on NAV_ITEMS. */
+const ROLE_SUMMARY: Record<Role, StringKeys<Dictionary["users"]>> = {
+  admin: "roleSummaryAdmin",
+  manager: "roleSummaryManager",
+  operator: "roleSummaryOperator",
 };
 
 export default async function UsersPage() {
-  const { session, data } = await sessionWithData(getUsers);
+  const [{ session, data }, t] = await Promise.all([sessionWithData(getUsers), dict()]);
   const editable = can(session, "user.manage");
 
   const active = data.members.filter((member) => member.isActive);
@@ -29,32 +32,38 @@ export default async function UsersPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{bn.nav.users}</h1>
-          <p className="text-sm text-muted-foreground">
-            কে কী করতে পারবে, আর কে কী করেছে
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.nav.users}</h1>
+          <p className="text-sm text-muted-foreground">{t.users.hint}</p>
         </div>
         {editable ? <AddMemberForm /> : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <CountTile label="সক্রিয় ব্যবহারকারী" value={active.length} suffix="জন" icon={Users} />
-        <CountTile label="অ্যাডমিন" value={admins.length} suffix="জন" icon={ShieldCheck} />
         <CountTile
-          label="সাম্প্রতিক কার্যক্রম"
+          label={t.users.activeUsers}
+          value={active.length}
+          suffix={t.users.people}
+          icon={Users}
+        />
+        <CountTile
+          label={t.role.admin}
+          value={admins.length}
+          suffix={t.users.people}
+          icon={ShieldCheck}
+        />
+        <CountTile
+          label={t.users.recentActivity}
           value={data.activity.length}
-          suffix="টি"
+          suffix={t.users.countSuffix}
           icon={History}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>ব্যবহারকারী</CardTitle>
+          <CardTitle>{t.nav.users}</CardTitle>
           {!editable ? (
-            <span className="text-xs text-muted-foreground">
-              পরিবর্তন করতে অ্যাডমিন অনুমতি লাগবে
-            </span>
+            <span className="text-xs text-muted-foreground">{t.users.needsAdmin}</span>
           ) : null}
         </CardHeader>
 
@@ -62,11 +71,11 @@ export default async function UsersPage() {
           <TableScroll>
             <THead>
               <TR>
-                <TH>{bn.fields.name}</TH>
-                <TH>{bn.fields.phone}</TH>
-                <TH>ভূমিকা</TH>
-                <TH numeric>এন্ট্রি</TH>
-                <TH>যোগ হয়েছেন</TH>
+                <TH>{t.fields.name}</TH>
+                <TH>{t.fields.phone}</TH>
+                <TH>{t.users.roleColumn}</TH>
+                <TH numeric>{t.users.entriesColumn}</TH>
+                <TH>{t.users.joinedColumn}</TH>
                 {editable ? <TH /> : null}
               </TR>
             </THead>
@@ -79,17 +88,17 @@ export default async function UsersPage() {
                       <span className="font-medium">{member.fullName}</span>
                       {isSelf ? (
                         <Badge tone="neutral" className="ml-2">
-                          আপনি
+                          {t.users.you}
                         </Badge>
                       ) : null}
                       {!member.isActive ? (
                         <Badge tone="neutral" className="ml-2">
-                          সরানো হয়েছে
+                          {t.users.removed}
                         </Badge>
                       ) : null}
                       {member.invitedByName ? (
                         <p className="text-xs text-muted-foreground">
-                          যোগ করেছেন {member.invitedByName}
+                          {t.users.invitedBy(member.invitedByName)}
                         </p>
                       ) : null}
                     </TD>
@@ -102,7 +111,7 @@ export default async function UsersPage() {
                           disabled={isSelf}
                         />
                       ) : (
-                        <span className="text-sm">{bn.role[member.role]}</span>
+                        <span className="text-sm">{t.role[member.role]}</span>
                       )}
                     </TD>
                     <TD numeric className="num text-muted-foreground">
@@ -139,12 +148,12 @@ export default async function UsersPage() {
             <MobileRow
               key={member.userId}
               title={member.fullName}
-              subtitle={member.phone ?? "মোবাইল নম্বর নেই"}
+              subtitle={member.phone ?? t.masterData.noPhone}
               right={
                 <>
-                  <Badge tone="neutral">{bn.role[member.role]}</Badge>
+                  <Badge tone="neutral">{t.role[member.role]}</Badge>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {member.entryCount} টি এন্ট্রি
+                    {t.users.entryCount(String(member.entryCount))}
                   </p>
                 </>
               }
@@ -159,7 +168,7 @@ export default async function UsersPage() {
             <CardTitle>
               <span className="inline-flex items-center gap-2">
                 <UserCog className="size-4 text-primary" aria-hidden />
-                ভূমিকা কী কী করতে পারে
+                {t.users.whatRolesCanDo}
               </span>
             </CardTitle>
           </CardHeader>
@@ -167,9 +176,11 @@ export default async function UsersPage() {
             {ROLES.map((role) => (
               <div key={role} className="flex gap-3">
                 <Badge tone="neutral" className="mt-0.5 shrink-0">
-                  {bn.role[role]}
+                  {t.role[role]}
                 </Badge>
-                <p className="text-sm text-muted-foreground">{ROLE_SUMMARY[role]}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t.users[ROLE_SUMMARY[role]]}
+                </p>
               </div>
             ))}
           </CardBody>
@@ -180,14 +191,14 @@ export default async function UsersPage() {
             <CardTitle>
               <span className="inline-flex items-center gap-2">
                 <History className="size-4 text-primary" aria-hidden />
-                সাম্প্রতিক কার্যক্রম
+                {t.users.recentActivity}
               </span>
             </CardTitle>
-            <span className="text-xs text-muted-foreground">শেষ ৩০টি</span>
+            <span className="text-xs text-muted-foreground">{t.users.lastThirty}</span>
           </CardHeader>
 
           {data.activity.length === 0 ? (
-            <EmptyState title="এখনো কোনো কার্যক্রম নেই" />
+            <EmptyState title={t.users.noActivity} />
           ) : (
             <ol className="divide-y divide-border">
               {data.activity.map((entry) => (
@@ -197,7 +208,7 @@ export default async function UsersPage() {
                       {entry.summaryBn ?? `${entry.entityType} ${entry.action}`}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {entry.actorName ?? "সিস্টেম"}
+                      {entry.actorName ?? t.users.system}
                     </p>
                   </div>
                   <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
