@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin, Phone, Receipt, ShoppingCart, Wallet } from "lucide-react";
 import { getPartyLedger } from "@hishabai/core";
-import { bn, moneyFromDb } from "@hishabai/shared";
+import { moneyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { MoneyText } from "@/components/ui/money";
 import { PrintButton } from "@/components/ui/print-button";
 import { StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
@@ -21,7 +22,10 @@ export default async function VendorPage({
   const { id } = await params;
   // The payable half: what we owe them, not the net of both directions — a
   // party marked 'both' has a customer profile for the other side.
-  const { data } = await sessionWithData((scope) => getPartyLedger(scope, id, "payable"));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getPartyLedger(scope, id, "payable")),
+    dict(),
+  ]);
 
   // Missing and not-yours give the same answer — RLS returns no row either way.
   if (!data) notFound();
@@ -37,7 +41,7 @@ export default async function VendorPage({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          {bn.nav.vendors}
+          {t.nav.vendors}
         </Link>
       </div>
 
@@ -45,7 +49,7 @@ export default async function VendorPage({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">{party.name}</h1>
-            <Badge tone="neutral">{bn.partyType[party.type]}</Badge>
+            <Badge tone="neutral">{t.partyType[party.type]}</Badge>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {party.phone ? (
@@ -64,9 +68,9 @@ export default async function VendorPage({
         </div>
 
         <div className="flex gap-2">
-          <PrintButton label="পাওনা বিবরণী প্রিন্ট" />
+          <PrintButton label={t.masterData.payableStatementPrint} />
           <Button asChild size="sm" className="no-print">
-            <Link href="/entry">{bn.nav.newEntry}</Link>
+            <Link href="/entry">{t.nav.newEntry}</Link>
           </Button>
         </div>
       </div>
@@ -74,45 +78,45 @@ export default async function VendorPage({
       {/* Spec §13, mirrored: total billed by them, total paid, still owed. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label="মোট ক্রয়"
+          label={t.masterData.totalPurchasesColumn}
           value={moneyFromDb(party.totalPurchases)}
           icon={ShoppingCart}
-          footnote="এই ভেন্ডরের কাছ থেকে মোট কেনা"
+          footnote={t.masterData.totalBought}
         />
         <StatTile
-          label="মোট পরিশোধ"
+          label={t.masterData.totalPaidColumn}
           value={moneyFromDb(party.totalPaid)}
           tone="debit"
           icon={Receipt}
-          footnote="যত টাকা দেওয়া হয়েছে"
+          footnote={t.masterData.totalPaidHint}
         />
         <StatTile
-          label="পাওনা"
+          label={t.masterData.payable}
           value={payable}
           tone={payable > 0n ? "due" : "neutral"}
           icon={Wallet}
-          footnote={payable > 0n ? "এখনো দিতে হবে" : "সব পরিশোধ হয়েছে"}
+          footnote={payable > 0n ? t.masterData.stillToPay : t.masterData.allSettled}
         />
       </div>
 
       <Card className="card">
         <CardHeader>
           <div>
-            <CardTitle>পাওনা বিবরণী</CardTitle>
+            <CardTitle>{t.masterData.payableStatement}</CardTitle>
             {/* Only meaningful on paper, where the reader has no company switcher. */}
             <p className="hidden text-xs text-muted-foreground print:block">
               {party.name} · {new Date().toLocaleDateString("en-GB")}
             </p>
           </div>
           <span className="text-xs text-muted-foreground no-print">
-            বিল ও পরিশোধ আলাদা লাইনে, নিচে চলতি ব্যালেন্স
+            {t.masterData.statementNote}
           </span>
         </CardHeader>
 
         {entries.length === 0 ? (
           <EmptyState
-            title="এখনো কোনো লেনদেন নেই"
-            hint="এই ভেন্ডরের প্রথম ক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে"
+            title={t.emptyStates.noTransactions}
+            hint={t.masterData.firstPurchaseHint}
           />
         ) : (
           <>
@@ -120,12 +124,12 @@ export default async function VendorPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.date}</TH>
-                    <TH>{bn.fields.voucherNo}</TH>
-                    <TH>{bn.fields.description}</TH>
-                    <TH numeric>বিল</TH>
-                    <TH numeric>{bn.due.payment}</TH>
-                    <TH numeric>ব্যালেন্স</TH>
+                    <TH>{t.fields.date}</TH>
+                    <TH>{t.fields.voucherNo}</TH>
+                    <TH>{t.fields.description}</TH>
+                    <TH numeric>{t.masterData.billColumn}</TH>
+                    <TH numeric>{t.due.payment}</TH>
+                    <TH numeric>{t.masterData.balanceColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -159,11 +163,11 @@ export default async function VendorPage({
                         <TD className="max-w-[18rem] truncate text-muted-foreground">
                           {entry.narration ??
                             (entry.transactionType
-                              ? bn.transactionType[entry.transactionType]
+                              ? t.transactionType[entry.transactionType]
                               : "—")}
                           {entry.status === "cancelled" ? (
                             <Badge tone="neutral" className="ml-1">
-                              {bn.transactionStatus.cancelled}
+                              {t.transactionStatus.cancelled}
                             </Badge>
                           ) : null}
                         </TD>
@@ -197,7 +201,7 @@ export default async function VendorPage({
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
                     <TD className="font-semibold" />
                     <TD />
-                    <TD className="font-semibold">বর্তমান পাওনা</TD>
+                    <TD className="font-semibold">{t.masterData.currentPayable}</TD>
                     <TD />
                     <TD />
                     <TD numeric>
@@ -226,9 +230,9 @@ export default async function VendorPage({
                     title={
                       isBill
                         ? (entry.transactionType
-                            ? bn.transactionType[entry.transactionType]
-                            : "বিল")
-                        : bn.due.payment
+                            ? t.transactionType[entry.transactionType]
+                            : t.masterData.billColumn)
+                        : t.due.payment
                     }
                     subtitle={`${formatDateShort(entry.date)}${
                       entry.voucherNo ? ` · ${entry.voucherNo}` : ""
@@ -242,7 +246,7 @@ export default async function VendorPage({
                           signed={false}
                         />
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          ব্যালেন্স{" "}
+                          {t.masterData.balanceColumn}{" "}
                           <MoneyText value={balance} size="sm" symbol={false} tone="due" />
                         </p>
                       </>
@@ -256,7 +260,7 @@ export default async function VendorPage({
       </Card>
 
       <p className="hidden text-xs text-muted-foreground print:block">
-        HishabAI থেকে তৈরি করা বিবরণী।
+        {t.masterData.statementFooter}
       </p>
     </div>
   );

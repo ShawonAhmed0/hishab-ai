@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { ArrowLeftRight, Boxes, SearchX, Users } from "lucide-react";
 import { search } from "@hishabai/core";
-import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { MobileCards, MobileRow } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
-export const metadata = { title: bn.actions.search };
+export async function generateMetadata() {
+  return { title: (await dict()).actions.search };
+}
 
 export default async function SearchPage({
   searchParams,
@@ -17,16 +20,14 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q = "" } = await searchParams;
-  const session = await requireSession();
+  const [session, t] = await Promise.all([requireSession(), dict()]);
   const results = await search(session, q);
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{bn.actions.search}</h1>
-        <p className="text-sm text-muted-foreground">
-          কাস্টমার, ভেন্ডর, পণ্য, ভাউচার ও মেমো — এক জায়গায়
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t.actions.search}</h1>
+        <p className="text-sm text-muted-foreground">{t.masterData.searchHint}</p>
       </div>
 
       {/* The topbar box is hidden on phones, so the page carries its own. */}
@@ -38,14 +39,14 @@ export default async function SearchPage({
               type="search"
               defaultValue={results.query}
               autoFocus={!results.query}
-              placeholder="নাম, নম্বর, ভাউচার বা অঙ্ক"
+              placeholder={t.masterData.searchPlaceholder}
               className="h-11 min-w-[14rem] flex-1 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             />
             <button
               type="submit"
               className="h-11 rounded-md bg-primary px-5 font-medium text-on-primary"
             >
-              {bn.actions.search}
+              {t.actions.search}
             </button>
           </form>
         </CardBody>
@@ -54,22 +55,22 @@ export default async function SearchPage({
       {!results.query ? (
         <Card>
           <EmptyState
-            title="কী খুঁজছেন?"
-            hint="কাস্টমারের নাম, মোবাইল নম্বর, পণ্যের নাম, ভাউচার নম্বর বা টাকার অঙ্ক লিখুন"
+            title={t.masterData.searchPrompt}
+            hint={t.masterData.searchPromptHint}
           />
         </Card>
       ) : results.total === 0 ? (
         <Card>
           <EmptyState
             icon={SearchX}
-            title={`"${results.query}" খুঁজে পাওয়া যায়নি`}
-            hint="বানান দেখে নিন, অথবা অন্য শব্দ দিয়ে চেষ্টা করুন"
+            title={t.masterData.searchMiss(results.query)}
+            hint={t.masterData.searchMissHint}
           />
         </Card>
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            <span className="num">{results.total}</span> টি ফলাফল
+            <span className="num">{results.total}</span> {t.masterData.resultsSuffix}
           </p>
 
           {results.parties.length > 0 ? (
@@ -78,7 +79,7 @@ export default async function SearchPage({
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
                     <Users className="size-4 text-primary" aria-hidden />
-                    কাস্টমার ও ভেন্ডর
+                    {t.masterData.partiesHeading}
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -91,14 +92,14 @@ export default async function SearchPage({
                       key={party.id}
                       href={`/${party.type === "vendor" ? "vendors" : "customers"}/${party.id}`}
                       title={party.name}
-                      subtitle={party.phone ?? "মোবাইল নম্বর নেই"}
-                      meta={<Badge tone="neutral">{bn.partyType[party.type]}</Badge>}
+                      subtitle={party.phone ?? t.masterData.noPhone}
+                      meta={<Badge tone="neutral">{t.partyType[party.type]}</Badge>}
                       right={
                         due > 0n || payable > 0n ? (
                           <>
                             <MoneyText value={due > 0n ? due : payable} size="sm" tone="due" />
                             <p className="mt-0.5 text-xs text-muted-foreground">
-                              {due > 0n ? "বকেয়া" : "পাওনা"}
+                              {due > 0n ? t.fields.dueAmount : t.masterData.payable}
                             </p>
                           </>
                         ) : null
@@ -116,7 +117,7 @@ export default async function SearchPage({
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
                     <Boxes className="size-4 text-primary" aria-hidden />
-                    {bn.nav.inventory}
+                    {t.nav.inventory}
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -126,12 +127,14 @@ export default async function SearchPage({
                     key={product.id}
                     href={`/inventory/${product.id}`}
                     title={product.nameBn}
-                    subtitle={`স্টক ${formatQty(qtyFromDb(product.quantity))} ${product.unitSymbol}`}
+                    subtitle={t.masterData.stockIs(
+                      `${formatQty(qtyFromDb(product.quantity))} ${product.unitSymbol}`,
+                    )}
                     right={
                       <>
                         <MoneyText value={moneyFromDb(product.salePrice)} size="sm" />
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {bn.fields.salePrice}
+                          {t.fields.salePrice}
                         </p>
                       </>
                     }
@@ -147,11 +150,11 @@ export default async function SearchPage({
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
                     <ArrowLeftRight className="size-4 text-primary" aria-hidden />
-                    {bn.nav.transactions}
+                    {t.nav.transactions}
                   </span>
                 </CardTitle>
                 <Link href="/transactions" className="text-sm text-primary hover:underline">
-                  {bn.actions.viewAll}
+                  {t.actions.viewAll}
                 </Link>
               </CardHeader>
               <MobileCards className="md:flex">
@@ -159,17 +162,17 @@ export default async function SearchPage({
                   <MobileRow
                     key={transaction.id}
                     href={`/transactions/${transaction.id}`}
-                    title={`${bn.transactionType[transaction.type]} · ${transaction.voucherNo}`}
+                    title={`${t.transactionType[transaction.type]} · ${transaction.voucherNo}`}
                     subtitle={[
                       formatDateShort(transaction.date),
                       transaction.partyName,
-                      transaction.memoNo ? `মেমো ${transaction.memoNo}` : null,
+                      transaction.memoNo ? t.masterData.memoIs(transaction.memoNo) : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
                     meta={
                       transaction.status === "cancelled" ? (
-                        <Badge tone="neutral">{bn.transactionStatus.cancelled}</Badge>
+                        <Badge tone="neutral">{t.transactionStatus.cancelled}</Badge>
                       ) : null
                     }
                     right={<MoneyText value={moneyFromDb(transaction.total)} size="sm" />}

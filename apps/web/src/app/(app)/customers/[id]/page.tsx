@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin, Phone, Receipt, TrendingUp, Wallet } from "lucide-react";
 import { getPartyLedger } from "@hishabai/core";
-import { bn, moneyFromDb } from "@hishabai/shared";
+import { moneyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { MoneyText } from "@/components/ui/money";
 import { PrintButton } from "@/components/ui/print-button";
 import { StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
@@ -19,7 +20,10 @@ export default async function CustomerPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { data } = await sessionWithData((scope) => getPartyLedger(scope, id, "receivable"));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getPartyLedger(scope, id, "receivable")),
+    dict(),
+  ]);
 
   // Missing and not-yours give the same answer — RLS returns no row either way.
   if (!data) notFound();
@@ -35,7 +39,7 @@ export default async function CustomerPage({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          {bn.nav.customers}
+          {t.nav.customers}
         </Link>
       </div>
 
@@ -43,7 +47,7 @@ export default async function CustomerPage({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">{party.name}</h1>
-            <Badge tone="neutral">{bn.partyType[party.type]}</Badge>
+            <Badge tone="neutral">{t.partyType[party.type]}</Badge>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {party.phone ? (
@@ -62,9 +66,9 @@ export default async function CustomerPage({
         </div>
 
         <div className="flex gap-2">
-          <PrintButton label={`${bn.due.statement} প্রিন্ট`} />
+          <PrintButton label={t.masterData.printStatement(t.due.statement)} />
           <Button asChild size="sm" className="no-print">
-            <Link href="/entry">{bn.nav.newEntry}</Link>
+            <Link href="/entry">{t.nav.newEntry}</Link>
           </Button>
         </div>
       </div>
@@ -72,45 +76,45 @@ export default async function CustomerPage({
       {/* Spec §13: total billed, total received, and what is still owed. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label="মোট বিক্রয়"
+          label={t.masterData.totalSalesColumn}
           value={moneyFromDb(party.totalSales)}
           icon={TrendingUp}
-          footnote="এই কাস্টমারের কাছে মোট বিল"
+          footnote={t.masterData.totalBilled}
         />
         <StatTile
-          label="মোট পরিশোধ"
+          label={t.masterData.totalPaidColumn}
           value={moneyFromDb(party.totalReceived)}
           tone="credit"
           icon={Receipt}
-          footnote="যত টাকা পাওয়া গেছে"
+          footnote={t.masterData.totalReceivedHint}
         />
         <StatTile
-          label={bn.fields.dueAmount}
+          label={t.fields.dueAmount}
           value={due}
           tone={due > 0n ? "due" : "neutral"}
           icon={Wallet}
-          footnote={due > 0n ? "এখনো বাকি" : "সব পরিশোধ হয়েছে"}
+          footnote={due > 0n ? t.masterData.stillOwed : t.masterData.allSettled}
         />
       </div>
 
       <Card className="card">
         <CardHeader>
           <div>
-            <CardTitle>{bn.due.statement}</CardTitle>
+            <CardTitle>{t.due.statement}</CardTitle>
             {/* Only meaningful on paper, where the reader has no company switcher. */}
             <p className="hidden text-xs text-muted-foreground print:block">
               {party.name} · {new Date().toLocaleDateString("en-GB")}
             </p>
           </div>
           <span className="text-xs text-muted-foreground no-print">
-            বিল ও পরিশোধ আলাদা লাইনে, নিচে চলতি ব্যালেন্স
+            {t.masterData.statementNote}
           </span>
         </CardHeader>
 
         {entries.length === 0 ? (
           <EmptyState
-            title="এখনো কোনো লেনদেন নেই"
-            hint="এই কাস্টমারের প্রথম বিক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে"
+            title={t.emptyStates.noTransactions}
+            hint={t.masterData.firstSaleHint}
           />
         ) : (
           <>
@@ -118,12 +122,12 @@ export default async function CustomerPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.date}</TH>
-                    <TH>{bn.fields.voucherNo}</TH>
-                    <TH>{bn.fields.description}</TH>
-                    <TH numeric>বিল</TH>
-                    <TH numeric>{bn.due.payment}</TH>
-                    <TH numeric>ব্যালেন্স</TH>
+                    <TH>{t.fields.date}</TH>
+                    <TH>{t.fields.voucherNo}</TH>
+                    <TH>{t.fields.description}</TH>
+                    <TH numeric>{t.masterData.billColumn}</TH>
+                    <TH numeric>{t.due.payment}</TH>
+                    <TH numeric>{t.masterData.balanceColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -155,11 +159,11 @@ export default async function CustomerPage({
                         <TD className="max-w-[18rem] truncate text-muted-foreground">
                           {entry.narration ??
                             (entry.transactionType
-                              ? bn.transactionType[entry.transactionType]
+                              ? t.transactionType[entry.transactionType]
                               : "—")}
                           {entry.status === "cancelled" ? (
                             <Badge tone="neutral" className="ml-1">
-                              {bn.transactionStatus.cancelled}
+                              {t.transactionStatus.cancelled}
                             </Badge>
                           ) : null}
                         </TD>
@@ -193,7 +197,7 @@ export default async function CustomerPage({
                   <TR className="border-t-2 border-border-strong bg-surface-sunken">
                     <TD className="font-semibold" />
                     <TD />
-                    <TD className="font-semibold">বর্তমান বকেয়া</TD>
+                    <TD className="font-semibold">{t.masterData.currentDue}</TD>
                     <TD />
                     <TD />
                     <TD numeric>
@@ -222,9 +226,9 @@ export default async function CustomerPage({
                     title={
                       isBill
                         ? (entry.transactionType
-                            ? bn.transactionType[entry.transactionType]
-                            : "বিল")
-                        : bn.due.payment
+                            ? t.transactionType[entry.transactionType]
+                            : t.masterData.billColumn)
+                        : t.due.payment
                     }
                     subtitle={`${formatDateShort(entry.date)}${
                       entry.voucherNo ? ` · ${entry.voucherNo}` : ""
@@ -238,7 +242,7 @@ export default async function CustomerPage({
                           signed={false}
                         />
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          ব্যালেন্স{" "}
+                          {t.masterData.balanceColumn}{" "}
                           <MoneyText value={balance} size="sm" symbol={false} tone="due" />
                         </p>
                       </>
@@ -252,7 +256,7 @@ export default async function CustomerPage({
       </Card>
 
       <p className="hidden text-xs text-muted-foreground print:block">
-        HishabAI থেকে তৈরি করা বিবরণী।
+        {t.masterData.statementFooter}
       </p>
     </div>
   );

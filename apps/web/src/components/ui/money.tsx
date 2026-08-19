@@ -1,4 +1,5 @@
 import { formatMoney, formatMoneyCompact, type Money } from "@hishabai/shared";
+import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
 export interface MoneyTextProps {
@@ -44,11 +45,12 @@ export function MoneyText({
   compact = false,
   className,
 }: MoneyTextProps) {
+  const t = useT();
   const resolvedTone =
     tone === "auto" ? (value < 0n ? "debit" : value > 0n ? "credit" : "neutral") : tone;
 
   const text = compact
-    ? formatMoneyCompact(value, { symbol })
+    ? formatMoneyCompact(value, { symbol, scale: t.moneyScale })
     : formatMoney(value, { symbol, decimals, signed });
 
   return (

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PlusCircle, Users, UserCheck, Wallet } from "lucide-react";
 import { can, getParties } from "@hishabai/core";
-import { bn, moneyFromDb } from "@hishabai/shared";
+import { moneyFromDb } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
@@ -11,7 +11,9 @@ import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 import { AddPartyPanel } from "@/components/master-data/create-forms";
 
-export const metadata = { title: bn.nav.customers };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.customers };
+}
 
 interface SearchParams {
   q?: string;
@@ -26,44 +28,55 @@ export default async function CustomersPage({
   const params = await searchParams;
   const dueOnly = params.due === "1";
 
-  const {
-    session,
-    data: { parties, summary },
-  } = await sessionWithData((scope) =>
-    getParties(scope, {
-      type: "customer",
-      ...(params.q ? { search: params.q } : {}),
-      dueOnly,
-    }),
-  );
+  const [
+    {
+      session,
+      data: { parties, summary },
+    },
+    t,
+  ] = await Promise.all([
+    sessionWithData((scope) =>
+      getParties(scope, {
+        type: "customer",
+        ...(params.q ? { search: params.q } : {}),
+        dueOnly,
+      }),
+    ),
+    dict(),
+  ]);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{bn.nav.customers}</h1>
-          <p className="text-sm text-muted-foreground">কার কাছে কত বকেয়া, এক নজরে</p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.nav.customers}</h1>
+          <p className="text-sm text-muted-foreground">{t.masterData.customersHint}</p>
         </div>
         <Button asChild>
           <Link href="/entry">
             <PlusCircle className="size-4" aria-hidden />
-            {bn.nav.newEntry}
+            {t.nav.newEntry}
           </Link>
         </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile
-          label={bn.dashboard.customerDue}
+          label={t.dashboard.customerDue}
           value={moneyFromDb(summary.totalReceivable)}
           tone="due"
           icon={Wallet}
         />
-        <CountTile label="কাস্টমার সংখ্যা" value={summary.partyCount} suffix="জন" icon={Users} />
         <CountTile
-          label="বকেয়া আছে যাদের"
+          label={t.masterData.customerCount}
+          value={summary.partyCount}
+          suffix={t.masterData.people}
+          icon={Users}
+        />
+        <CountTile
+          label={t.masterData.withDues}
           value={summary.withDueCount}
-          suffix="জন"
+          suffix={t.masterData.people}
           tone={summary.withDueCount > 0 ? "due" : "neutral"}
           icon={UserCheck}
           href="/customers?due=1"
@@ -74,19 +87,19 @@ export default async function CustomersPage({
         <CardBody>
           <form className="grid gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
-              <span className="font-medium">{bn.actions.search}</span>
+              <span className="font-medium">{t.actions.search}</span>
               <input
                 name="q"
                 type="search"
                 defaultValue={params.q ?? ""}
-                placeholder="নাম বা মোবাইল নম্বর"
+                placeholder={t.masterData.nameOrPhone}
                 className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               />
             </label>
 
             <div className="flex items-end">
               <Button type="submit" block>
-                {bn.actions.filter}
+                {t.actions.filter}
               </Button>
             </div>
 
@@ -98,7 +111,7 @@ export default async function CustomersPage({
                 defaultChecked={dueOnly}
                 className="size-4 cursor-pointer accent-[var(--color-primary)]"
               />
-              শুধু যাদের বকেয়া আছে
+              {t.masterData.onlyWithDues}
             </label>
           </form>
         </CardBody>
@@ -106,7 +119,7 @@ export default async function CustomersPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{parties.length} জন কাস্টমার</CardTitle>
+          <CardTitle>{t.masterData.customerCountTitle(String(parties.length))}</CardTitle>
         </CardHeader>
 
         {can(session, "party.manage") ? (
@@ -118,11 +131,11 @@ export default async function CustomersPage({
         {parties.length === 0 ? (
           <EmptyState
             icon={Users}
-            title={dueOnly ? "কারও বকেয়া নেই" : bn.emptyStates.noCustomers}
-            hint="উপরে কাস্টমার যোগ করুন, বা বিক্রয় এন্ট্রির মধ্যেই যোগ করে নিন"
+            title={dueOnly ? t.emptyStates.noDues : t.emptyStates.noCustomers}
+            hint={t.masterData.addCustomerHint}
             action={
               <Button asChild size="sm">
-                <Link href="/entry">{bn.nav.newEntry}</Link>
+                <Link href="/entry">{t.nav.newEntry}</Link>
               </Button>
             }
           />
@@ -132,12 +145,12 @@ export default async function CustomersPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.name}</TH>
-                    <TH>{bn.fields.phone}</TH>
-                    <TH numeric>মোট বিক্রয়</TH>
-                    <TH numeric>মোট পরিশোধ</TH>
-                    <TH numeric>{bn.dashboard.customerDue}</TH>
-                    <TH>শেষ লেনদেন</TH>
+                    <TH>{t.fields.name}</TH>
+                    <TH>{t.fields.phone}</TH>
+                    <TH numeric>{t.masterData.totalSalesColumn}</TH>
+                    <TH numeric>{t.masterData.totalPaidColumn}</TH>
+                    <TH numeric>{t.dashboard.customerDue}</TH>
+                    <TH>{t.masterData.lastEntryColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -197,15 +210,15 @@ export default async function CustomersPage({
                     key={party.id}
                     href={`/customers/${party.id}`}
                     title={party.name}
-                    subtitle={party.phone ?? "মোবাইল নম্বর নেই"}
+                    subtitle={party.phone ?? t.masterData.noPhone}
                     right={
                       due > 0n ? (
                         <>
                           <MoneyText value={due} size="sm" tone="due" />
-                          <p className="mt-0.5 text-xs text-muted-foreground">বকেয়া</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{t.fields.dueAmount}</p>
                         </>
                       ) : (
-                        <span className="text-xs text-muted-foreground">বকেয়া নেই</span>
+                        <span className="text-xs text-muted-foreground">{t.masterData.noDue}</span>
                       )
                     }
                   />

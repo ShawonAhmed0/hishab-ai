@@ -2,12 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowDownLeft, ArrowUpRight, Boxes, Coins, Ruler } from "lucide-react";
 import { getProductDetail } from "@hishabai/core";
-import { bn, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
 
@@ -20,7 +21,10 @@ export default async function ProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { data } = await sessionWithData((scope) => getProductDetail(scope, id));
+  const [{ data }, t] = await Promise.all([
+    sessionWithData((scope) => getProductDetail(scope, id)),
+    dict(),
+  ]);
 
   // Not found and not-yours are deliberately the same answer: RLS returns no
   // row either way, and saying which it was would confirm the id exists.
@@ -39,60 +43,70 @@ export default async function ProductPage({
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
-          {bn.nav.inventory}
+          {t.nav.inventory}
         </Link>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-bold tracking-tight">{product.nameBn}</h1>
-          <Badge tone="neutral">{bn.productKind[product.kind]}</Badge>
+          <Badge tone="neutral">{t.productKind[product.kind]}</Badge>
           {low ? (
-            <Badge tone="due">{quantity <= 0n ? "স্টক শেষ" : bn.messages.lowStock}</Badge>
+            <Badge tone="due">
+              {quantity <= 0n ? t.masterData.outOfStock : t.messages.lowStock}
+            </Badge>
           ) : null}
         </div>
 
         <p className="mt-1 text-sm text-muted-foreground">
           {product.nameEn ? `${product.nameEn} · ` : ""}
-          একক {product.unitNameBn}
-          {product.sku ? ` · কোড ${product.sku}` : ""}
+          {t.masterData.unitIs(product.unitNameBn)}
+          {product.sku ? t.masterData.codeIs(product.sku) : ""}
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <CountTile
-          label="বর্তমান স্টক"
+          label={t.masterData.currentStock}
           value={formatQty(quantity, { unit: product.unitSymbol })}
           tone={low ? "due" : "neutral"}
           icon={Boxes}
         />
         <StatTile
-          label={bn.fields.avgCost}
+          label={t.fields.avgCost}
           value={moneyFromDb(product.avgCost)}
           icon={Coins}
-          footnote="ওজনভিত্তিক গড়"
+          footnote={t.masterData.weightedAverage}
         />
-        <StatTile label="স্টক ভ্যালু" value={moneyFromDb(product.value)} icon={Boxes} />
+        <StatTile
+          label={t.masterData.stockValueColumn}
+          value={moneyFromDb(product.value)}
+          icon={Boxes}
+        />
         <CountTile
-          label={bn.fields.minStock}
+          label={t.fields.minStock}
           value={formatQty(minimum, { unit: product.unitSymbol })}
           icon={Ruler}
           footnote={
-            low ? "এই স্তরে নেমে গেছে" : minimum > 0n ? "এর নিচে নামলে সতর্কতা" : "নির্ধারিত নয়"
+            low
+              ? t.masterData.atThisLevel
+              : minimum > 0n
+                ? t.masterData.warnBelow
+                : t.masterData.notSet
           }
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>স্টকের গতিবিধি</CardTitle>
+          <CardTitle>{t.masterData.stockMovements}</CardTitle>
           <span className="text-xs text-muted-foreground">
-            প্রতিটি লাইনে সেই সময়ের ব্যালেন্স ও গড় মূল্য
+            {t.masterData.stockMovementsNote}
           </span>
         </CardHeader>
 
         {movements.length === 0 ? (
           <EmptyState
-            title="এখনো কোনো স্টক গতিবিধি নেই"
-            hint="ক্রয় বা বিক্রয় এন্ট্রি করলেই এখানে ইতিহাস জমা হবে"
+            title={t.masterData.noMovements}
+            hint={t.masterData.noMovementsHint}
           />
         ) : (
           <>
@@ -100,15 +114,15 @@ export default async function ProductPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.date}</TH>
-                    <TH>ধরন</TH>
-                    <TH>{bn.fields.voucherNo}</TH>
-                    <TH>{bn.fields.party}</TH>
-                    <TH numeric>পরিমাণ</TH>
-                    <TH numeric>দর</TH>
-                    <TH numeric>ব্যালেন্স</TH>
-                    <TH numeric>{bn.fields.avgCost}</TH>
-                    <TH numeric>স্টক ভ্যালু</TH>
+                    <TH>{t.fields.date}</TH>
+                    <TH>{t.masterData.kindColumn}</TH>
+                    <TH>{t.fields.voucherNo}</TH>
+                    <TH>{t.fields.party}</TH>
+                    <TH numeric>{t.fields.quantity}</TH>
+                    <TH numeric>{t.masterData.rateColumn}</TH>
+                    <TH numeric>{t.masterData.balanceColumn}</TH>
+                    <TH numeric>{t.fields.avgCost}</TH>
+                    <TH numeric>{t.masterData.stockValueColumn}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -121,7 +135,7 @@ export default async function ProductPage({
                         </TD>
                         <TD>
                           <Badge tone={inbound ? "credit" : "debit"}>
-                            {bn.stockMovementType[movement.movementType]}
+                            {t.stockMovementType[movement.movementType]}
                           </Badge>
                         </TD>
                         <TD>
@@ -184,13 +198,13 @@ export default async function ProductPage({
                 return (
                   <MobileRow
                     key={movement.id}
-                    title={bn.stockMovementType[movement.movementType]}
+                    title={t.stockMovementType[movement.movementType]}
                     subtitle={`${formatDateShort(movement.date)}${
                       movement.voucherNo ? ` · ${movement.voucherNo}` : ""
                     }`}
                     meta={
                       <span className="text-xs text-muted-foreground">
-                        ব্যালেন্স{" "}
+                        {t.masterData.balanceColumn}{" "}
                         {formatQty(qtyFromDb(movement.quantityAfter), {
                           unit: product.unitSymbol,
                         })}
@@ -215,7 +229,7 @@ export default async function ProductPage({
                           })}
                         </span>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          গড়{" "}
+                          {t.masterData.average}{" "}
                           <MoneyText
                             value={moneyFromDb(movement.avgCostAfter)}
                             size="sm"

@@ -12,7 +12,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney, formatMoneyCompact, money } from "@hishabai/shared";
+import {
+  formatMoney,
+  formatMoneyCompact,
+  money,
+  type MoneyScaleWords,
+} from "@hishabai/shared";
 import { useT } from "@/components/locale-provider";
 
 /**
@@ -44,8 +49,8 @@ function periodLabel(period: string, months: readonly string[]): string {
   return months[month - 1] ?? period;
 }
 
-const axisMoney = (value: number) =>
-  formatMoneyCompact(money(Math.round(value)), { symbol: false });
+const axisMoney = (value: number, scale: MoneyScaleWords) =>
+  formatMoneyCompact(money(Math.round(value)), { symbol: false, scale });
 
 function MoneyTooltip({
   active,
@@ -115,7 +120,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           tickLine={false}
         />
         <YAxis
-          tickFormatter={axisMoney}
+          tickFormatter={(value: number) => axisMoney(value, t.moneyScale)}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}
@@ -170,7 +175,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           tickLine={false}
         />
         <YAxis
-          tickFormatter={axisMoney}
+          tickFormatter={(value: number) => axisMoney(value, t.moneyScale)}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}

@@ -167,11 +167,33 @@ const LAKH = 100_000n * MONEY_UNIT;
 const THOUSAND = 1_000n * MONEY_UNIT;
 
 /**
+ * The words for the scale steps.
+ *
+ * Crore and lakh in both locales, never million — the grouping stays 2-2-3,
+ * and "2 crore" beside "1,98,58,770" is the same number read aloud, where
+ * "20 million" would be a different reading of a differently grouped figure.
+ */
+export interface MoneyScaleWords {
+  crore: string;
+  lakh: string;
+  thousand: string;
+}
+
+const BENGALI_SCALE: MoneyScaleWords = {
+  crore: "কোটি",
+  lakh: "লাখ",
+  thousand: "হাজার",
+};
+
+/**
  * Compact form for chart axes and tight cards only — never for a figure the
  * user is expected to reconcile against a memo.
  */
-export function formatMoneyCompact(a: Money, options: { symbol?: boolean } = {}): string {
-  const { symbol = true } = options;
+export function formatMoneyCompact(
+  a: Money,
+  options: { symbol?: boolean; scale?: MoneyScaleWords } = {},
+): string {
+  const { symbol = true, scale = BENGALI_SCALE } = options;
   const magnitude = a < 0n ? -a : a;
   const sign = a < 0n ? "−" : "";
 
@@ -181,8 +203,8 @@ export function formatMoneyCompact(a: Money, options: { symbol?: boolean } = {})
     return `${sign}${symbol ? `${TAKA_SIGN} ` : ""}${digits} ${suffix}`;
   };
 
-  if (magnitude >= CRORE) return render(CRORE, "কোটি");
-  if (magnitude >= LAKH) return render(LAKH, "লাখ");
-  if (magnitude >= THOUSAND) return render(THOUSAND, "হাজার");
+  if (magnitude >= CRORE) return render(CRORE, scale.crore);
+  if (magnitude >= LAKH) return render(LAKH, scale.lakh);
+  if (magnitude >= THOUSAND) return render(THOUSAND, scale.thousand);
   return formatMoney(a, { symbol, decimals: 0 });
 }

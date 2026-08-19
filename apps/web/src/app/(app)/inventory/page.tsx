@@ -3,7 +3,6 @@ import { AlertTriangle, Boxes, PackageX, Layers, PlusCircle } from "lucide-react
 import { can, getInventory } from "@hishabai/core";
 import {
   PRODUCT_KINDS,
-  bn,
   formatQty,
   moneyFromDb,
   qtyFromDb,
@@ -15,10 +14,13 @@ import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { AddProductPanel } from "@/components/master-data/create-forms";
 
-export const metadata = { title: bn.nav.inventory };
+export async function generateMetadata() {
+  return { title: (await dict()).nav.inventory };
+}
 
 interface SearchParams {
   kind?: string;
@@ -37,30 +39,34 @@ export default async function InventoryPage({
     : undefined;
   const lowOnly = params.low === "1";
 
-  const {
-    session,
-    data: { products, summary, units, categories },
-  } = await sessionWithData((scope) =>
-    getInventory(scope, {
-      ...(kind ? { kind } : {}),
-      ...(params.q ? { search: params.q } : {}),
-      lowOnly,
-    }),
-  );
+  const [
+    {
+      session,
+      data: { products, summary, units, categories },
+    },
+    t,
+  ] = await Promise.all([
+    sessionWithData((scope) =>
+      getInventory(scope, {
+        ...(kind ? { kind } : {}),
+        ...(params.q ? { search: params.q } : {}),
+        lowOnly,
+      }),
+    ),
+    dict(),
+  ]);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{bn.nav.inventory}</h1>
-          <p className="text-sm text-muted-foreground">
-            স্টক প্রতিটি এন্ট্রির সাথে নিজে থেকেই আপডেট হয়
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.nav.inventory}</h1>
+          <p className="text-sm text-muted-foreground">{t.masterData.stockSelfUpdates}</p>
         </div>
         <Button asChild>
           <Link href="/entry">
             <PlusCircle className="size-4" aria-hidden />
-            {bn.nav.newEntry}
+            {t.nav.newEntry}
           </Link>
         </Button>
       </div>
@@ -68,23 +74,28 @@ export default async function InventoryPage({
       {/* Tiles describe the whole business; the table below describes the filter. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label={bn.dashboard.stockValue}
+          label={t.dashboard.stockValue}
           value={moneyFromDb(summary.totalValue)}
           icon={Boxes}
         />
-        <CountTile label="পণ্যের সংখ্যা" value={summary.productCount} suffix="টি" icon={Layers} />
         <CountTile
-          label={bn.messages.lowStock}
+          label={t.masterData.productCountLabel}
+          value={summary.productCount}
+          suffix={t.masterData.countSuffix}
+          icon={Layers}
+        />
+        <CountTile
+          label={t.messages.lowStock}
           value={summary.lowStockCount}
-          suffix="টি"
+          suffix={t.masterData.countSuffix}
           tone={summary.lowStockCount > 0 ? "due" : "neutral"}
           icon={AlertTriangle}
           href="/inventory?low=1"
         />
         <CountTile
-          label="স্টক শেষ"
+          label={t.masterData.outOfStock}
           value={summary.outOfStockCount}
-          suffix="টি"
+          suffix={t.masterData.countSuffix}
           tone={summary.outOfStockCount > 0 ? "debit" : "neutral"}
           icon={PackageX}
         />
@@ -94,27 +105,27 @@ export default async function InventoryPage({
         <CardBody>
           <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{bn.actions.search}</span>
+              <span className="font-medium">{t.actions.search}</span>
               <input
                 name="q"
                 type="search"
                 defaultValue={params.q ?? ""}
-                placeholder="পণ্যের নাম বা কোড"
+                placeholder={t.masterData.nameOrCode}
                 className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               />
             </label>
 
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">পণ্যের ধরন</span>
+              <span className="font-medium">{t.masterData.productKindLabel}</span>
               <select
                 name="kind"
                 defaultValue={params.kind ?? ""}
                 className="h-11 cursor-pointer rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
               >
-                <option value="">সব</option>
+                <option value="">{t.masterData.all}</option>
                 {PRODUCT_KINDS.map((option) => (
                   <option key={option} value={option}>
-                    {bn.productKind[option]}
+                    {t.productKind[option]}
                   </option>
                 ))}
               </select>
@@ -122,7 +133,7 @@ export default async function InventoryPage({
 
             <div className="flex items-end">
               <Button type="submit" block>
-                {bn.actions.filter}
+                {t.actions.filter}
               </Button>
             </div>
 
@@ -134,7 +145,7 @@ export default async function InventoryPage({
                 defaultChecked={lowOnly}
                 className="size-4 cursor-pointer accent-[var(--color-primary)]"
               />
-              শুধু যেগুলোর স্টক সর্বনিম্নে নেমেছে
+              {t.masterData.onlyLowStock}
             </label>
           </form>
         </CardBody>
@@ -142,7 +153,7 @@ export default async function InventoryPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{products.length} টি পণ্য</CardTitle>
+          <CardTitle>{t.masterData.productCountTitle(String(products.length))}</CardTitle>
         </CardHeader>
 
         {/* An operator can post entries but not invent master data, and a
@@ -156,11 +167,11 @@ export default async function InventoryPage({
         {products.length === 0 ? (
           <EmptyState
             icon={Boxes}
-            title={bn.emptyStates.noProducts}
-            hint="উপরে পণ্য যোগ করুন, বা ক্রয় এন্ট্রির মধ্যেই যোগ করে নিন"
+            title={t.emptyStates.noProducts}
+            hint={t.masterData.addProductHint}
             action={
               <Button asChild size="sm">
-                <Link href="/entry">{bn.nav.newEntry}</Link>
+                <Link href="/entry">{t.nav.newEntry}</Link>
               </Button>
             }
           />
@@ -170,13 +181,13 @@ export default async function InventoryPage({
               <TableScroll>
                 <THead>
                   <TR>
-                    <TH>{bn.fields.product}</TH>
-                    <TH>ধরন</TH>
-                    <TH numeric>স্টক</TH>
-                    <TH numeric>{bn.fields.avgCost}</TH>
-                    <TH numeric>স্টক ভ্যালু</TH>
-                    <TH numeric>{bn.fields.minStock}</TH>
-                    <TH numeric>{bn.fields.salePrice}</TH>
+                    <TH>{t.fields.product}</TH>
+                    <TH>{t.masterData.kindColumn}</TH>
+                    <TH numeric>{t.masterData.stockColumn}</TH>
+                    <TH numeric>{t.fields.avgCost}</TH>
+                    <TH numeric>{t.masterData.stockValueColumn}</TH>
+                    <TH numeric>{t.fields.minStock}</TH>
+                    <TH numeric>{t.fields.salePrice}</TH>
                   </TR>
                 </THead>
                 <tbody>
@@ -200,14 +211,14 @@ export default async function InventoryPage({
                             </span>
                           ) : null}
                         </TD>
-                        <TD className="text-muted-foreground">{bn.productKind[product.kind]}</TD>
+                        <TD className="text-muted-foreground">{t.productKind[product.kind]}</TD>
                         <TD numeric>
                           <span className={low ? "num text-due" : "num"}>
                             {formatQty(quantity, { unit: product.unitSymbol })}
                           </span>
                           {low ? (
                             <Badge tone="due" className="ml-2">
-                              {quantity <= 0n ? "শেষ" : bn.messages.lowStock}
+                              {quantity <= 0n ? t.masterData.empty : t.messages.lowStock}
                             </Badge>
                           ) : null}
                         </TD>
@@ -245,13 +256,13 @@ export default async function InventoryPage({
                     key={product.id}
                     href={`/inventory/${product.id}`}
                     title={product.nameBn}
-                    subtitle={`${bn.productKind[product.kind]} · ${formatQty(quantity, {
+                    subtitle={`${t.productKind[product.kind]} · ${formatQty(quantity, {
                       unit: product.unitSymbol,
                     })}`}
                     meta={
                       low ? (
                         <Badge tone="due">
-                          {quantity <= 0n ? "শেষ" : bn.messages.lowStock}
+                          {quantity <= 0n ? t.masterData.empty : t.messages.lowStock}
                         </Badge>
                       ) : null
                     }
@@ -259,7 +270,7 @@ export default async function InventoryPage({
                       <>
                         <MoneyText value={moneyFromDb(product.value)} size="sm" />
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          গড়{" "}
+                          {t.masterData.average}{" "}
                           <MoneyText
                             value={moneyFromDb(product.avgCost)}
                             size="sm"

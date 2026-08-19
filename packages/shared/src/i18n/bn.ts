@@ -292,6 +292,102 @@ export const messages = {
 } as const;
 
 /**
+ * Master data: the customer, vendor and product lists and their detail pages.
+ *
+ * Customers and vendors share one screen shape and one service, but not one
+ * vocabulary — a customer's balance is বকেয়া and a vendor's is পাওনা, and
+ * showing the wrong one is the kind of mistake a shopkeeper notices
+ * immediately. The two sets are kept apart here rather than parametrised.
+ */
+export const masterData = {
+  customersHint: "কার কাছে কত বকেয়া, এক নজরে",
+  vendorsHint: "কার পাওনা কত, এক নজরে",
+  customerCount: "কাস্টমার সংখ্যা",
+  vendorCount: "ভেন্ডর সংখ্যা",
+  people: "জন",
+  withDues: "বকেয়া আছে যাদের",
+  withPayables: "পাওনা আছে যাদের",
+  nameOrPhone: "নাম বা মোবাইল নম্বর",
+  onlyWithDues: "শুধু যাদের বকেয়া আছে",
+  onlyWithPayables: "শুধু যাদের পাওনা আছে",
+  customerCountTitle: (count: string) => `${count} জন কাস্টমার`,
+  vendorCountTitle: (count: string) => `${count} জন ভেন্ডর`,
+  noPayables: "কারও পাওনা নেই",
+  addCustomerHint: "উপরে কাস্টমার যোগ করুন, বা বিক্রয় এন্ট্রির মধ্যেই যোগ করে নিন",
+  addVendorHint: "উপরে ভেন্ডর যোগ করুন, বা ক্রয় এন্ট্রির মধ্যেই যোগ করে নিন",
+  addProductHint: "উপরে পণ্য যোগ করুন, বা ক্রয় এন্ট্রির মধ্যেই যোগ করে নিন",
+  totalSalesColumn: "মোট বিক্রয়",
+  totalPurchasesColumn: "মোট ক্রয়",
+  totalPaidColumn: "মোট পরিশোধ",
+  lastEntryColumn: "শেষ লেনদেন",
+  noPhone: "মোবাইল নম্বর নেই",
+  payable: "পাওনা",
+  noDue: "বকেয়া নেই",
+  noPayable: "পাওনা নেই",
+
+  stockSelfUpdates: "স্টক প্রতিটি এন্ট্রির সাথে নিজে থেকেই আপডেট হয়",
+  productCountLabel: "পণ্যের সংখ্যা",
+  countSuffix: "টি",
+  outOfStock: "স্টক শেষ",
+  nameOrCode: "পণ্যের নাম বা কোড",
+  productKindLabel: "পণ্যের ধরন",
+  all: "সব",
+  onlyLowStock: "শুধু যেগুলোর স্টক সর্বনিম্নে নেমেছে",
+  productCountTitle: (count: string) => `${count} টি পণ্য`,
+  kindColumn: "ধরন",
+  stockColumn: "স্টক",
+  stockValueColumn: "স্টক ভ্যালু",
+  empty: "শেষ",
+  average: "গড়",
+
+  // --- party detail ---
+  printStatement: (statement: string) => `${statement} প্রিন্ট`,
+  payableStatement: "পাওনা বিবরণী",
+  payableStatementPrint: "পাওনা বিবরণী প্রিন্ট",
+  totalBilled: "এই কাস্টমারের কাছে মোট বিল",
+  totalBought: "এই ভেন্ডরের কাছ থেকে মোট কেনা",
+  totalReceivedHint: "যত টাকা পাওয়া গেছে",
+  totalPaidHint: "যত টাকা দেওয়া হয়েছে",
+  stillOwed: "এখনো বাকি",
+  stillToPay: "এখনো দিতে হবে",
+  allSettled: "সব পরিশোধ হয়েছে",
+  statementNote: "বিল ও পরিশোধ আলাদা লাইনে, নিচে চলতি ব্যালেন্স",
+  firstSaleHint: "এই কাস্টমারের প্রথম বিক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে",
+  firstPurchaseHint: "এই ভেন্ডরের প্রথম ক্রয় এন্ট্রি করলে বিবরণী তৈরি হবে",
+  billColumn: "বিল",
+  balanceColumn: "ব্যালেন্স",
+  currentDue: "বর্তমান বকেয়া",
+  currentPayable: "বর্তমান পাওনা",
+  statementFooter: "HishabAI থেকে তৈরি করা বিবরণী।",
+
+  // --- product detail ---
+  unitIs: (unit: string) => `একক ${unit}`,
+  codeIs: (code: string) => ` · কোড ${code}`,
+  currentStock: "বর্তমান স্টক",
+  weightedAverage: "ওজনভিত্তিক গড়",
+  atThisLevel: "এই স্তরে নেমে গেছে",
+  warnBelow: "এর নিচে নামলে সতর্কতা",
+  notSet: "নির্ধারিত নয়",
+  stockMovements: "স্টকের গতিবিধি",
+  stockMovementsNote: "প্রতিটি লাইনে সেই সময়ের ব্যালেন্স ও গড় মূল্য",
+  noMovements: "এখনো কোনো স্টক গতিবিধি নেই",
+  noMovementsHint: "ক্রয় বা বিক্রয় এন্ট্রি করলেই এখানে ইতিহাস জমা হবে",
+  rateColumn: "দর",
+
+  // --- search ---
+  searchHint: "কাস্টমার, ভেন্ডর, পণ্য, ভাউচার ও মেমো — এক জায়গায়",
+  searchPlaceholder: "নাম, নম্বর, ভাউচার বা অঙ্ক",
+  searchPrompt: "কী খুঁজছেন?",
+  searchPromptHint: "কাস্টমারের নাম, মোবাইল নম্বর, পণ্যের নাম, ভাউচার নম্বর বা টাকার অঙ্ক লিখুন",
+  searchMiss: (query: string) => `"${query}" খুঁজে পাওয়া যায়নি`,
+  searchMissHint: "বানান দেখে নিন, অথবা অন্য শব্দ দিয়ে চেষ্টা করুন",
+  resultsSuffix: "টি ফলাফল",
+  partiesHeading: "কাস্টমার ও ভেন্ডর",
+  stockIs: (quantity: string) => `স্টক ${quantity}`,
+  memoIs: (memoNo: string) => `মেমো ${memoNo}`,
+} as const;
+
+/**
  * The transaction list and the voucher view.
  */
 export const transactions = {
@@ -480,6 +576,18 @@ export const months = [
   "ডিসেম্বর",
 ] as const;
 
+/**
+ * The scale words a compact figure ends in.
+ *
+ * `formatMoneyCompact` takes these rather than reading a locale itself — the
+ * money module has no business knowing one exists.
+ */
+export const moneyScale = {
+  crore: "কোটি",
+  lakh: "লাখ",
+  thousand: "হাজার",
+} as const;
+
 /** The axis form — a month label has to fit under a bar. */
 export const monthsShort = [
   "জানু",
@@ -555,10 +663,12 @@ export const bn = {
   messages,
   emptyStates,
   shell,
+  masterData,
   transactions,
   reports,
   months,
   monthsShort,
+  moneyScale,
 } as const;
 
 /**
