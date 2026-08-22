@@ -142,14 +142,31 @@ export async function sessionWithData<T>(
     return { session, data: await read(session) };
   }
 
-  const [session, data] = await Promise.all([requireSession(), read(hint)]);
+  // Settled, not rejected. The optimistic read is a head start on a company
+  // the browser *claims* is current, so it is allowed to be wrong — and a
+  // `Promise.all` that rejects takes the request down before the check below
+  // can notice that it was. Most reads for a company you are not in come back
+  // empty, which is why this held for so long; `getSettings` throws instead,
+  // and a deleted or revoked company then 500'd every load of /settings with
+  // the bad cookie resent on each retry. That is the `hishabai_company`
+  // incident again, from the other side.
+  const [session, attempt] = await Promise.all([
+    requireSession(),
+    read(hint).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    ),
+  ]);
 
   // The cookie named a company they are no longer a member of, so
-  // sessionContext fell back to a different one and the rows we fetched are for
-  // the wrong company (in practice: none). Pay for the correct read.
+  // sessionContext fell back to a different one and whatever we fetched is for
+  // the wrong company. Pay for the correct read.
   if (session.companyId !== hint.companyId) {
     return { session, data: await read(session) };
   }
 
-  return { session, data };
+  // The hint was right and the read still failed, so the failure is real.
+  if (!attempt.ok) throw attempt.error;
+
+  return { session, data: attempt.value };
 }
