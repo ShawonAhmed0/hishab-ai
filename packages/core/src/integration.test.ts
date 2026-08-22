@@ -57,6 +57,12 @@ import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./confirmations";
 import { loadAgeing } from "./ageing";
 import { dailyAlertsFrom, getCustomerHealth, reactivationList } from "./customer-health";
+import {
+  flushDeliveries,
+  listDeliveries,
+  MAX_ATTEMPTS,
+  type WhatsAppTransport,
+} from "./delivery";
 import { getCompanyPolicy, updateCompanyPolicy } from "./policy";
 import type { Session } from "./session";
 
@@ -2701,6 +2707,236 @@ describeDb("কাস্টমারের অবস্থা", () => {
       expect(view.customers.map((c) => c.name)).not.toContain("নিয়মিত কাস্টমার");
       expect(view.customers.map((c) => c.name)).not.toContain("চুপচাপ কাস্টমার");
       expect(view.customers).toHaveLength(0);
+    } finally {
+      await dropTenant(other);
+    }
+  }, 60_000);
+});
+
+/**
+ * Spec R4.6. The two halves of the transaction boundary, and the retry.
+ *
+ * The transport is always a fake here — a suite that could message a real
+ * phone is a suite nobody dares run.
+ */
+describeDb("হোয়াটসঅ্যাপ ডেলিভারি", () => {
+  let tenant: Tenant;
+  let productId: string;
+  let customerId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Delivery");
+    productId = await seedProduct(tenant, "ডেলিভারির পণ্য", "100000", "50");
+    customerId = await seedParty(tenant, "ফোনওয়ালা কাস্টমার");
+    // A number to deliver to. seedParty leaves it null.
+    await withTenant(tenant.session, (tx) =>
+      tx.execute(sql`update parties set phone = '01812345678' where id = ${customerId}::uuid`),
+    );
+    // The admin needs one too, or the payment alert has nowhere to go.
+    await withUser(tenant.userId, (tx) =>
+      tx.execute(sql`update profiles set phone = '01911111111' where id = ${tenant.userId}::uuid`),
+    );
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  /** Records every send, and fails on demand. */
+  function fakeTransport(options: { fail?: boolean } = {}): WhatsAppTransport & {
+    sent: { to: string; templateName: string }[];
+  } {
+    const sent: { to: string; templateName: string }[] = [];
+    return {
+      sent,
+      configured: true,
+      async send(message) {
+        if (options.fail) throw new Error("Meta is having a day");
+        sent.push({ to: message.to, templateName: message.templateName });
+        return { providerMessageId: `wamid.${sent.length}` };
+      },
+    };
+  }
+
+  async function deliveriesFor(entityId: string) {
+    return (await listDeliveries(tenant.session, 100)).filter(
+      (row) => row.entityId === entityId,
+    );
+  }
+
+  it("queues a message to the customer when a sale is recorded", async () => {
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+      payments: [],
+    });
+
+    const queued = await deliveriesFor(sale.transactionId);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]!.template).toBe("entryRecorded");
+    expect(queued[0]!.status).toBe("pending");
+    // Normalised on the way in, so the sender never has to think about it.
+    expect(queued[0]!.recipient).toBe("8801812345678");
+    // The rendered sentence is kept so the log reads without the template.
+    expect(queued[0]!.preview).toContain("৳");
+  });
+
+  /**
+   * The half of the rule that is easy to miss: a message must not survive the
+   * entry it describes.
+   */
+  it("leaves nothing behind when the entry is refused", async () => {
+    const before = (await listDeliveries(tenant.session, 200)).length;
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "sale",
+        date: todayIso(),
+        source: "manual",
+        partyId: customerId,
+        // Far more than the books have ever received.
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "999999", rate: "80" }],
+        payments: [],
+      }),
+    ).rejects.toThrow();
+
+    expect((await listDeliveries(tenant.session, 200)).length).toBe(before);
+  });
+
+  it("tells the admin when money is collected", async () => {
+    const receipt = await createTransaction(tenant.session, {
+      type: "customer_payment",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "500" }],
+    });
+
+    const templates = (await deliveriesFor(receipt.transactionId)).map((r) => r.template);
+    // The customer hears that an entry landed; the admin hears that money did.
+    expect(templates).toContain("paymentReceived");
+    expect(templates).toContain("entryRecorded");
+  });
+
+  it("sends what is queued and marks it, without touching the entry", async () => {
+    const transport = fakeTransport();
+    const report = await flushDeliveries(tenant.session, transport);
+
+    expect(report.sent).toBeGreaterThan(0);
+    expect(transport.sent.every((m) => m.to === "8801812345678" || m.to === "8801911111111")).toBe(true);
+
+    const rows = await listDeliveries(tenant.session, 200);
+    const stillPending = rows.filter((r) => r.status === "pending");
+    expect(stillPending).toHaveLength(0);
+    for (const row of rows.filter((r) => r.status === "sent")) {
+      expect(row.providerMessageId).toMatch(/^wamid\./);
+      expect(row.sentAt).not.toBeNull();
+    }
+  });
+
+  it("keeps a failed message pending until the attempt cap, then gives up", async () => {
+    // Quantities differ across these three tests on purpose: same party, same
+    // day, same product and same total is R2.2's probable duplicate, and it
+    // refuses — correctly — if every one of them buys one kilo.
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "1", rate: "80" }],
+      payments: [],
+    });
+
+    const failing = fakeTransport({ fail: true });
+    for (let pass = 1; pass <= MAX_ATTEMPTS; pass += 1) {
+      await flushDeliveries(tenant.session, failing);
+      const row = (await deliveriesFor(sale.transactionId))[0]!;
+      expect(row.attempts).toBe(pass);
+      // Below the cap it stays pending, which is what makes the next flush a
+      // retry. At the cap it is terminal.
+      expect(row.status).toBe(pass < MAX_ATTEMPTS ? "pending" : "failed");
+      expect(row.lastError).toContain("Meta is having a day");
+    }
+  });
+
+  it("never throws, whatever the transport does", async () => {
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "2", rate: "80" }],
+      payments: [],
+    });
+
+    const exploding: WhatsAppTransport = {
+      configured: true,
+      send() {
+        throw new Error("not even a rejected promise");
+      },
+    };
+    // The entry is already committed by the time this runs. An exception here
+    // would report a failed save for an entry that was saved.
+    await expect(flushDeliveries(tenant.session, exploding)).resolves.toBeDefined();
+  });
+
+  it("skips rather than hoards when there are no credentials", async () => {
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "3", rate: "80" }],
+      payments: [],
+    });
+
+    const unconfigured: WhatsAppTransport = {
+      configured: false,
+      async send() {
+        throw new Error("should never be called");
+      },
+    };
+    const report = await flushDeliveries(tenant.session, unconfigured);
+    expect(report.skipped).toBeGreaterThan(0);
+
+    // Not pending. A message delivered three weeks late, on the day somebody
+    // pastes in a token, is worse than one never sent.
+    const row = (await deliveriesFor(sale.transactionId))[0]!;
+    expect(row.status).toBe("skipped");
+    expect(row.lastError).toContain("not configured");
+  });
+
+  it("logs a party with an unusable number instead of dropping them", async () => {
+    const unreachable = await seedParty(tenant, "নম্বরহীন কাস্টমার");
+    await withTenant(tenant.session, (tx) =>
+      tx.execute(sql`update parties set phone = 'ask my brother' where id = ${unreachable}::uuid`),
+    );
+
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: unreachable,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "4", rate: "80" }],
+      payments: [],
+    });
+
+    const row = (await deliveriesFor(sale.transactionId)).find(
+      (r) => r.template === "entryRecorded",
+    )!;
+    expect(row.status).toBe("skipped");
+    expect(row.lastError).toBe("no usable phone number");
+  });
+
+  /** X.1 — a new read path is a new way into the data. */
+  it("shows one company's delivery log to nobody else", async () => {
+    const other = await makeTenant("Snooper");
+    try {
+      expect(await listDeliveries(other.session, 100)).toHaveLength(0);
     } finally {
       await dropTenant(other);
     }

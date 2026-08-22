@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { ZodError } from "zod";
 import {
   createTransaction,
+  flushDeliveries,
   DuplicateMemoError,
   MissingSetupError,
   OverrideError,
@@ -100,6 +102,15 @@ export async function createEntryAction(
     });
     revalidatePath("/dashboard");
     revalidatePath("/transactions");
+
+    // Spec R4.6 — sending happens *after* the posting transaction has
+    // committed, and cannot touch it. `after()` runs this once the response has
+    // been sent, so a slow or unreachable Meta costs the user nothing; the
+    // entry is already saved either way. `flushDeliveries` never throws, so the
+    // `void` here is discarding a report rather than swallowing an error.
+    after(async () => {
+      await flushDeliveries(session);
+    });
 
     const t = await dict();
     return {

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -8,7 +9,12 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { createdAt, nullableAt, primaryId } from "./columns";
-import { auditActionEnum, notificationSeverityEnum } from "./enums";
+import {
+  auditActionEnum,
+  deliveryChannelEnum,
+  deliveryStatusEnum,
+  notificationSeverityEnum,
+} from "./enums";
 import { companies, profiles } from "./tenancy";
 
 /**
@@ -67,5 +73,62 @@ export const notifications = pgTable(
   ],
 );
 
+/**
+ * Spec R4.6 — every WhatsApp message this app tried to send, and what came of
+ * it.
+ *
+ * A queue and a log in one table, which is the right shape here: the volume is
+ * a handful of rows per entry, the retry needs the attempt count anyway, and a
+ * separate log would only ever be joined back to the queue row it came from.
+ *
+ * Rows are written **inside** the posting transaction and sent **after** it
+ * commits. Both halves of that matter and they pull in opposite directions:
+ * queueing inside means an entry that rolls back leaves no message claiming it
+ * happened, and sending outside means Meta being down cannot roll back a sale.
+ */
+export const messageDeliveries = pgTable(
+  "message_deliveries",
+  {
+    id: primaryId(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    channel: deliveryChannelEnum("channel").notNull().default("whatsapp"),
+    /** The template key, which maps to a name registered with Meta. */
+    template: varchar("template", { length: 60 }).notNull(),
+    /** Which language variant of that template to ask Meta for. */
+    locale: varchar("locale", { length: 5 }).notNull().default("bn"),
+    /** E.164 without the plus, which is what the Cloud API takes. */
+    recipient: varchar("recipient", { length: 20 }).notNull(),
+    /** The positional `{{n}}` parameters, already formatted. */
+    params: jsonb("params").notNull().default(sql`'[]'::jsonb`),
+    /** The rendered sentence, so the log is readable without the template. */
+    preview: text("preview"),
+    status: deliveryStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    /** Meta's own id for the message, once they have accepted it. */
+    providerMessageId: varchar("provider_message_id", { length: 120 }),
+    entityType: varchar("entity_type", { length: 60 }),
+    entityId: uuid("entity_id"),
+    createdAt: createdAt(),
+    sentAt: nullableAt("sent_at"),
+  },
+  (table) => [
+    // The sender's only query: what is still owed a send, oldest first.
+    index("message_deliveries_pending_idx").on(
+      table.companyId,
+      table.status,
+      table.createdAt,
+    ),
+    index("message_deliveries_entity_idx").on(
+      table.companyId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type MessageDelivery = typeof messageDeliveries.$inferSelect;

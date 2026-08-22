@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 166 passing instead of 267. Check the count.
+skip** and you get 183 passing instead of 293. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -208,12 +208,16 @@ the `/api/v1` Android surface (not started), and real voice/OCR (the parser in
 `entry/voice-scan.tsx` is a heuristic stub — the review-and-confirm flow
 around it is not).
 
-WhatsApp delivery (spec R4.6) is not built, and it is the missing half of
-R5.6: the follow-up reminder is derived and shown in the app, but nothing
-sends it. It needs `WHATSAPP_*` credentials and templates registered with Meta
-before a line of the delivery layer is worth writing. There is also no
-"assigned sales person" — `parties` has no such column — so the reminder is
-addressed to whoever opens the screen rather than to one named rep.
+WhatsApp delivery (spec R4.6) is **built and inert**. The queue, the transport,
+the retry and the templates are all there and tested against a fake transport;
+what is missing is a `WHATSAPP_*` token and Meta's approval of the template
+bodies in `packages/shared/src/whatsapp.ts`. Until both exist, messages are
+queued, logged and marked `skipped`.
+
+Two things still need a scheduler that this app does not have:
+`queueDailySummary` and `queueAtRiskReminders` are written and idempotent per
+day, but nothing calls them. And R5.6's "assigned sales person" has no column to
+live in, so at-risk reminders go to the admins.
 
 ## Refuse, but leave a door — and it is a door, not a hint
 
@@ -456,6 +460,55 @@ mistake again, in a new table. So low stock, aged receivables and negative
 wallets are **derived on read** in `notifications.ts` and there is nothing to
 go stale. Aged receivables come from `journal_lines`, not
 `transactions.due_amount`, for the reason above.
+
+## WhatsApp: queue inside the transaction, send outside it
+
+`packages/core/src/delivery.ts`, `delivery-events.ts`, and the templates in
+`packages/shared/src/whatsapp.ts`. Spec R4.6 says delivery is **outside** the
+posting transaction and must never roll back or block an entry. That is half
+the rule, and taken alone it produces the other bug: a WhatsApp message telling
+a customer their order was recorded, for an order that rolled back.
+
+So the two halves are split, and they pull in opposite directions:
+
+- **Queueing is inside** the posting transaction — a `message_deliveries` row
+  written beside the journal lines, so a refused entry takes its messages down
+  with it. Nothing has been sent, so nothing has to be unsent. Same reasoning
+  as `recordPostingWarnings`.
+- **Sending is after the commit**, in its own transaction, and `flushDeliveries`
+  **never throws**. By the time it runs the entry is safe; an exception escaping
+  would turn a Meta outage into a failed save on screen for an entry that was in
+  fact recorded. The web layer calls it from `after()` so it does not even cost
+  the user the response.
+
+Everything Meta sends is a **template**: outside a 24-hour window they reject
+free text, and this app messages people who have never written to it. The bodies
+therefore live in the repo as constants — they have to exist before they can be
+submitted for approval, and the copy that ships must be the copy that was
+approved or the send is rejected. Both locales register under the *same*
+template name with different language codes, which is how Meta models a
+translation.
+
+With `WHATSAPP_*` unset the transport is **inert**, and rows are marked
+`skipped` rather than left `pending`. A backlog of "your order was recorded"
+messages delivered three weeks late, on the day somebody finally pastes in a
+token, is worse than never sending them. The log still records every message the
+app wanted to send and why it did not — including a party whose phone number
+cannot be parsed, which is written as `skipped` rather than dropped, because
+"the number in their record is not a number" is the answer somebody will want.
+
+`toE164` is worth its tests: a number that fails to normalise does not throw, it
+delivers to nobody, quietly.
+
+Two events have no posting to hang off — a daily summary happens because the day
+ended, and a customer turns yellow because *nothing happened*. `queueDailySummary`
+and `queueAtRiskReminders` are functions something scheduled must call, and both
+refuse to queue the same thing twice on the same day, because a cron that fires
+twice is a Tuesday.
+
+R5.6 asks for the reminder to reach "the assigned sales person". **There is no
+such column** — `parties` has no owner — so it goes to the admins. That is the
+gap to close first if this is picked up again.
 
 ## Nothing happening is what changes a customer's status
 

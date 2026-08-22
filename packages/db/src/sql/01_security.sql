@@ -111,7 +111,7 @@ begin
     'production_recipes', 'production_recipe_inputs',
     'transactions', 'transaction_lines', 'transaction_payments',
     'journal_entries', 'journal_lines', 'attachments',
-    'audit_logs', 'notifications', 'counters'
+    'audit_logs', 'notifications', 'counters', 'message_deliveries'
   ]
   loop
     execute format('alter table %I enable row level security', tenant_table);

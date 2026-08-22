@@ -105,6 +105,21 @@ export const SUBTYPE_TO_TYPE: Record<AccountSubtype, AccountType> = {
 // ---------------------------------------------------------------------------
 
 /** The user-facing পেমেন্ট মাধ্যম kinds. */
+/**
+ * Spec R4.6. One channel today, and the column exists so adding SMS later is a
+ * migration rather than a second table.
+ */
+export const DELIVERY_CHANNELS = ["whatsapp"] as const;
+export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
+
+/**
+ * `pending` is the only state a queued row starts in, and the only one the
+ * sender picks up. `failed` is terminal — it means the attempt cap was reached,
+ * not that the next tick should try again.
+ */
+export const DELIVERY_STATUSES = ["pending", "sent", "failed", "skipped"] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
 export const FINANCIAL_ACCOUNT_KINDS = ["cash", "bank", "mfs"] as const;
 export type FinancialAccountKind = (typeof FINANCIAL_ACCOUNT_KINDS)[number];
 

@@ -3,6 +3,8 @@ import {
   ACCOUNT_SUBTYPES,
   ACCOUNT_TYPES,
   AUDIT_ACTIONS,
+  DELIVERY_CHANNELS,
+  DELIVERY_STATUSES,
   FINANCIAL_ACCOUNT_KINDS,
   MFS_PROVIDERS,
   NOTIFICATION_SEVERITIES,
@@ -36,6 +38,8 @@ export const productKindEnum = pgEnum("product_kind", PRODUCT_KINDS);
 export const stockDirectionEnum = pgEnum("stock_direction", STOCK_DIRECTIONS);
 export const stockMovementTypeEnum = pgEnum("stock_movement_type", STOCK_MOVEMENT_TYPES);
 export const auditActionEnum = pgEnum("audit_action", AUDIT_ACTIONS);
+export const deliveryChannelEnum = pgEnum("delivery_channel", DELIVERY_CHANNELS);
+export const deliveryStatusEnum = pgEnum("delivery_status", DELIVERY_STATUSES);
 export const notificationSeverityEnum = pgEnum(
   "notification_severity",
   NOTIFICATION_SEVERITIES,

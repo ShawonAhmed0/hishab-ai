@@ -64,6 +64,7 @@ import {
   loadProductStates,
 } from "./posting-context";
 import { recordPostingWarnings } from "./notifications";
+import { queueTransactionDeliveries } from "./delivery-events";
 import { writeAudit } from "./audit";
 import { authoriseOverride, type OverrideRequest } from "./overrides";
 import {
@@ -259,6 +260,20 @@ export async function createTransaction(
       transactionId,
       voucherNo,
       warnings: result.warnings,
+    });
+
+    // Spec R4.6. Queued here and sent after the commit: a message saying the
+    // sale was recorded must not go out when the sale rolled back, and Meta
+    // being down must not be able to roll one back. `flushDeliveries` is the
+    // other half, and the caller runs it once this transaction has committed.
+    await queueTransactionDeliveries(tx, session, {
+      transactionId,
+      voucherNo,
+      type: input.type,
+      partyId: "partyId" in input ? input.partyId : undefined,
+      total: result.totals.total,
+      paid: result.totals.paid,
+      newDue: (previousDue + result.totals.due) as Money,
     });
 
     await writeAudit(tx, session, {
