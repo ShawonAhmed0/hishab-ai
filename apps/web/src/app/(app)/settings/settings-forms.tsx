@@ -752,6 +752,37 @@ export function PolicyForm({ policy }: { policy: CompanyPolicy }) {
         </Field>
       </div>
 
+      {/* R5.1 and R5.3 — the customer traffic light. Days, and one percentage:
+          the sensitivity is a setting because "materially below" is a trade,
+          not a constant. */}
+      <p className="text-sm text-muted-foreground">{t.settings.activityHint}</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field hint={t.settings.doubtfulDaysHint}>
+          <FieldLabel>{t.settings.doubtfulDays}</FieldLabel>
+          <Input numeric name="doubtfulDays" defaultValue={String(policy.activity.doubtfulDays)} />
+        </Field>
+        <Field hint={t.settings.criticalDaysHint}>
+          <FieldLabel>{t.settings.criticalDays}</FieldLabel>
+          <Input numeric name="criticalDays" defaultValue={String(policy.activity.criticalDays)} />
+        </Field>
+        <Field hint={t.settings.volumeDropHint}>
+          <FieldLabel>{t.settings.volumeDropPercent}</FieldLabel>
+          <Input
+            numeric
+            name="volumeDropPercent"
+            defaultValue={String(policy.activity.volumeDropPercent)}
+          />
+        </Field>
+        <Field hint={t.settings.recentDaysHint}>
+          <FieldLabel>{t.settings.recentDays}</FieldLabel>
+          <Input numeric name="recentDays" defaultValue={String(policy.activity.recentDays)} />
+        </Field>
+        <Field hint={t.settings.baselineDaysHint}>
+          <FieldLabel>{t.settings.baselineDays}</FieldLabel>
+          <Input numeric name="baselineDays" defaultValue={String(policy.activity.baselineDays)} />
+        </Field>
+      </div>
+
       <Button type="submit" loading={pending}>
         {t.actions.saveShort}
       </Button>

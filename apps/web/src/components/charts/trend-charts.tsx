@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import {
   Area,
   AreaChart,
@@ -42,6 +44,16 @@ export interface ChartPoint {
   expense: number;
   sales: number;
   profit: number;
+  /**
+   * Where this month's bar or point leads — spec R5.7.
+   *
+   * Built on the server and carried in the data rather than derived here: a
+   * function prop cannot cross from a server component, and a client component
+   * guessing at route shapes is how a typed route stops being typed. The same
+   * links are rendered as real anchors under the chart, which is what makes the
+   * drill-down reachable without a mouse.
+   */
+  href: Route;
 }
 
 function periodLabel(period: string, months: readonly string[]): string {
@@ -87,6 +99,21 @@ function MoneyTooltip({
   );
 }
 
+/**
+ * Recharts hands the click back as a label, not as the datum. Looking the
+ * point up by period keeps the navigation honest when the series is filtered
+ * or reordered.
+ */
+function useSegmentClick(data: ChartPoint[]) {
+  const router = useRouter();
+  return (state: { activeLabel?: string | number } | null) => {
+    const period = state?.activeLabel;
+    if (period === undefined) return;
+    const point = data.find((d) => d.period === String(period));
+    if (point) router.push(point.href);
+  };
+}
+
 const GRID = "var(--color-border)";
 const AXIS = "var(--color-subtle-foreground)";
 
@@ -102,6 +129,7 @@ const ANIMATE = false;
 
 export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
+  const onSegmentClick = useSegmentClick(data);
   const rows = data.map((d) => ({
     period: d.period,
     income: d.income,
@@ -110,7 +138,12 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
+      <BarChart
+        data={rows}
+        margin={{ top: 4, right: 4, bottom: 0, left: -12 }}
+        onClick={onSegmentClick}
+        className="cursor-pointer"
+      >
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
         <XAxis
           dataKey="period"
@@ -151,6 +184,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
 
 export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
+  const onSegmentClick = useSegmentClick(data);
   const rows = data.map((d) => ({
     period: d.period,
     sales: d.sales,
@@ -159,7 +193,12 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
+      <AreaChart
+        data={rows}
+        margin={{ top: 4, right: 4, bottom: 0, left: -12 }}
+        onClick={onSegmentClick}
+        className="cursor-pointer"
+      >
         <defs>
           <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.24} />

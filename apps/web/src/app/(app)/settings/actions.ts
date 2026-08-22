@@ -182,10 +182,10 @@ export async function deactivateRecipeAction(recipeId: string): Promise<Settings
 }
 
 /**
- * The company's own rules — spec R4.1 and R5.2.
+ * The company's own rules — spec R4.1, R5.2 and R5.3.
  *
- * A checkbox and four numbers. Everything has a working default, so a field
- * left alone keeps the default rather than being cleared.
+ * Everything has a working default, so a field left alone keeps the default
+ * rather than being cleared.
  */
 export async function updatePolicyAction(
   _previous: SettingsState,
@@ -201,6 +201,11 @@ export async function updatePolicyAction(
       largeAmount: Number(text(form, "largeAmount") ?? 100000),
       largeMultiple: Number(text(form, "largeMultiple") ?? 5),
       confirmEveryEntry: form.get("confirmEveryEntry") === "on",
+      doubtfulDays: Number(text(form, "doubtfulDays") ?? 7),
+      criticalDays: Number(text(form, "criticalDays") ?? 14),
+      recentDays: Number(text(form, "recentDays") ?? 30),
+      baselineDays: Number(text(form, "baselineDays") ?? 90),
+      volumeDropPercent: Number(text(form, "volumeDropPercent") ?? 40),
     }),
   );
 }

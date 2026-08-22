@@ -15,6 +15,7 @@ import {
   currentMonthRange,
   moneyFromDb,
   todayIso,
+  type FinancialAccountKind,
   type Money,
   type TransactionType,
 } from "@hishabai/shared";
@@ -574,13 +575,18 @@ export interface CashBookReport {
  */
 export async function getCashBook(
   scope: TenantScope,
-  input: ReportPeriod & { financialAccountId?: string },
+  input: ReportPeriod & { financialAccountId?: string; kind?: FinancialAccountKind },
 ): Promise<CashBookReport> {
   const period = checkPeriod(input);
 
+  // `kind` is what the dashboard's নগদ / ব্যাংক / MFS tiles drill into — R5.7.
+  // Each of those tiles is the sum of every wallet of one kind, so the ledger
+  // behind it is the same sum's movements, not one account's.
   const walletFilter = input.financialAccountId
     ? tenantQuery`and fa.id = ${input.financialAccountId}::uuid`
-    : "";
+    : input.kind
+      ? tenantQuery`and fa.kind = ${token(input.kind)}`
+      : "";
 
   const rows = await tenantRead<{
     opening: string | null;

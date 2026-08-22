@@ -56,6 +56,7 @@ import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./confirmations";
 import { loadAgeing } from "./ageing";
+import { dailyAlertsFrom, getCustomerHealth, reactivationList } from "./customer-health";
 import { getCompanyPolicy, updateCompanyPolicy } from "./policy";
 import type { Session } from "./session";
 
@@ -2582,4 +2583,126 @@ describeDb("অস্বাভাবিক অঙ্ক", () => {
     const saved = await sell("5000", "2026-08-16");
     expect(saved.voucherNo).toMatch(/^SALE/);
   });
+});
+
+/**
+ * Spec R5.1, R5.3, R5.4 and R5.5 against real journal rows.
+ *
+ * The unit tests hold the boundaries at the day; this is about whether the
+ * query behind them finds an order at all — and whether a second company can
+ * see any of it (X.1).
+ */
+describeDb("কাস্টমারের অবস্থা", () => {
+  let tenant: Tenant;
+  let productId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Health");
+    // Plenty of stock: every sale below is real, and R1.1 refuses one that
+    // is not.
+    productId = await seedProduct(tenant, "অবস্থার পণ্য", "100000", "50");
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  const iso = (daysAgo: number): string =>
+    new Date(Date.parse(`${todayIso()}T00:00:00Z`) - daysAgo * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+  /** Small, and identical per party, so R4.2's typo guard has nothing to say. */
+  async function sell(partyId: string, daysAgo: number) {
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(daysAgo),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+      // Paid in full, so nothing here ages into the red band and starts
+      // refusing the next sale.
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "800" }],
+    });
+  }
+
+  async function healthOf(name: string) {
+    const view = await getCustomerHealth(tenant.session);
+    return view.customers.find((c) => c.name === name)!;
+  }
+
+  it("reads the last order date off journal_lines", async () => {
+    const partyId = await seedParty(tenant, "নিয়মিত কাস্টমার");
+    await sell(partyId, 2);
+
+    const found = await healthOf("নিয়মিত কাস্টমার");
+    expect(found.lastOrderDate).toBe(iso(2));
+    expect(found.daysSince).toBe(2);
+    expect(found.status).toBe("normal");
+  });
+
+  it("keeps a customer who has never ordered, and does not call them lost", async () => {
+    await seedParty(tenant, "নতুন কাস্টমার");
+
+    // `left join` from parties, not from the journal. An empty list is not the
+    // same answer as "everyone is fine".
+    const found = await healthOf("নতুন কাস্টমার");
+    expect(found.lastOrderDate).toBeNull();
+    expect(found.daysSince).toBeNull();
+    expect(found.status).toBe("normal");
+    expect(found.orders).toBe(0);
+  });
+
+  it("turns a customer red once the silence passes the threshold", async () => {
+    const partyId = await seedParty(tenant, "চুপচাপ কাস্টমার");
+    await sell(partyId, 40);
+
+    const found = await healthOf("চুপচাপ কাস্টমার");
+    expect(found.status).toBe("critical");
+    expect(found.daysSince).toBe(40);
+  });
+
+  it("names today's new entrant without a stored yesterday", async () => {
+    // Fifteen days is the first morning past a fourteen-day threshold.
+    const partyId = await seedParty(tenant, "আজকের লাল কাস্টমার");
+    await sell(partyId, 15);
+
+    const view = await getCustomerHealth(tenant.session);
+    const alerts = dailyAlertsFrom(view);
+    expect(alerts.enteredCritical.map((c) => c.name)).toContain("আজকের লাল কাস্টমার");
+    // …and the one that went quiet 40 days ago is lost, but not *new*.
+    expect(alerts.enteredCritical.map((c) => c.name)).not.toContain("চুপচাপ কাস্টমার");
+    expect(alerts.likelyLost.map((c) => c.name)).toContain("চুপচাপ কাস্টমার");
+  });
+
+  it("puts a lapsed regular on the win-back list and a one-off buyer nowhere", async () => {
+    const regular = await seedParty(tenant, "পুরনো নিয়মিত");
+    // Newest first: the older bill would otherwise age while the second sale
+    // is being posted. Both are paid in full anyway, which is the real guard.
+    await sell(regular, 30);
+    await sell(regular, 60);
+
+    const once = await seedParty(tenant, "একবারের ক্রেতা");
+    await sell(once, 200);
+
+    const view = await getCustomerHealth(tenant.session);
+    const names = reactivationList(view).map((c) => c.name);
+    expect(names).toContain("পুরনো নিয়মিত");
+    // They bought once, a long time ago. There was never a habit to win back.
+    expect(names).not.toContain("একবারের ক্রেতা");
+  });
+
+  /** X.1 — a new read path is a new way into the data, and gets its own test. */
+  it("shows one company's customers to nobody else", async () => {
+    const other = await makeTenant("Nosy");
+    try {
+      const view = await getCustomerHealth(other.session);
+      expect(view.customers.map((c) => c.name)).not.toContain("নিয়মিত কাস্টমার");
+      expect(view.customers.map((c) => c.name)).not.toContain("চুপচাপ কাস্টমার");
+      expect(view.customers).toHaveLength(0);
+    } finally {
+      await dropTenant(other);
+    }
+  }, 60_000);
 });

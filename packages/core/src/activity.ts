@@ -30,10 +30,14 @@ import {
 export interface CustomerActivity {
   partyId: string;
   name: string;
+  /** So the sales team can ring them without a second page load — R5.6. */
+  phone: string | null;
   /** ISO date of their most recent order, or null if they never ordered. */
   lastOrderDate: string | null;
   /** Days since that order. `null` when there has never been one. */
   daysSince: number | null;
+  /** How many orders they have ever placed. One is not a habit. */
+  orders: number;
   status: ActivityStatus;
   /** What they have bought in the recent window. */
   recent: Money;
@@ -44,6 +48,15 @@ export interface CustomerActivity {
   baseline: Money;
   /** Set when R5.3 is what made them doubtful, rather than R5.1's silence. */
   volumeDrop: boolean;
+  /**
+   * What they still owe, from `party_balances`.
+   *
+   * Reading that table is fine and writing it is not: it is maintained by
+   * trigger from `journal_lines`, and it is the same figure the dashboard tile
+   * shows. How *old* the balance is cannot come from there, and does not —
+   * that is `ageing.ts`, derived from the journal on every read.
+   */
+  receivable: Money;
 }
 
 /** Whole days between two ISO dates, floor. */
@@ -85,12 +98,38 @@ export function statusFor(
   return { status: "normal", volumeDrop: false };
 }
 
+/**
+ * Did they cross into this band *today* — R5.4's "new entrants".
+ *
+ * Nothing is stored and nothing needs to be. The day counter goes up by
+ * exactly one every morning, so a customer entered the yellow band on the
+ * single day `daysSince` first exceeded the threshold, which is the day it
+ * equals `doubtfulDays + 1`. Yesterday it was one less and they were green;
+ * tomorrow it is one more and they are no longer new.
+ *
+ * A volume drop has no such day — it depends on two rolling windows that both
+ * move — so `volumeDrop` customers are reported as their own list rather than
+ * pretended into this one.
+ */
+export function enteredBandToday(
+  activity: Pick<CustomerActivity, "daysSince" | "volumeDrop">,
+  policy: ActivityPolicy = DEFAULT_ACTIVITY_POLICY,
+): ActivityStatus | null {
+  if (activity.daysSince === null || activity.volumeDrop) return null;
+  if (activity.daysSince === policy.criticalDays + 1) return "critical";
+  if (activity.daysSince === policy.doubtfulDays + 1) return "doubtful";
+  return null;
+}
+
 interface Row extends Record<string, unknown> {
   party_id: string;
   name: string;
+  phone: string | null;
   last_order: string | null;
+  order_count: number;
   recent_total: string;
   prior_total: string;
+  receivable: string;
 }
 
 /**
@@ -118,20 +157,25 @@ export async function loadCustomerActivity(
     )
     select p.id                       as party_id,
            p.name                     as name,
+           p.phone                    as phone,
            max(o.date)::text          as last_order,
+           count(o.date)::int         as order_count,
            coalesce(sum(o.debit) filter (
              where o.date > ${today}::date - ${policy.recentDays}::int
            ), 0)::text                as recent_total,
            coalesce(sum(o.debit) filter (
              where o.date <= ${today}::date - ${policy.recentDays}::int
                and o.date > ${today}::date - ${policy.baselineDays}::int
-           ), 0)::text                as prior_total
+           ), 0)::text                as prior_total,
+           coalesce(max(pb.receivable), 0)::text as receivable
       from parties p
       left join orders o on o.party_id = p.id
+      left join party_balances pb
+        on pb.party_id = p.id and pb.company_id = p.company_id
      where p.company_id = ${companyId}::uuid
        and p.type in ('customer', 'both')
        and p.is_active
-     group by p.id, p.name
+     group by p.id, p.name, p.phone
      order by p.name
   `)) as unknown as Row[];
 
@@ -154,12 +198,15 @@ export async function loadCustomerActivity(
     return {
       partyId: row.party_id,
       name: row.name,
+      phone: row.phone,
       lastOrderDate,
       daysSince,
+      orders: Number(row.order_count ?? 0),
       status,
       recent,
       baseline,
       volumeDrop,
+      receivable: moneyFromDb(row.receivable),
     } satisfies CustomerActivity;
   });
 }

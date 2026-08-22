@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, Banknote, Wallet } from "lucide-react";
 import { getCashBook } from "@hishabai/core";
-import type { FinancialAccountKind } from "@hishabai/shared";
+import { FINANCIAL_ACCOUNT_KINDS, type FinancialAccountKind } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
@@ -21,15 +21,22 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export default async function CashBookPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; wallet?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; wallet?: string; kind?: string }>;
 }) {
   const params = await searchParams;
   const period = periodFrom(params);
   const wallet = params.wallet && UUID.test(params.wallet) ? params.wallet : undefined;
+  // R5.7 — the dashboard's নগদ / ব্যাংক / MFS tiles drill in by kind rather
+  // than by one wallet, because each tile is the sum of all of that kind.
+  const kind = FINANCIAL_ACCOUNT_KINDS.find((k) => k === params.kind);
 
   const [{ data }, t] = await Promise.all([
     sessionWithData((scope) =>
-      getCashBook(scope, { ...period, ...(wallet ? { financialAccountId: wallet } : {}) }),
+      getCashBook(scope, {
+        ...period,
+        ...(wallet ? { financialAccountId: wallet } : {}),
+        ...(kind ? { kind } : {}),
+      }),
     ),
     dict(),
   ]);
@@ -41,6 +48,9 @@ export default async function CashBookPage({
       period={period}
       filters={
         <label className="flex flex-col gap-1.5 text-sm">
+          {/* Carried through the filter form, so narrowing the date range does
+              not silently widen the report back to every wallet. */}
+          {kind ? <input type="hidden" name="kind" value={kind} /> : null}
           <span className="font-medium">{t.fields.paymentMethod}</span>
           <select
             name="wallet"

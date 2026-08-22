@@ -18,3 +18,4 @@ export * from "./confirmations";
 export * from "./ageing";
 export * from "./policy";
 export * from "./activity";
+export * from "./customer-health";

@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 144 passing instead of 239. Check the count.
+skip** and you get 166 passing instead of 267. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -207,6 +207,13 @@ Vercel env (points at a deleted Supabase project; needs port 6543 and `bom1`),
 the `/api/v1` Android surface (not started), and real voice/OCR (the parser in
 `entry/voice-scan.tsx` is a heuristic stub — the review-and-confirm flow
 around it is not).
+
+WhatsApp delivery (spec R4.6) is not built, and it is the missing half of
+R5.6: the follow-up reminder is derived and shown in the app, but nothing
+sends it. It needs `WHATSAPP_*` credentials and templates registered with Meta
+before a line of the delivery layer is worth writing. There is also no
+"assigned sales person" — `parties` has no such column — so the reminder is
+addressed to whoever opens the screen rather than to one named rep.
 
 ## Refuse, but leave a door — and it is a door, not a hint
 
@@ -449,6 +456,64 @@ mistake again, in a new table. So low stock, aged receivables and negative
 wallets are **derived on read** in `notifications.ts` and there is nothing to
 go stale. Aged receivables come from `journal_lines`, not
 `transactions.due_amount`, for the reason above.
+
+## Nothing happening is what changes a customer's status
+
+`packages/core/src/activity.ts` and `customer-health.ts`. Spec R5.1 asks for a
+`last_order_date` per customer and a traffic light over it. There is no such
+column and there should not be: a customer's status is the **worst** thing in
+this codebase to cache, because the event that changes it is the absence of an
+event. No trigger fires when somebody does not order, so a stored status is
+right on the morning it is written and wrong every morning after.
+
+An "order" is a debit on the receivable control account carrying the party id —
+what a sale posts, gross, before any payment against it. A return credits that
+account and so is not one; a cash sale is one, which is right.
+
+### "Entered the band today" needs no stored yesterday
+
+R5.4 wants today's new entrants, and the obvious way to get them is to keep
+yesterday's band and diff. That is the cache mistake in a fifth costume, and it
+is not needed. The day counter goes up by exactly one every morning, so a
+customer crossed a threshold on the single day their counter **equals** it —
+`daysSince === doubtfulDays + 1`, `daysOverdue === slowPayerDays`. Yesterday it
+was one less, tomorrow one more. `enteredBandToday` and `crossedAgeingToday`
+are that, and both are pure so the boundary is testable at the day.
+
+Two consequences worth keeping:
+
+- a company that changes its thresholds gets the new answer on the next page
+  load, instead of a backlog of rows computed under the old ones;
+- a **volume drop** (R5.3) has no crossing day at all — it depends on two
+  rolling windows that both move — so those customers are reported as their own
+  list rather than given a date the derivation cannot prove.
+
+`party_balances.receivable` *is* read here, and that is not a contradiction:
+reading a trigger-maintained cache is fine, writing one is not. How **old** the
+balance is still cannot come from there, and does not — that is `ageing.ts`.
+
+The thresholds are `ActivityPolicy` in `companies.settings`, because "materially
+below their own average" is a trade, not a constant. `volumeDropPercent` at 0
+turns R5.3 off.
+
+## Every figure on the dashboard leads somewhere
+
+Spec R5.7. A tile that cannot be opened is a number the user has to trust. Each
+one now links to the report that produced it — the wallet tiles to ক্যাশ বই
+filtered by *kind* (the tile is the sum of every wallet of that kind, not one
+account), the month tiles to লাভ-ক্ষতি for that range, বকেয়া to the aging
+report, and each chart month to that month's লাভ-ক্ষতি or বিক্রয় রেজিস্টার.
+
+Those reports all read `journal_lines`, so the drill-down inherits the property
+that matters: a cancelled voucher nets to zero on the way down without anything
+in the chain knowing that cancellation exists.
+
+Two mechanical notes. A **chart segment is a mouse target only**, so the same
+month links are rendered as real anchors under each chart — the drill-down has
+to be reachable by keyboard. And a client component cannot receive a function
+prop from a server one, so the hrefs are built server-side and travel *in* the
+`ChartPoint` data; `typedRoutes` types them as `Route` rather than `string` so
+a bad path is a build error rather than a 404 somebody finds later.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

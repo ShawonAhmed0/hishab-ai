@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   AlertTriangle,
   Banknote,
@@ -12,8 +14,8 @@ import {
   PlusCircle,
   ReceiptText,
 } from "lucide-react";
-import { getDashboard } from "@hishabai/core";
-import { formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { dailyAlertsFrom, getCustomerHealth, getDashboard } from "@hishabai/core";
+import { currentMonthRange, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,7 @@ import {
   SalesTrendChart,
   type ChartPoint,
 } from "@/components/charts/trend-charts";
+import { DailyAlertBlock } from "@/components/customers/health";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
@@ -42,6 +45,35 @@ const TYPE_TONE: Record<string, "credit" | "debit" | "info" | "neutral"> = {
   vendor_payment: "debit",
 };
 
+/**
+ * The first and last day of a `YYYY-MM` period.
+ *
+ * Day 0 of the *next* month is the last day of this one, which is the only
+ * form of this that does not need a leap-year table.
+ */
+function monthBounds(period: string): { from: string; to: string } {
+  const year = Number(period.slice(0, 4));
+  const month = Number(period.slice(5, 7));
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from: `${period}-01`, to: `${period}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * R5.4's daily block, streamed.
+ *
+ * It is its own read — the health derivation walks the journal per party and
+ * the dashboard's single round trip should not wait on it. Inside a Suspense
+ * boundary the tiles and the tables paint immediately and this arrives when it
+ * is ready, rather than holding the most-visited page in the app.
+ */
+async function DailyAlerts() {
+  const [{ data: view }, t] = await Promise.all([
+    sessionWithData(getCustomerHealth),
+    dict(),
+  ]);
+  return <DailyAlertBlock alerts={dailyAlertsFrom(view)} t={t} limit={5} />;
+}
+
 export default async function DashboardPage() {
   // One round trip for the whole page — tiles, charts, lists and alerts — and
   // it runs alongside the session lookup rather than after it.
@@ -52,22 +84,42 @@ export default async function DashboardPage() {
     t,
   ] = await Promise.all([sessionWithData(getDashboard), dict()]);
 
+  // R5.7 — every figure below leads to the ledger detail that produced it, and
+  // all of those reports read `journal_lines`, so a cancelled voucher nets to
+  // zero on the way down without the drill-down knowing cancellation exists.
+  const month = currentMonthRange();
+  const monthReport = `/reports/profit-loss?from=${month.from}&to=${month.to}` as Route;
+
   // Money is a bigint and cannot cross to a client component. Charts get plain
   // taka — exact figures are rendered from the real values in the tiles and
   // tables below.
   const toTaka = (value: bigint) => Number(value) / 10_000;
-  const chartData: ChartPoint[] = trend.map((point) => ({
+  const points = trend.map((point) => ({
     period: point.period,
     income: toTaka(point.income),
     expense: toTaka(point.expense),
     sales: toTaka(point.sales),
     profit: toTaka(point.profit),
+    bounds: monthBounds(point.period),
+  }));
+
+  // The two charts answer different questions, so a click on each lands
+  // somewhere different: আয় বনাম ব্যয় on that month's লাভ-ক্ষতি, বিক্রয় on that
+  // month's বিক্রয় রেজিস্টার.
+  const flowData: ChartPoint[] = points.map((p) => ({
+    ...p,
+    href: `/reports/profit-loss?from=${p.bounds.from}&to=${p.bounds.to}` as Route,
+  }));
+  const salesData: ChartPoint[] = points.map((p) => ({
+    ...p,
+    href: `/reports/register?type=sale&from=${p.bounds.from}&to=${p.bounds.to}` as Route,
   }));
 
   const alerts = [
     ...lowStock.map((product) => ({
       key: `stock-${product.id}`,
       tone: "due" as const,
+      href: "/inventory?lowOnly=1" as Route,
       text: t.dashboard.lowStockAlert(
         product.nameBn,
         formatQty(qtyFromDb(product.quantity ?? "0"), { unit: product.unitSymbol }),
@@ -79,11 +131,27 @@ export default async function DashboardPage() {
           {
             key: "due",
             tone: "debit" as const,
+            href: "/reports/dues?side=receivable" as Route,
             text: t.dashboard.customersOwing(String(topDueCustomers.length)),
           },
         ]
       : []),
   ];
+
+  /** The month chips under each chart — the drill-down, reachable by keyboard. */
+  const monthLinks = (data: ChartPoint[]) => (
+    <nav className="mt-3 flex flex-wrap gap-1.5 px-1" aria-label={t.dashboard.lastSixMonths}>
+      {data.map((point) => (
+        <Link
+          key={point.period}
+          href={point.href}
+          className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:border-border-strong hover:text-foreground"
+        >
+          {t.monthsShort[Number(point.period.slice(5, 7)) - 1]}
+        </Link>
+      ))}
+    </nav>
+  );
 
   return (
     <div className="space-y-5">
@@ -106,9 +174,24 @@ export default async function DashboardPage() {
           {t.dashboard.balancesHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile label={t.dashboard.cash} value={tiles.cash} icon={Wallet} />
-          <StatTile label={t.dashboard.bank} value={tiles.bank} icon={Building} />
-          <StatTile label={t.dashboard.mfs} value={tiles.mfs} icon={Smartphone} />
+          <StatTile
+            label={t.dashboard.cash}
+            value={tiles.cash}
+            icon={Wallet}
+            href="/reports/cash-book?kind=cash"
+          />
+          <StatTile
+            label={t.dashboard.bank}
+            value={tiles.bank}
+            icon={Building}
+            href="/reports/cash-book?kind=bank"
+          />
+          <StatTile
+            label={t.dashboard.mfs}
+            value={tiles.mfs}
+            icon={Smartphone}
+            href="/reports/cash-book?kind=mfs"
+          />
         </div>
       </section>
 
@@ -123,18 +206,21 @@ export default async function DashboardPage() {
             value={tiles.monthIncome}
             tone="credit"
             icon={TrendingUp}
+            href={monthReport}
           />
           <StatTile
             label={t.dashboard.monthExpense}
             value={tiles.monthExpense}
             tone="debit"
             icon={TrendingDown}
+            href={monthReport}
           />
           <StatTile
             label={t.dashboard.netProfit}
             value={tiles.netProfit}
             tone="auto"
             icon={Banknote}
+            href={monthReport}
           />
         </div>
       </section>
@@ -150,20 +236,20 @@ export default async function DashboardPage() {
             value={tiles.customerDue}
             tone="due"
             icon={Users}
-            href="/customers"
+            href="/reports/dues?side=receivable"
           />
           <StatTile
             label={t.dashboard.vendorPayable}
             value={tiles.vendorPayable}
             tone="due"
             icon={ReceiptText}
-            href="/vendors"
+            href="/reports/dues?side=payable"
           />
           <StatTile
             label={t.dashboard.stockValue}
             value={tiles.stockValue}
             icon={Boxes}
-            href="/inventory"
+            href="/reports/stock"
           />
         </div>
       </section>
@@ -173,11 +259,16 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>{t.dashboard.incomeVsExpense}</CardTitle>
-            <span className="text-xs text-muted-foreground">{t.dashboard.lastSixMonths}</span>
+            <Link href={monthReport} className="text-sm text-primary hover:underline">
+              {t.actions.viewAll}
+            </Link>
           </CardHeader>
           <CardBody>
-            {chartData.length > 0 ? (
-              <IncomeVsExpenseChart data={chartData} />
+            {flowData.length > 0 ? (
+              <>
+                <IncomeVsExpenseChart data={flowData} />
+                {monthLinks(flowData)}
+              </>
             ) : (
               <EmptyState
                 title={t.emptyStates.noTransactions}
@@ -190,11 +281,19 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>{t.dashboard.salesTrend}</CardTitle>
-            <span className="text-xs text-muted-foreground">{t.dashboard.lastSixMonths}</span>
+            <Link
+              href={`/reports/register?type=sale&from=${month.from}&to=${month.to}` as Route}
+              className="text-sm text-primary hover:underline"
+            >
+              {t.actions.viewAll}
+            </Link>
           </CardHeader>
           <CardBody>
-            {chartData.length > 0 ? (
-              <SalesTrendChart data={chartData} />
+            {salesData.length > 0 ? (
+              <>
+                <SalesTrendChart data={salesData} />
+                {monthLinks(salesData)}
+              </>
             ) : (
               <EmptyState
                 title={t.emptyStates.noTransactions}
@@ -286,6 +385,7 @@ export default async function DashboardPage() {
                 {recent.map((row) => (
                   <MobileRow
                     key={row.id}
+                    href={`/transactions/${row.id}`}
                     title={row.partyName ?? t.transactionType[row.type]}
                     subtitle={`${row.voucherNo} · ${formatDateShort(row.date)}`}
                     meta={
@@ -317,6 +417,11 @@ export default async function DashboardPage() {
         </Card>
 
         <div className="space-y-4">
+          {/* ---- R5.4: who has gone quiet, derived this morning ---- */}
+          <Suspense fallback={<AlertsSkeleton title={t.activity.dailyTitle} />}>
+            <DailyAlerts />
+          </Suspense>
+
           {/* ---- alerts ---- */}
           <Card>
             <CardHeader>
@@ -327,12 +432,21 @@ export default async function DashboardPage() {
             ) : (
               <ul className="divide-y divide-border">
                 {alerts.slice(0, 6).map((alert) => (
-                  <li key={alert.key} className="flex items-start gap-2.5 px-4 py-3 text-sm">
-                    <AlertTriangle
-                      className={alert.tone === "debit" ? "mt-0.5 size-4 shrink-0 text-debit" : "mt-0.5 size-4 shrink-0 text-due"}
-                      aria-hidden
-                    />
-                    <span>{alert.text}</span>
+                  <li key={alert.key} className="text-sm">
+                    <Link
+                      href={alert.href}
+                      className="flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 hover:bg-surface-sunken"
+                    >
+                      <AlertTriangle
+                        className={
+                          alert.tone === "debit"
+                            ? "mt-0.5 size-4 shrink-0 text-debit"
+                            : "mt-0.5 size-4 shrink-0 text-due"
+                        }
+                        aria-hidden
+                      />
+                      <span>{alert.text}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -352,12 +466,19 @@ export default async function DashboardPage() {
             ) : (
               <ul className="divide-y divide-border">
                 {topDueCustomers.map((customer) => (
-                  <li
-                    key={customer.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5"
-                  >
-                    <span className="min-w-0 truncate text-sm">{customer.name}</span>
-                    <MoneyText value={customer.receivable} size="sm" tone="due" symbol={false} />
+                  <li key={customer.id}>
+                    <Link
+                      href={`/customers/${customer.id}`}
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-sunken"
+                    >
+                      <span className="min-w-0 truncate text-sm">{customer.name}</span>
+                      <MoneyText
+                        value={customer.receivable}
+                        size="sm"
+                        tone="due"
+                        symbol={false}
+                      />
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -366,5 +487,20 @@ export default async function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Reserved height, so the column below does not jump when the block lands. */
+function AlertsSkeleton({ title }: { title: string }) {
+  return (
+    <Card aria-busy="true">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-2.5">
+        <div className="h-4 w-3/4 animate-pulse rounded bg-surface-sunken" />
+        <div className="h-4 w-1/2 animate-pulse rounded bg-surface-sunken" />
+      </CardBody>
+    </Card>
   );
 }

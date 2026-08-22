@@ -476,5 +476,12 @@ export const companyPolicySchema = z.object({
   /** R4.2 — multiple of this party's own recent average; 0 turns it off. */
   largeMultiple: z.number().min(0).max(1000).default(5),
   confirmEveryEntry: z.boolean().default(false),
+  /* R5.1 and R5.3 — when a quiet customer becomes worth a phone call. */
+  doubtfulDays: z.number().int().min(1).max(3650).default(7),
+  criticalDays: z.number().int().min(1).max(3650).default(14),
+  recentDays: z.number().int().min(1).max(3650).default(30),
+  baselineDays: z.number().int().min(1).max(3650).default(90),
+  /** A fall of at least this much against their own baseline; 0 turns it off. */
+  volumeDropPercent: z.number().int().min(0).max(99).default(40),
 });
 export type CompanyPolicyInput = z.infer<typeof companyPolicySchema>;

@@ -12,6 +12,7 @@
  */
 import type {
   AccountSubtype,
+  ActivityStatus,
   FinancialAccountKind,
   MfsProvider,
   NotificationSeverity,
@@ -31,6 +32,7 @@ export const nav = {
   transactions: "হিসাব",
   inventory: "ইনভেন্টরি",
   customers: "কাস্টমার",
+  customerHealth: "কাস্টমারের অবস্থা",
   vendors: "ভেন্ডর",
   reports: "রিপোর্ট",
   users: "ব্যবহারকারী",
@@ -432,6 +434,17 @@ export const settings = {
   creditPeriodHint: "এত দিন পর থেকে বকেয়া দেরি ধরা হবে",
   slowPayerDays: "ধীর গ্রাহক (দিন)",
   riskyDays: "ঝুঁকিপূর্ণ (দিন)",
+  activityHint: "কত দিন চুপ থাকলে কাস্টমারকে নিয়ে চিন্তা করতে হবে",
+  doubtfulDays: "সন্দেহজনক (দিন)",
+  doubtfulDaysHint: "এত দিন অর্ডার না এলে হলুদ",
+  criticalDays: "ঝুঁকিতে (দিন)",
+  criticalDaysHint: "এত দিন অর্ডার না এলে লাল",
+  recentDays: "সাম্প্রতিক সময় (দিন)",
+  recentDaysHint: "এই কদিনের কেনাকাটা \"এখনকার\" ধরা হবে",
+  baselineDays: "তুলনার সময় (দিন)",
+  baselineDaysHint: "এত দিনের হিসাব দিয়ে আগের গড় বের হবে",
+  volumeDropPercent: "কেনাকাটা কমার হার (%)",
+  volumeDropHint: "নিজের গড় থেকে এত শতাংশ কমলে হলুদ। ০ দিলে বন্ধ",
   companySaved: "কোম্পানির তথ্য সংরক্ষিত হয়েছে",
   companyName: "কোম্পানির নাম",
   companyNameHint: "রিপোর্ট ও প্রিন্টে এই নামটি দেখাবে",
@@ -1098,6 +1111,62 @@ export const confirm = {
   finalBody: (total: string) => `সর্বমোট ${total}। সংরক্ষণের পর বাতিল করা যাবে, মুছে ফেলা যাবে না।`,
 } as const;
 
+/**
+ * কাস্টমারের অবস্থা — spec R5.1, R5.3, R5.4, R5.5 and R5.6.
+ *
+ * Every one of these is derived on read, so the copy never claims a date it
+ * cannot prove: "১২ দিন চুপ" is counted from the journal this morning, not
+ * read out of a column somebody wrote last week.
+ */
+export const activity = {
+  title: "কাস্টমারের অবস্থা",
+  hint: "কে নিয়মিত, কে চুপ, আর কার বকেয়া পুরনো হচ্ছে",
+  status: {
+    normal: "স্বাভাবিক",
+    doubtful: "সন্দেহজনক",
+    critical: "ঝুঁকিতে",
+  } as Record<ActivityStatus, string>,
+  /* The receivable bands. Same three words the credit rules use. */
+  band: {
+    healthy: "ভালো",
+    slow: "ধীর",
+    risky: "ঝুঁকিপূর্ণ",
+  },
+  dailyTitle: "আজকের সতর্কতা",
+  dailyHint: (date: string) => `${date} তারিখের হিসাবে`,
+  likelyLost: "হারানোর আশঙ্কা",
+  likelyLostBody: (names: string) => `অনেক দিন অর্ডার নেই — ${names}`,
+  enteredDoubtful: "আজ সন্দেহজনক হয়েছে",
+  enteredCritical: "আজ ঝুঁকিতে পড়েছে",
+  agedToday: "আজ বকেয়ার সীমা পেরিয়েছে",
+  agedTodayBody: (name: string, days: string) => `${name} — ${days} দিন পার`,
+  volumeDrops: "কেনাকাটা কমেছে",
+  volumeDropBody: (name: string, now: string, before: string) =>
+    `${name} — এখন ${now}, আগে ${before}`,
+  volumeDropBadge: "কম কিনছে",
+  followUps: "ফলো-আপ কল",
+  followUpLine: (name: string) => `${name} কে ফলো-আপ কল দিন`,
+  followUpHint: "হলুদ বা লাল হলেই তালিকায় আসে, কল করা পর্যন্ত থাকে",
+  noAlerts: "আজ নতুন কোনো সতর্কতা নেই",
+  allHealthy: "সব কাস্টমার নিয়মিত আছে",
+  reactivation: "ফিরিয়ে আনার তালিকা",
+  reactivationHint: "যারা নিয়মিত কিনত, তারপর থেমে গেছে",
+  noReactivation: "নিয়মিত কেনার পর থেমে গেছে — এমন কেউ নেই",
+  statusColumn: "অবস্থা",
+  lastOrder: "শেষ অর্ডার",
+  neverOrdered: "কখনো অর্ডার করেনি",
+  daysSilent: (days: string) => `${days} দিন চুপ`,
+  orderCount: "অর্ডার",
+  orderCountValue: (count: string) => `${count} বার`,
+  recentVolume: "সাম্প্রতিক কেনাকাটা",
+  baselineVolume: "আগের গড়",
+  overdueDays: (days: string) => `${days} দিন পার`,
+  call: "কল করুন",
+  noPhone: "ফোন নম্বর নেই",
+  onlyReactivation: "শুধু ফিরিয়ে আনার তালিকা",
+  customerCount: (count: string) => `${count} জন কাস্টমার`,
+} as const;
+
 export const bn = {
   nav,
   actions,
@@ -1105,6 +1174,7 @@ export const bn = {
   transactionTypeHint,
   fields,
   dashboard,
+  activity,
   due,
   role,
   financialAccountKind,

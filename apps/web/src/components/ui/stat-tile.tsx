@@ -1,4 +1,6 @@
 import type * as React from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import type { Money } from "@hishabai/shared";
 import { MoneyText } from "./money";
 import { cn } from "@/lib/utils";
@@ -10,7 +12,7 @@ import { cn } from "@/lib/utils";
  * numbers", and on a phone the label above it is what makes the number
  * meaningful, so neither is allowed to shrink into the other.
  */
-export function StatTile({
+export function StatTile<T extends string>({
   label,
   value,
   tone = "neutral",
@@ -24,7 +26,18 @@ export function StatTile({
   tone?: "neutral" | "credit" | "debit" | "due" | "auto";
   icon?: React.ComponentType<{ className?: string }>;
   footnote?: string;
-  href?: string;
+  /**
+   * Spec R5.7 — a tile that cannot be opened is a number the user has to take
+   * on trust.
+   *
+   * `Route<T>` and not `string`: this used to render a bare `<a>`, which meant
+   * a typo in the path was a 404 somebody found later rather than a build
+   * error, and every tile click threw away the client router and reloaded the
+   * whole app. Generic for the reason `Link` is — `typedRoutes` infers the
+   * literal type of an interpolated path, and a non-generic prop collapses it
+   * to `unknown` and rejects every template string.
+   */
+  href?: Route<T>;
   className?: string;
 }) {
   const body = (
@@ -47,9 +60,9 @@ export function StatTile({
   );
 
   return href ? (
-    <a href={href} className={base}>
+    <Link href={href} className={base}>
       {body}
-    </a>
+    </Link>
   ) : (
     <div className={base}>{body}</div>
   );
@@ -75,7 +88,7 @@ export function StatTileSkeleton() {
  * "৳ ৩" are different claims, and a tile that blurs them on a finance screen
  * is worse than no tile.
  */
-export function CountTile({
+export function CountTile<T extends string>({
   label,
   value,
   suffix,
@@ -91,7 +104,7 @@ export function CountTile({
   tone?: "neutral" | "credit" | "debit" | "due";
   icon?: React.ComponentType<{ className?: string }>;
   footnote?: string;
-  href?: string;
+  href?: Route<T>;
 }) {
   const toneClass =
     tone === "due"
@@ -122,9 +135,9 @@ export function CountTile({
   );
 
   return href ? (
-    <a href={href} className={base}>
+    <Link href={href} className={base}>
       {body}
-    </a>
+    </Link>
   ) : (
     <div className={base}>{body}</div>
   );

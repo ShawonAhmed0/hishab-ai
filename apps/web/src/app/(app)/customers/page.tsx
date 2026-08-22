@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PlusCircle, Users, UserCheck, Wallet } from "lucide-react";
+import { HeartPulse, PlusCircle, Users, UserCheck, Wallet } from "lucide-react";
 import { can, getParties } from "@hishabai/core";
 import { moneyFromDb } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
@@ -53,12 +53,22 @@ export default async function CustomersPage({
           <h1 className="text-2xl font-bold tracking-tight">{t.nav.customers}</h1>
           <p className="text-sm text-muted-foreground">{t.masterData.customersHint}</p>
         </div>
-        <Button asChild>
-          <Link href="/entry">
-            <PlusCircle className="size-4" aria-hidden />
-            {t.nav.newEntry}
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {/* R5.5 — the win-back list is reachable from here, which is where
+              the sales team already is when they ask who to ring. */}
+          <Button asChild variant="secondary">
+            <Link href="/customers/health">
+              <HeartPulse className="size-4" aria-hidden />
+              {t.nav.customerHealth}
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/entry">
+              <PlusCircle className="size-4" aria-hidden />
+              {t.nav.newEntry}
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
