@@ -363,6 +363,62 @@ export function confirmPolicyFrom(settings: unknown): ConfirmPolicy {
   };
 }
 
+/**
+ * When a customer has gone quiet — spec R5.1 and R5.3.
+ *
+ * Two different questions, and a business needs both. "No order for a
+ * fortnight" catches the customer who stopped; it says nothing about the one
+ * who used to buy ten sacks a week and now buys one. `volumeDropPercent` is
+ * R5.3's sensitivity — a setting rather than a magic number, because what
+ * counts as a material fall is a trade judgement.
+ */
+export interface ActivityPolicy {
+  doubtfulDays: number;
+  criticalDays: number;
+  /** How far back "recently" reaches. */
+  recentDays: number;
+  /** …and how far back the run they are being compared against reaches. */
+  baselineDays: number;
+  /** A fall of at least this much, against their own baseline, is doubtful. */
+  volumeDropPercent: number;
+}
+
+export const DEFAULT_ACTIVITY_POLICY: ActivityPolicy = {
+  doubtfulDays: 7,
+  criticalDays: 14,
+  recentDays: 30,
+  baselineDays: 90,
+  volumeDropPercent: 40,
+};
+
+export function activityPolicyFrom(settings: unknown): ActivityPolicy {
+  const raw = (settings ?? {}) as Record<string, unknown>;
+  const read = (key: keyof ActivityPolicy): number => {
+    const value = raw[key];
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 3650
+      ? value
+      : DEFAULT_ACTIVITY_POLICY[key];
+  };
+  const policy: ActivityPolicy = {
+    doubtfulDays: read("doubtfulDays"),
+    criticalDays: read("criticalDays"),
+    recentDays: read("recentDays"),
+    baselineDays: read("baselineDays"),
+    volumeDropPercent: read("volumeDropPercent"),
+  };
+  // A baseline window that does not reach past the recent one has nothing to
+  // compare against, so fall back rather than divide by a window of zero days.
+  if (policy.baselineDays <= policy.recentDays) {
+    policy.recentDays = DEFAULT_ACTIVITY_POLICY.recentDays;
+    policy.baselineDays = DEFAULT_ACTIVITY_POLICY.baselineDays;
+  }
+  return policy;
+}
+
+/** R5.1's traffic light. */
+export const ACTIVITY_STATUSES = ["normal", "doubtful", "critical"] as const;
+export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
+
 export const DEFAULT_PERIOD_LOCK: PeriodLock = {
   lockedBefore: null,
   lockPriorMonths: false,

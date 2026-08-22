@@ -17,3 +17,4 @@ export * from "./overrides";
 export * from "./confirmations";
 export * from "./ageing";
 export * from "./policy";
+export * from "./activity";
