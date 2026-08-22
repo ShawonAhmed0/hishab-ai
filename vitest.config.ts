@@ -25,8 +25,11 @@ function loadEnvLocal(): Record<string, string> {
 
 export default defineConfig({
   test: {
+    // No `include` here on purpose. The projects in vitest.workspace.ts each
+    // declare their own, and `extends` *merges* arrays rather than replacing
+    // them — leaving one here silently ran every package test a second time,
+    // inside the jsdom project.
     environment: "node",
-    include: ["packages/**/*.test.ts"],
     // Integration tests need a real database; they skip themselves when
     // DATABASE_URL is absent, so this stays optional.
     env: loadEnvLocal(),
@@ -40,10 +43,15 @@ export default defineConfig({
       thresholds: { lines: 90, functions: 90, branches: 85, statements: 90 },
     },
   },
+  // esbuild handles the JSX, so @vitejs/plugin-react is not needed — and its
+  // current major wants a Vite that vitest 2 does not ship.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@hishabai/shared": r("./packages/shared/src/index.ts"),
       "@hishabai/accounting": r("./packages/accounting/src/index.ts"),
+      // The same `@/` the web app's tsconfig maps.
+      "@": r("./apps/web/src"),
     },
   },
 });

@@ -24,7 +24,17 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 183 passing instead of 293. Check the count.
+skip** and you get 191 passing instead of 301. Check the count.
+
+The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
+node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
+file. They are split because `setupFiles` in a shared config runs for *every*
+test file — the jsdom shims were loaded into the node tests too, where
+`Element` does not exist, and every pure test failed to collect. Note also that
+`extends` **merges** arrays: an `include` left in the base config ran all of
+`packages` a second time inside the jsdom project. Neither failure is loud, so
+check which project a file ran under (`vitest run --project web`) if a count
+looks wrong.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
