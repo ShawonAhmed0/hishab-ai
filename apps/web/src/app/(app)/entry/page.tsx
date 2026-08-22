@@ -1,4 +1,4 @@
-import { can, loadEntryFormData } from "@hishabai/core";
+import { can, getCompanyPolicy, loadEntryFormData } from "@hishabai/core";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { EntryForm } from "./entry-form";
@@ -12,6 +12,7 @@ export default async function EntryPage() {
   // the session resolves in parallel. The dropdowns are local after this — a
   // data-entry operator should never wait on the network between keystrokes.
   const { session, data } = await sessionWithData(loadEntryFormData);
+  const policy = await getCompanyPolicy(session);
 
   return (
     <EntryForm
@@ -26,6 +27,7 @@ export default async function EntryPage() {
       productCategories={data.productCategories}
       canManageParties={can(session, "party.manage")}
       canManageProducts={can(session, "product.manage")}
+      confirmEveryEntry={policy.confirm.confirmEveryEntry}
     />
   );
 }

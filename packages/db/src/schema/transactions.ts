@@ -57,6 +57,20 @@ export const transactions = pgTable(
     memoNo: varchar("memo_no", { length: 60 }),
     description: text("description"),
 
+    /**
+     * Who handed the money or goods over, and who took them — spec R4.3.
+     *
+     * Free text, and deliberately so: the person at the counter is often not a
+     * user of this app and often not the party either — a customer's driver, a
+     * vendor's delivery boy, the owner's son. Forcing them to exist as a
+     * record first would mean the receipt just says nothing instead.
+     *
+     * `transaction_payments.handled_by_name` is a different thing and stays:
+     * that is which of *our* people took a particular payment.
+     */
+    giverName: varchar("giver_name", { length: 160 }),
+    recipientName: varchar("recipient_name", { length: 160 }),
+
     subtotal: moneyColumn("subtotal").notNull().default(ZERO_NUMERIC),
     transportCost: moneyColumn("transport_cost").notNull().default(ZERO_NUMERIC),
     laborCost: moneyColumn("labor_cost").notNull().default(ZERO_NUMERIC),

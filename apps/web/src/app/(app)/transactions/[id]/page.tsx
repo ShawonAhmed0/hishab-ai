@@ -1,25 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { can, getTransactionDetail } from "@hishabai/core";
 import { formatQty, isTransactionLineRole, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
+import { PrintButton } from "@/components/ui/print-button";
 import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { dict } from "@/lib/locale.server";
 import { requireSession } from "@/lib/session";
 import { formatDate } from "@/lib/utils";
+import { AutoPrint } from "./auto-print";
 import { CancelTransactionButton } from "./cancel-button";
 
 export default async function TransactionDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [session, t] = await Promise.all([requireSession(), dict()]);
   const { id } = await params;
+  const { print } = await searchParams;
   const detail = await getTransactionDetail(session, id);
   if (!detail) notFound();
 
@@ -40,6 +45,8 @@ export default async function TransactionDetailPage({
 
   return (
     <div className="space-y-4">
+      {print === "1" ? <AutoPrint /> : null}
+
       <div className="flex flex-wrap items-start justify-between gap-3 no-print">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" asChild aria-label={t.actions.back}>
@@ -77,12 +84,7 @@ export default async function TransactionDetailPage({
       <Card>
         <CardHeader>
           <CardTitle>{hasParty ? t.due.statement : t.transactions.summary}</CardTitle>
-          <Button variant="ghost" size="sm" className="no-print" asChild>
-            <a href="?print=1">
-              <Printer className="size-4" aria-hidden />
-              {t.actions.print}
-            </a>
-          </Button>
+          <PrintButton label={t.transactions.printReceipt} />
         </CardHeader>
         <CardBody>
           {!hasParty ? (
@@ -149,6 +151,13 @@ export default async function TransactionDetailPage({
                 value={t.transactionSource[transaction.source]}
               />
               <Detail label={t.transactions.createdBy} value={createdByName ?? "—"} />
+              {/* R4.3/R4.4: on the receipt, because that is what they are for. */}
+              {transaction.giverName ? (
+                <Detail label={t.fields.giverName} value={transaction.giverName} />
+              ) : null}
+              {transaction.recipientName ? (
+                <Detail label={t.fields.recipientName} value={transaction.recipientName} />
+              ) : null}
               <Detail
                 label={t.transactions.createdAt}
                 value={new Date(transaction.createdAt).toLocaleString("en-GB", {

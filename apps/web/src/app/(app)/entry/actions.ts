@@ -9,7 +9,9 @@ import {
   OverrideError,
   PermissionError,
   ProbableDuplicateError,
+  UnusualAmountError,
   type DuplicateCandidate,
+  type UnusualAmount,
 } from "@hishabai/core";
 import { PostingError } from "@hishabai/accounting";
 import {
@@ -26,6 +28,8 @@ import { requireSession } from "@/lib/session";
 
 export interface EntrySuccess {
   ok: true;
+  /** So the success dialog can offer this entry's receipt — spec R4.4. */
+  transactionId: string;
   voucherNo: string;
   /** Serialised as strings — bigint does not cross the action boundary. */
   total: string;
@@ -62,6 +66,11 @@ export interface EntryFailure {
    * question, not a refusal: the browser shows it and offers to save anyway.
    */
   duplicate?: DuplicateCandidate;
+  /**
+   * The figure looked wrong for this party — spec R4.2. Also a question, not
+   * a refusal: a genuinely large order is a good day, not a typo.
+   */
+  unusual?: UnusualAmount;
 }
 
 export type EntryResult = EntrySuccess | EntryFailure;
@@ -78,6 +87,7 @@ export async function createEntryAction(
   options: {
     override?: { pin: string; rules: OverridableRule[] };
     confirmDuplicate?: boolean;
+    confirmUnusual?: boolean;
   } = {},
 ): Promise<EntryResult> {
   const session = await requireSession();
@@ -86,6 +96,7 @@ export async function createEntryAction(
     const result = await createTransaction(session, rawInput, {
       ...(options.override ? { override: options.override } : {}),
       ...(options.confirmDuplicate ? { confirmDuplicate: true } : {}),
+      ...(options.confirmUnusual ? { confirmUnusual: true } : {}),
     });
     revalidatePath("/dashboard");
     revalidatePath("/transactions");
@@ -93,6 +104,7 @@ export async function createEntryAction(
     const t = await dict();
     return {
       ok: true,
+      transactionId: result.transactionId,
       voucherNo: result.voucherNo,
       total: moneyToDb(result.totals.total),
       paid: moneyToDb(result.totals.paid),
@@ -168,6 +180,13 @@ export async function createEntryAction(
         error: t.duplicate.title,
         duplicate: error.candidate,
       };
+    }
+
+    // The figure looked wrong for this party. Same shape as the duplicate:
+    // shown, explained, and waved through if the person says it is right.
+    if (error instanceof UnusualAmountError) {
+      const t = await dict();
+      return { ok: false, error: t.confirm.unusualTitle, unusual: error.detail };
     }
 
     if (error instanceof PermissionError) {

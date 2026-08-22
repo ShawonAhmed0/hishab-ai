@@ -102,6 +102,8 @@ export const en: Dictionary = {
     dueAmount: "Due",
     paymentMethod: "Payment method",
     handledBy: "Received / paid by",
+    giverName: "Giver's name",
+    recipientName: "Recipient's name",
     memoNo: "Memo no.",
     voucherNo: "Voucher no.",
     description: "Description",
@@ -307,6 +309,10 @@ export const en: Dictionary = {
     otherCostUnnamed: "No category",
     otherCostHint:
       "Pick a category and the cost posts there instead of being added to what the goods cost",
+    giverHint: "Who handed it over — printed on the receipt",
+    recipientHint: "Who took it",
+    savedTitle: "Entry saved",
+    savedAnother: "Another entry",
     showMoreTypes: "Show more types",
     showFewerTypes: "Show fewer",
     details: "Details",
@@ -382,6 +388,14 @@ export const en: Dictionary = {
 
     companyProfile: "Company details",
     policyTitle: "Company rules",
+    largeAmount: "Large amount (৳)",
+    largeAmountHint: "Anything above this asks once. 0 turns it off",
+    largeMultiple: "Times the usual",
+    largeMultipleHint:
+      "Asks when an entry is this many times the party's recent average. 0 turns it off",
+    confirmEveryEntry: "Confirm every entry",
+    confirmEveryEntryLabel: "Always ask before saving",
+    confirmEveryEntryHint: "Adds one extra step to every single entry",
     policySaved: "Rules saved",
     policyHint:
       "When the books close, and how late a due has to be before it is worth worrying about",
@@ -642,6 +656,7 @@ export const en: Dictionary = {
   },
 
   transactions: {
+    printReceipt: "Print receipt",
     searchPlaceholder: "Voucher, memo, name",
     all: "All",
     start: "Start",
@@ -942,6 +957,18 @@ export const en: Dictionary = {
     phoneInvalid: "That mobile number is not valid",
     pinInvalid: "That PIN is not valid",
     required: "This field is required",
+  },
+
+  confirm: {
+    unusualTitle: "Does that figure look right?",
+    unusualAbsolute: (total: string) =>
+      `This entry comes to ${total}, which is a large amount. Worth a second look.`,
+    unusualMultiple: (total: string, usual: string) =>
+      `This entry comes to ${total}, where this party's entries usually come to ${usual}. Worth a second look.`,
+    yesItIsRight: "Yes, that is right",
+    finalTitle: "Save this entry?",
+    finalBody: (total: string) =>
+      `${total} in total. It can be cancelled after saving, but never deleted.`,
   },
 
   override: {

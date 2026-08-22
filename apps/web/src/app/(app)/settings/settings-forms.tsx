@@ -724,6 +724,34 @@ export function PolicyForm({ policy }: { policy: CompanyPolicy }) {
         </Field>
       </div>
 
+      {/* R4.2 — the typo guard. Two triggers, because neither works alone. */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field hint={t.settings.largeAmountHint}>
+          <FieldLabel>{t.settings.largeAmount}</FieldLabel>
+          <Input numeric name="largeAmount" defaultValue={String(policy.confirm.largeAmount)} />
+        </Field>
+        <Field hint={t.settings.largeMultipleHint}>
+          <FieldLabel>{t.settings.largeMultiple}</FieldLabel>
+          <Input
+            numeric
+            name="largeMultiple"
+            defaultValue={String(policy.confirm.largeMultiple)}
+          />
+        </Field>
+        <Field hint={t.settings.confirmEveryEntryHint}>
+          <FieldLabel>{t.settings.confirmEveryEntry}</FieldLabel>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="confirmEveryEntry"
+              defaultChecked={policy.confirm.confirmEveryEntry}
+              className="size-4 cursor-pointer accent-primary"
+            />
+            {t.settings.confirmEveryEntryLabel}
+          </label>
+        </Field>
+      </div>
+
       <Button type="submit" loading={pending}>
         {t.actions.saveShort}
       </Button>

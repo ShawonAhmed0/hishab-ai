@@ -198,6 +198,9 @@ export async function updatePolicyAction(
       creditPeriodDays: Number(text(form, "creditPeriodDays") ?? 0),
       slowPayerDays: Number(text(form, "slowPayerDays") ?? 30),
       riskyDays: Number(text(form, "riskyDays") ?? 60),
+      largeAmount: Number(text(form, "largeAmount") ?? 100000),
+      largeMultiple: Number(text(form, "largeMultiple") ?? 5),
+      confirmEveryEntry: form.get("confirmEveryEntry") === "on",
     }),
   );
 }

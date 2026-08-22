@@ -48,6 +48,7 @@ import {
   qtyToDb,
   transactionInputSchema,
   TRANSACTION_TYPES,
+  confirmPolicyFrom,
   isOverridable,
   type AuditAction,
   type BlockedReason,
@@ -57,7 +58,11 @@ import {
   type TransactionStatus,
   type TransactionType,
 } from "@hishabai/shared";
-import { loadPostingContext, loadProductStates } from "./posting-context";
+import {
+  loadCompanySettings,
+  loadPostingContext,
+  loadProductStates,
+} from "./posting-context";
 import { recordPostingWarnings } from "./notifications";
 import { writeAudit } from "./audit";
 import { authoriseOverride, type OverrideRequest } from "./overrides";
@@ -65,7 +70,7 @@ import {
   DuplicateMemoError,
   checkForDuplicates,
   isDuplicateMemoViolation,
-} from "./duplicates";
+} from "./confirmations";
 import { requirePermission, type Session, type TenantScope } from "./session";
 
 /** Voucher prefixes, so a number tells you what it is at a glance. */
@@ -106,6 +111,8 @@ export interface CreateTransactionOptions {
    * regardless; this only waves through the same-everything-else case.
    */
   confirmDuplicate?: boolean;
+  /** Set once they have seen the typo guard and said the figure is right. */
+  confirmUnusual?: boolean;
 }
 
 /**
@@ -217,7 +224,9 @@ export async function createTransaction(
       companyId: session.companyId,
       input,
       total: result.totals.total,
+      policy: confirmPolicyFrom(await loadCompanySettings(tx, session.companyId)),
       ...(options.confirmDuplicate ? { confirmDuplicate: true } : {}),
+      ...(options.confirmUnusual ? { confirmUnusual: true } : {}),
     });
 
     const partyId = "partyId" in input ? input.partyId : undefined;
@@ -306,6 +315,8 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
       "categoryAccountId" in input ? (input.categoryAccountId ?? null) : null,
     memoNo: input.memoNo ?? null,
     description: input.description ?? null,
+    giverName: input.giverName ?? null,
+    recipientName: input.recipientName ?? null,
     subtotal: moneyToDb(result.totals.subtotal),
     transportCost: "transportCost" in input ? moneyToDb(money(input.transportCost)) : "0",
     laborCost: "laborCost" in input ? moneyToDb(money(input.laborCost)) : "0",

@@ -12,8 +12,10 @@ import { eq, sql } from "drizzle-orm";
 import { companies, withTenant } from "@hishabai/db";
 import {
   companyPolicySchema,
+  confirmPolicyFrom,
   creditPolicyFrom,
   periodLockFrom,
+  type ConfirmPolicy,
   type CreditPolicy,
   type PeriodLock,
 } from "@hishabai/shared";
@@ -23,6 +25,7 @@ import { requirePermission, type Session, type TenantScope } from "./session";
 export interface CompanyPolicy {
   credit: CreditPolicy;
   lock: PeriodLock;
+  confirm: ConfirmPolicy;
 }
 
 export async function getCompanyPolicy(scope: TenantScope): Promise<CompanyPolicy> {
@@ -32,7 +35,11 @@ export async function getCompanyPolicy(scope: TenantScope): Promise<CompanyPolic
       .from(companies)
       .where(eq(companies.id, scope.companyId))
       .limit(1);
-    return { credit: creditPolicyFrom(row?.settings), lock: periodLockFrom(row?.settings) };
+    return {
+      credit: creditPolicyFrom(row?.settings),
+      lock: periodLockFrom(row?.settings),
+      confirm: confirmPolicyFrom(row?.settings),
+    };
   });
 }
 
@@ -57,6 +64,9 @@ export async function updateCompanyPolicy(
     creditPeriodDays: input.creditPeriodDays,
     slowPayerDays: input.slowPayerDays,
     riskyDays: input.riskyDays,
+    largeAmount: input.largeAmount,
+    largeMultiple: input.largeMultiple,
+    confirmEveryEntry: input.confirmEveryEntry,
   };
 
   await withTenant(session, async (tx) => {

@@ -138,6 +138,9 @@ const baseFields = {
   date: isoDate,
   memoNo: z.string().trim().max(60).optional(),
   description: z.string().trim().max(1000).optional(),
+  /** R4.3 — who handed it over, and who took it. Free text; see the schema. */
+  giverName: z.string().trim().max(160).optional(),
+  recipientName: z.string().trim().max(160).optional(),
   attachmentIds: z.array(uuid).max(10).default([]),
   source: z.enum(TRANSACTION_SOURCES).default("manual"),
 };
@@ -468,5 +471,10 @@ export const companyPolicySchema = z.object({
   creditPeriodDays: z.number().int().min(0).max(3650).default(0),
   slowPayerDays: z.number().int().min(1).max(3650).default(30),
   riskyDays: z.number().int().min(1).max(3650).default(60),
+  /** R4.2 — whole taka, 0 to turn the absolute trigger off. */
+  largeAmount: z.number().min(0).max(1e12).default(100000),
+  /** R4.2 — multiple of this party's own recent average; 0 turns it off. */
+  largeMultiple: z.number().min(0).max(1000).default(5),
+  confirmEveryEntry: z.boolean().default(false),
 });
 export type CompanyPolicyInput = z.infer<typeof companyPolicySchema>;

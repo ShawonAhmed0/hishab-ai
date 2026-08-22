@@ -25,7 +25,12 @@ import {
   withUser,
 } from "@hishabai/db";
 import { money, moneyToDb, subMoney, todayIso } from "@hishabai/shared";
-import { cancelTransaction, createTransaction, listTransactions } from "./transactions";
+import {
+  cancelTransaction,
+  createTransaction,
+  getTransactionDetail,
+  listTransactions,
+} from "./transactions";
 import { createFinancialAccount } from "./companies";
 import { getDashboard } from "./dashboard";
 import { getProductDetail } from "./inventory";
@@ -49,7 +54,7 @@ import { createRecipe } from "./recipes";
 import { getNotifications, markAllNotificationsRead } from "./notifications";
 import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
-import type { DuplicateCandidate } from "./duplicates";
+import type { DuplicateCandidate } from "./confirmations";
 import { loadAgeing } from "./ageing";
 import { getCompanyPolicy, updateCompanyPolicy } from "./policy";
 import type { Session } from "./session";
@@ -2101,7 +2106,13 @@ describeDb("টাকার হিসাবের বাধা", () => {
         // guard — one override authorises one rule, and this test is about that one.
         payments: [{ financialAccountId: tenant.cashWalletId, amount: "100000" }],
       },
-      { override: { pin: PIN, rules: ["insufficientFunds"] } },
+      {
+        override: { pin: PIN, rules: ["insufficientFunds"] },
+        // ৳1,00,000 against a history of ৳5,000 expenses trips R4.2's typo
+        // guard as well. This test is about the overdraft; the figure is
+        // deliberate.
+        confirmUnusual: true,
+      },
     );
 
     expect(overdrawn.overrides.map((o) => o.rule)).toEqual(["insufficientFunds"]);
@@ -2406,6 +2417,42 @@ describeDb("বন্ধ হিসাবের সময়কাল", () => {
     expect(filed.overrides.map((o) => o.rule)).toEqual(["periodLocked"]);
   });
 
+  // R4.3. Free text, nullable, and it survives the round trip — which is the
+  // whole claim, since nothing derives from it.
+  it("keeps the giver and recipient names on the entry", async () => {
+    const saved = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-20",
+      source: "manual",
+      partyId: customerId,
+      giverName: "করিম ড্রাইভার",
+      recipientName: "রফিক",
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "1", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "80" }],
+    });
+
+    const detail = await getTransactionDetail(tenant.session, saved.transactionId);
+    expect(detail?.transaction.giverName).toBe("করিম ড্রাইভার");
+    expect(detail?.transaction.recipientName).toBe("রফিক");
+  });
+
+  it("leaves them null when nobody was named", async () => {
+    // A different quantity, or R2.2 correctly asks whether this is the same
+    // entry as the one above.
+    const saved = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-08-20",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "2", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "160" }],
+    });
+
+    const detail = await getTransactionDetail(tenant.session, saved.transactionId);
+    expect(detail?.transaction.giverName).toBeNull();
+    expect(detail?.transaction.recipientName).toBeNull();
+  });
+
   it("leaves the rest of the settings blob alone", async () => {
     // `settings` is shared, so the policy writes the keys it owns and nothing
     // else — a merge, not a replace.
@@ -2434,5 +2481,105 @@ describeDb("বন্ধ হিসাবের সময়কাল", () => {
     expect(settings["somethingElse"]).toBe(42);
     expect(settings["creditPeriodDays"]).toBe(15);
     expect(settings["lockedBefore"]).toBeNull();
+  });
+});
+
+/** Spec R4.2. The typo guard, against a party with a real history. */
+describeDb("অস্বাভাবিক অঙ্ক", () => {
+  let tenant: Tenant;
+  let customerId: string;
+  let productId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Typo");
+    customerId = await seedParty(tenant, "টাইপোর কাস্টমার", "customer");
+    productId = await createProduct(tenant.session, {
+      nameBn: "টাইপোর পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "100",
+      openingQuantity: "1000000",
+      openingRate: "50",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  const sell = (quantity: string, date: string, options?: Parameters<typeof createTransaction>[2]) =>
+    createTransaction(
+      tenant.session,
+      {
+        type: "sale",
+        date,
+        source: "manual",
+        partyId: customerId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity, rate: "100" }],
+        payments: [{ financialAccountId: tenant.cashWalletId, amount: String(Number(quantity) * 100) }],
+      },
+      options,
+    );
+
+  it("says nothing about the first few ordinary entries", async () => {
+    for (const [index, quantity] of ["100", "120", "90"].entries()) {
+      const saved = await sell(quantity, `2026-08-1${index + 1}`);
+      expect(saved.voucherNo).toMatch(/^SALE/);
+    }
+  });
+
+  it("asks when an entry dwarfs what this party usually spends", async () => {
+    // ৳10,000-ish is normal for them; ৳80,000 is eight times that, and well
+    // under the absolute threshold — so this is the multiple trigger.
+    await expect(sell("800", "2026-08-14")).rejects.toMatchObject({
+      name: "UnusualAmountError",
+      detail: { trigger: "multiple", total: "৳ 80,000.00" },
+    });
+  });
+
+  it("saves it once the user says the figure is right", async () => {
+    const saved = await sell("800", "2026-08-14", { confirmUnusual: true });
+    expect(saved.voucherNo).toMatch(/^SALE/);
+  });
+
+  it("asks on the absolute figure when there is no history to compare", async () => {
+    // A brand-new party has no baseline at all, which is exactly the case the
+    // multiple cannot catch — ৳1,20,000 on their first ever entry.
+    const stranger = await createParty(tenant.session, {
+      name: "নতুন কাস্টমার",
+      type: "customer",
+    });
+
+    await expect(
+      createTransaction(tenant.session, {
+        type: "sale",
+        date: "2026-08-15",
+        source: "manual",
+        partyId: stranger,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity: "1200", rate: "100" }],
+        payments: [{ financialAccountId: tenant.cashWalletId, amount: "120000" }],
+      }),
+    ).rejects.toMatchObject({
+      name: "UnusualAmountError",
+      detail: { trigger: "absolute", total: "৳ 1,20,000.00" },
+    });
+  });
+
+  it("stops asking when the company turns both triggers off", async () => {
+    await updateCompanyPolicy(tenant.session, {
+      lockedBefore: "",
+      lockPriorMonths: false,
+      creditPeriodDays: 0,
+      slowPayerDays: 30,
+      riskyDays: 60,
+      largeAmount: 0,
+      largeMultiple: 0,
+      confirmEveryEntry: false,
+    });
+
+    const saved = await sell("5000", "2026-08-16");
+    expect(saved.voucherNo).toMatch(/^SALE/);
   });
 });

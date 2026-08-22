@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Undo2,
   FileText,
+  Printer,
 } from "lucide-react";
 import {
   ZERO,
@@ -58,7 +59,7 @@ import {
   type CategoryChoice,
 } from "@/components/master-data/create-forms";
 import { Dialog } from "@/components/ui/dialog";
-import { createEntryAction, type EntryResult } from "./actions";
+import { createEntryAction, type EntryResult, type EntrySuccess } from "./actions";
 import { VoiceScanPanel, type ParsedDraft } from "./voice-scan";
 
 // ---------------------------------------------------------------------------
@@ -125,6 +126,8 @@ interface Props {
   /** An operator may post entries but not create the things they name. */
   canManageParties: boolean;
   canManageProducts: boolean;
+  /** R4.2 — ask before every save. Off unless the company turned it on. */
+  confirmEveryEntry: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -491,6 +494,7 @@ export function EntryForm({
   productCategories,
   canManageParties,
   canManageProducts,
+  confirmEveryEntry,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -538,6 +542,9 @@ export function EntryForm({
     },
   ]);
   const [memoNo, setMemoNo] = React.useState("");
+  // R4.3 — free text, and often not a user of this app: a driver, a delivery boy.
+  const [giverName, setGiverName] = React.useState("");
+  const [recipientName, setRecipientName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [source, setSource] = React.useState<"manual" | "voice" | "scan">("manual");
 
@@ -563,17 +570,27 @@ export function EntryForm({
   // The override — spec R1.2. The payload is held rather than rebuilt so the
   // retry posts exactly what the server already refused, and the PIN is held
   // only for as long as the dialog is open.
-  const [blockedPayload, setBlockedPayload] = React.useState<unknown>(null);
+  // R4.2. One gate for every "are you sure?": the payload waiting on an
+  // answer, and the question itself derived from the server's reply. Three
+  // separate dialogs is how the wording and the dismiss behaviour drift apart.
+  const [pendingPayload, setPendingPayload] = React.useState<unknown>(null);
+  // The one question that is asked before the server sees anything: R4.2's
+  // final confirmation, off unless the company turned it on.
+  const [askingFinal, setAskingFinal] = React.useState(false);
   const [pin, setPin] = React.useState("");
   // Every rule the person has been shown and agreed to on this entry. Sent
   // with the PIN so the server relaxes those and nothing else — a rule they
   // have not seen comes back as a fresh refusal and a fresh dialog.
   const [overrideRules, setOverrideRules] = React.useState<OverridableRule[]>([]);
+  // R4.4 — the entry that just saved, so the success dialog can offer its receipt.
+  const [saved, setSaved] = React.useState<EntrySuccess | null>(null);
+  // Which questions this attempt has already answered, so the next refusal is
+  // a fresh question rather than the same one again.
+  const [answered, setAnswered] = React.useState<{
+    duplicate?: boolean;
+    unusual?: boolean;
+  }>({});
 
-  // The probable duplicate — spec R2.2. Separate from `blockedPayload`
-  // because it is a different kind of dialog: a question with a link in it,
-  // not a refusal with a PIN field.
-  const [duplicatePayload, setDuplicatePayload] = React.useState<unknown>(null);
 
   const fieldErrors = result && !result.ok ? (result.fieldErrors ?? {}) : {};
 
@@ -667,6 +684,8 @@ export function EntryForm({
     setLaborCost("");
     setOtherCost("");
     setOtherCostAccountId("");
+    setGiverName("");
+    setRecipientName("");
     setDiscount("");
     setDiscountType("amount");
     setSource("manual");
@@ -774,6 +793,8 @@ export function EntryForm({
       attachmentIds: [],
       ...(memoNo ? { memoNo } : {}),
       ...(description ? { description } : {}),
+      ...(giverName ? { giverName } : {}),
+      ...(recipientName ? { recipientName } : {}),
     };
 
     const activePayments = payments
@@ -891,6 +912,7 @@ export function EntryForm({
     options: {
       override?: { pin: string; rules: OverridableRule[] };
       confirmDuplicate?: boolean;
+      confirmUnusual?: boolean;
     } = {},
   ) {
     setResult(null);
@@ -900,36 +922,42 @@ export function EntryForm({
       setResult(outcome);
 
       if (outcome.ok) {
-        setBlockedPayload(null);
-        setDuplicatePayload(null);
-        setPin("");
-        setOverrideRules([]);
-        toast.success(
-          `${t.messages.saved} — ${outcome.voucherNo}`,
-          t.entry.savedTotal(formatMoney(money(outcome.total))),
-        );
+        closeGate();
         for (const warning of outcome.warnings) toast.show({ tone: "info", title: warning });
+        // R4.4. The dialog replaces the toast as the confirmation, because it
+        // is also where the receipt is offered — a toast that carries an
+        // action is a toast people miss.
+        setSaved(outcome);
         changeType(type);
         router.refresh();
         return;
       }
 
-      if (outcome.canOverride) {
-        setBlockedPayload(payload);
-        if (outcome.blockedRule) {
-          const rule = outcome.blockedRule;
-          setOverrideRules((current) =>
-            current.includes(rule) ? current : [...current, rule],
-          );
-        }
-      } else {
-        setBlockedPayload(null);
+      // Anything the user can answer keeps the payload alive so the retry
+      // posts exactly what the server already saw.
+      const answerable = Boolean(outcome.canOverride || outcome.duplicate || outcome.unusual);
+      setPendingPayload(answerable ? payload : null);
+      if (!answerable) {
         setPin("");
         setOverrideRules([]);
+        return;
       }
 
-      setDuplicatePayload(outcome.duplicate ? payload : null);
+      if (outcome.blockedRule) {
+        const rule = outcome.blockedRule;
+        setOverrideRules((current) =>
+          current.includes(rule) ? current : [...current, rule],
+        );
+      }
     });
+  }
+
+  function closeGate() {
+    setPendingPayload(null);
+    setAskingFinal(false);
+    setPin("");
+    setOverrideRules([]);
+    setAnswered({});
   }
 
   /**
@@ -955,8 +983,61 @@ export function EntryForm({
       return;
     }
 
+    // R4.2's final confirmation, when the company asked for one.
+    if (confirmEveryEntry) {
+      setResult(null);
+      setPendingPayload(payload);
+      setAskingFinal(true);
+      return;
+    }
+
     save(payload);
   }
+
+  /**
+   * What, if anything, the user is being asked — spec R4.2.
+   *
+   * Derived from the last reply rather than held in its own state, so the
+   * dialog and the banner can never disagree about what happened.
+   */
+  const gate = React.useMemo(() => {
+    if (pendingPayload !== null && askingFinal) return { kind: "final" as const };
+    if (!result || result.ok || pendingPayload === null) return null;
+    if (result.canOverride) return { kind: "override" as const };
+    if (result.duplicate) return { kind: "duplicate" as const, candidate: result.duplicate };
+    if (result.unusual) return { kind: "unusual" as const, detail: result.unusual };
+    return null;
+  }, [result, pendingPayload]);
+
+  const gateTitle =
+    gate?.kind === "final"
+      ? t.confirm.finalTitle
+      : gate?.kind === "duplicate"
+      ? t.duplicate.title
+      : gate?.kind === "unusual"
+        ? t.confirm.unusualTitle
+        : t.override.overrideTitle;
+
+  const gateBody =
+    gate?.kind === "final"
+      ? t.confirm.finalBody(formatMoney(total))
+      : gate?.kind === "duplicate" && result && !result.ok && result.duplicate
+      ? t.duplicate.body(
+          result.duplicate.voucherNo,
+          formatDateTime(result.duplicate.savedAt, t),
+        )
+      : gate?.kind === "unusual" && gate.detail.usual
+        ? t.confirm.unusualMultiple(gate.detail.total, gate.detail.usual)
+        : gate?.kind === "unusual"
+          ? t.confirm.unusualAbsolute(gate.detail.total)
+          : gate?.kind === "override"
+            ? ((
+                <>
+                  <p>{result && !result.ok ? result.error : null}</p>
+                  <p className="mt-2">{t.override.explain}</p>
+                </>
+              ) as React.ReactNode)
+            : undefined;
 
   const summaryErrors =
     result && !result.ok
@@ -1165,6 +1246,16 @@ export function EntryForm({
                 onChange={(e) => setMemoNo(e.target.value)}
                 placeholder={t.entry.ratePlaceholder}
               />
+            </Field>
+
+            {/* R4.3. Free text: often a driver or a delivery boy, not a user. */}
+            <Field hint={t.entry.giverHint}>
+              <FieldLabel>{t.fields.giverName}</FieldLabel>
+              <Input value={giverName} onChange={(e) => setGiverName(e.target.value)} />
+            </Field>
+            <Field hint={t.entry.recipientHint}>
+              <FieldLabel>{t.fields.recipientName}</FieldLabel>
+              <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
             </Field>
           </div>
 
@@ -1746,129 +1837,165 @@ export function EntryForm({
       </Card>
 
       {/*
-        Spec R2.2. Not blocking: a repeat order from the same customer on the
-        same day is legitimate, so this asks rather than refuses — and it shows
-        the existing voucher so the answer is an informed one.
+        Spec R4.4. The receipt is the transaction page itself — one layout,
+        so an entry cannot say one total on screen and another on paper.
       */}
       <Dialog
-        open={duplicatePayload !== null}
+        open={saved !== null}
         onOpenChange={(next) => {
-          if (!next) setDuplicatePayload(null);
+          if (!next) setSaved(null);
         }}
         closeLabel={t.actions.close}
-        title={t.duplicate.title}
+        title={t.entry.savedTitle}
         description={
-          result && !result.ok && result.duplicate
-            ? t.duplicate.body(
-                result.duplicate.voucherNo,
-                formatDateTime(result.duplicate.savedAt, t),
-              )
-            : undefined
+          saved ? (
+            <>
+              <p className="num text-lg font-semibold text-foreground">{saved.voucherNo}</p>
+              <p className="mt-1">
+                {t.entry.savedTotal(formatMoney(money(saved.total)))}
+                {money(saved.due) > 0n
+                  ? ` · ${t.fields.dueAmount} ${formatMoney(money(saved.due))}`
+                  : ""}
+              </p>
+            </>
+          ) : undefined
         }
         footer={
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setDuplicatePayload(null)}
-            >
+            <Button type="button" variant="secondary" onClick={() => setSaved(null)}>
+              {t.entry.savedAnother}
+            </Button>
+            {saved ? (
+              <Button asChild>
+                <Link href={`/transactions/${saved.transactionId}?print=1` as Route}>
+                  <Printer className="size-4" aria-hidden />
+                  {t.transactions.printReceipt}
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      {/*
+        Spec R4.2. One gate, three questions.
+
+        The kind of question decides the wording and the buttons; the shell,
+        the focus handling and the dismiss behaviour are decided once. An
+        override is blocking — a refusal dismissed by a stray click outside
+        reads exactly like a save, and the entry is not saved — while the two
+        questions are not, because "no" is a legitimate answer to both.
+      */}
+      <Dialog
+        open={gate !== null}
+        onOpenChange={(next) => {
+          if (!next) closeGate();
+        }}
+        blocking={gate?.kind === "override"}
+        closeLabel={t.actions.close}
+        title={gateTitle}
+        description={gateBody}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeGate}>
               {t.actions.cancel}
             </Button>
-            <Button
-              type="button"
-              loading={pending}
-              onClick={() => {
-                if (duplicatePayload !== null) {
-                  save(duplicatePayload, { confirmDuplicate: true });
-                }
-              }}
-            >
-              {t.duplicate.saveAnyway}
-            </Button>
+            {gate?.kind === "override" ? (
+              <Button
+                type="button"
+                loading={pending}
+                disabled={pin.trim().length < 4}
+                onClick={() => {
+                  if (pendingPayload !== null) {
+                    save(pendingPayload, {
+                      override: { pin, rules: overrideRules },
+                      ...answered,
+                    });
+                  }
+                }}
+              >
+                {t.override.submit}
+              </Button>
+            ) : null}
+            {gate?.kind === "duplicate" ? (
+              <Button
+                type="button"
+                loading={pending}
+                onClick={() => {
+                  setAnswered((current) => ({ ...current, duplicate: true }));
+                  if (pendingPayload !== null) {
+                    save(pendingPayload, { ...answered, confirmDuplicate: true });
+                  }
+                }}
+              >
+                {t.duplicate.saveAnyway}
+              </Button>
+            ) : null}
+            {gate?.kind === "final" ? (
+              <Button
+                type="button"
+                loading={pending}
+                onClick={() => {
+                  setAskingFinal(false);
+                  if (pendingPayload !== null) save(pendingPayload);
+                }}
+              >
+                {t.actions.saveShort}
+              </Button>
+            ) : null}
+            {gate?.kind === "unusual" ? (
+              <Button
+                type="button"
+                loading={pending}
+                onClick={() => {
+                  setAnswered((current) => ({ ...current, unusual: true }));
+                  if (pendingPayload !== null) {
+                    save(pendingPayload, { ...answered, confirmUnusual: true });
+                  }
+                }}
+              >
+                {t.confirm.yesItIsRight}
+              </Button>
+            ) : null}
           </>
         }
       >
-        {result && !result.ok && result.duplicate ? (
+        {gate?.kind === "override" ? (
+          <Field fieldId="overridePin" hint={t.override.pinHint}>
+            <FieldLabel required>{t.override.pin}</FieldLabel>
+            <Input
+              id="overridePin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (pendingPayload !== null && pin.trim().length >= 4) {
+                    save(pendingPayload, {
+                      override: { pin, rules: overrideRules },
+                      ...answered,
+                    });
+                  }
+                }
+              }}
+            />
+          </Field>
+        ) : null}
+
+        {gate?.kind === "duplicate" ? (
           <Link
-            href={`/transactions/${result.duplicate.id}` as Route}
+            href={`/transactions/${gate.candidate.id}` as Route}
             className="inline-flex min-h-11 items-center text-primary hover:underline"
             target="_blank"
           >
-            {t.duplicate.viewExisting} — {result.duplicate.voucherNo}
+            {t.duplicate.viewExisting} — {gate.candidate.voucherNo}
           </Link>
         ) : null}
       </Dialog>
 
-      {/*
-        Spec R1.2. Blocking on purpose: a refusal dismissed by a stray click
-        outside reads exactly like a save, and the entry is not saved.
-      */}
-      <Dialog
-        open={blockedPayload !== null}
-        onOpenChange={(next) => {
-          if (!next) {
-            setBlockedPayload(null);
-            setPin("");
-            setOverrideRules([]);
-          }
-        }}
-        blocking
-        closeLabel={t.actions.close}
-        title={t.override.overrideTitle}
-        description={
-          <>
-            <p>{result && !result.ok ? result.error : null}</p>
-            <p className="mt-2">{t.override.explain}</p>
-          </>
-        }
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setBlockedPayload(null);
-                setPin("");
-                setOverrideRules([]);
-              }}
-            >
-              {t.actions.cancel}
-            </Button>
-            <Button
-              type="button"
-              loading={pending}
-              disabled={pin.trim().length < 4}
-              onClick={() => {
-                if (blockedPayload !== null) {
-                  save(blockedPayload, { override: { pin, rules: overrideRules } });
-                }
-              }}
-            >
-              {t.override.submit}
-            </Button>
-          </>
-        }
-      >
-        <Field fieldId="overridePin" hint={t.override.pinHint}>
-          <FieldLabel required>{t.override.pin}</FieldLabel>
-          <Input
-            id="overridePin"
-            type="password"
-            inputMode="numeric"
-            autoComplete="off"
-            value={pin}
-            onChange={(event) => setPin(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                if (blockedPayload !== null && pin.trim().length >= 4) {
-                  save(blockedPayload, { override: { pin, rules: overrideRules } });
-                }
-              }
-            }}
-          />
-        </Field>
-      </Dialog>
     </form>
   );
 }

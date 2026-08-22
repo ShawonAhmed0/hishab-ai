@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 144 passing instead of 232. Check the count.
+skip** and you get 144 passing instead of 239. Check the count.
 
 A schema change needs `npm run migrate -w @hishabai/db` before the integration
 tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
@@ -351,6 +351,36 @@ Two things in `field.tsx` are load-bearing and easy to undo by accident:
   reselected products and units. That is the R4.5 "inputs change on every
   selection" bug, and the banner focusing with `preventScroll` is its other
   half.
+
+## One gate, and one query behind it
+
+Spec R4.2. Every "are you sure?" on নতুন এন্ট্রি renders through a single
+`Dialog` in `entry-form.tsx`, switched on the *kind* of question — an override
+needs a PIN and is blocking, a duplicate carries a link, a large amount carries
+a comparison, the final confirmation carries the total. Three dialogs is how
+the wording, the buttons and the dismiss behaviour drift apart.
+
+The state is one payload plus a `gate` **derived from the last reply**, so the
+banner and the dialog cannot disagree about what happened.
+
+Behind it, `packages/core/src/confirmations.ts` asks all of it in **one
+statement**. Inside the posting transaction every statement is a serial round
+trip, and the duplicate check and the typo guard are the same question about
+the same rows. The party's baseline is `left join`ed onto the candidates rather
+than selected beside them, because it has to come back even when there are no
+candidates — an entry with no duplicate still has a figure worth checking.
+
+The typo guard has **two triggers and no single global number**:
+
+- an absolute figure (৳1,00,000 by default), which is what catches ৳1,00,000
+  typed where ৳10,000 was meant for a party nobody has any history for;
+- a multiple of that party's own recent average (5× by default), which catches
+  the same slip at a business where a lakh is an ordinary Tuesday.
+
+Either set to 0 turns it off. The multiple wins when both fire, because "eight
+times what they usually spend" tells the person more than "over a lakh" does.
+`confirmEveryEntry` is off by default: a second tap on every entry is a cost
+paid by the person who makes no mistakes as well as the one who does.
 
 ## Ageing is derived, every time
 

@@ -110,6 +110,8 @@ export const fields = {
   dueAmount: "বকেয়া",
   paymentMethod: "পেমেন্ট মাধ্যম",
   handledBy: "টাকা গ্রহণকারী/প্রদানকারী",
+  giverName: "যিনি দিয়েছেন",
+  recipientName: "যিনি নিয়েছেন",
   memoNo: "মেমো নম্বর",
   voucherNo: "ভাউচার নম্বর",
   description: "বিবরণ",
@@ -330,6 +332,10 @@ export const entry = {
   otherCostCategory: "অন্যান্য খরচের খাত",
   otherCostUnnamed: "খাত ছাড়া",
   otherCostHint: "খাত বেছে নিলে খরচটি সেই খাতে যাবে — পণ্যের দামে যোগ হবে না",
+  giverHint: "কে দিয়ে গেল — নাম লিখলে রসিদে ছাপা হবে",
+  recipientHint: "কে বুঝে নিল",
+  savedTitle: "এন্ট্রি সংরক্ষণ হয়েছে",
+  savedAnother: "আরেকটি এন্ট্রি",
   showMoreTypes: "আরও ধরন দেখান",
   showFewerTypes: "কম দেখান",
   details: "বিস্তারিত",
@@ -408,6 +414,13 @@ export const settings = {
 
   companyProfile: "কোম্পানির তথ্য",
   policyTitle: "কোম্পানির নিয়ম",
+  largeAmount: "বড় অঙ্কের সীমা (৳)",
+  largeAmountHint: "এর বেশি হলে একবার জিজ্ঞেস করা হবে। ০ দিলে বন্ধ",
+  largeMultiple: "সাধারণের কত গুণ",
+  largeMultipleHint: "এই পক্ষের চলতি গড়ের এত গুণ ছাড়ালে জিজ্ঞেস করা হবে। ০ দিলে বন্ধ",
+  confirmEveryEntry: "প্রতিবার নিশ্চিত করুন",
+  confirmEveryEntryLabel: "সংরক্ষণের আগে সবসময় জিজ্ঞেস করুন",
+  confirmEveryEntryHint: "প্রতিটি এন্ট্রিতে একটি বাড়তি ধাপ যোগ হবে",
   policySaved: "নিয়ম সংরক্ষণ করা হয়েছে",
   policyHint: "কখন হিসাব বন্ধ হবে, আর কত দিন পর বকেয়া নিয়ে চিন্তা করতে হবে",
   lockedBefore: "এই তারিখের আগে হিসাব বন্ধ",
@@ -687,6 +700,7 @@ export const masterData = {
  * The transaction list and the voucher view.
  */
 export const transactions = {
+  printReceipt: "রসিদ প্রিন্ট করুন",
   searchPlaceholder: "ভাউচার, মেমো, নাম",
   all: "সব",
   start: "শুরু",
@@ -1067,6 +1081,23 @@ export const validation = {
   required: "এই ঘরটি পূরণ করুন",
 } as const;
 
+/**
+ * The one confirmation gate — spec R4.2.
+ *
+ * Every "are you sure?" in the app renders through a single dialog, so the
+ * wording, the buttons and the way it is dismissed are decided once.
+ */
+export const confirm = {
+  unusualTitle: "অঙ্কটা কি ঠিক আছে?",
+  unusualAbsolute: (total: string) =>
+    `এই এন্ট্রির পরিমাণ ${total} — অনেক বড়। একবার দেখে নিন।`,
+  unusualMultiple: (total: string, usual: string) =>
+    `এই এন্ট্রির পরিমাণ ${total}, অথচ এই পক্ষের সাধারণ এন্ট্রি ${usual}। একবার দেখে নিন।`,
+  yesItIsRight: "হ্যাঁ, ঠিক আছে",
+  finalTitle: "এন্ট্রিটি সংরক্ষণ করবেন?",
+  finalBody: (total: string) => `সর্বমোট ${total}। সংরক্ষণের পর বাতিল করা যাবে, মুছে ফেলা যাবে না।`,
+} as const;
+
 export const bn = {
   nav,
   actions,
@@ -1089,6 +1120,7 @@ export const bn = {
   messages,
   emptyStates,
   blocked,
+  confirm,
   warned,
   validation,
   duplicate,

@@ -322,6 +322,47 @@ export interface PeriodLock {
   lockPriorMonths: boolean;
 }
 
+/**
+ * The typo guard — spec R4.2.
+ *
+ * Two triggers, because neither works alone. An absolute figure catches
+ * ৳1,00,000 typed where ৳10,000 was meant on a brand-new customer nobody has
+ * any history for; a multiple of what *this* party usually spends catches the
+ * same slip at a business where ৳1,00,000 is an ordinary Tuesday. Either may
+ * be set to 0 to turn it off.
+ *
+ * `confirmEveryEntry` is the spec's "final confirmation before posting", and
+ * it is off by default: a second tap on every entry, all day, is a cost paid
+ * by the person who makes no mistakes as well as the one who does.
+ */
+export interface ConfirmPolicy {
+  largeAmount: number;
+  largeMultiple: number;
+  confirmEveryEntry: boolean;
+}
+
+export const DEFAULT_CONFIRM_POLICY: ConfirmPolicy = {
+  /** Whole taka, not scaled — this is a setting, not an amount in the books. */
+  largeAmount: 100000,
+  largeMultiple: 5,
+  confirmEveryEntry: false,
+};
+
+export function confirmPolicyFrom(settings: unknown): ConfirmPolicy {
+  const raw = (settings ?? {}) as Record<string, unknown>;
+  const read = (key: "largeAmount" | "largeMultiple"): number => {
+    const value = raw[key];
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1e12
+      ? value
+      : DEFAULT_CONFIRM_POLICY[key];
+  };
+  return {
+    largeAmount: read("largeAmount"),
+    largeMultiple: read("largeMultiple"),
+    confirmEveryEntry: raw["confirmEveryEntry"] === true,
+  };
+}
+
 export const DEFAULT_PERIOD_LOCK: PeriodLock = {
   lockedBefore: null,
   lockPriorMonths: false,
