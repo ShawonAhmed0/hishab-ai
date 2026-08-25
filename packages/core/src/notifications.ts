@@ -90,17 +90,48 @@ export async function getNotifications(scope: TenantScope): Promise<Notification
 
         -- Derived from the journal, never from transactions.due_amount, which
         -- is a posting-time snapshot and would age every bill as unpaid.
-        (select coalesce(json_agg(t order by t.amount desc), '[]'::json) from (
-          select pt.id as "partyId", pt.name,
-                 sum(jl.debit - jl.credit)::text as amount
-            from journal_lines jl
-            join accounts a on a.id = jl.account_id
-            join parties pt on pt.id = jl.party_id
-           where jl.company_id = app.current_company_id()
-             and a.subtype = 'receivable'
-             and jl.date <= current_date - ${OVERDUE_DAYS}
-           group by pt.id, pt.name
-          having sum(jl.debit - jl.credit) > 0
+        --
+        -- This used to filter every line by date, 30 days back, which hid the
+        -- *payments* as well as the recent charges: a customer who
+        -- cleared a 60-day-old bill last week still showed as overdue, for the
+        -- amount they no longer owed. An alert is a state — true exactly while
+        -- the money is outstanding — and one that cannot see a payment is the
+        -- stored-status mistake wearing a date filter.
+        --
+        -- So the balance is the whole ledger, and the *age* comes from the same
+        -- FIFO walk in ageing.ts: settlement pays the oldest bill first, so
+        -- what is still outstanding is the newest run of charges, and the date
+        -- that matters is where the running total, counted newest first, first
+        -- covers the balance.
+        (select coalesce(json_agg(t order by (t.amount)::numeric desc), '[]'::json) from (
+          with ledger as (
+            select jl.party_id, jl.date as d, sum(jl.debit - jl.credit) as delta
+              from journal_lines jl
+              join accounts a on a.id = jl.account_id
+             where jl.company_id = app.current_company_id()
+               and a.subtype = 'receivable'
+               and jl.party_id is not null
+             group by jl.party_id, jl.date
+          ),
+          total as (
+            select party_id, sum(delta) as outstanding
+              from ledger group by party_id having sum(delta) > 0
+          ),
+          walk as (
+            select party_id, d,
+                   sum(greatest(delta, 0)) over (
+                     partition by party_id order by d desc
+                     rows between unbounded preceding and current row
+                   ) as cum
+              from ledger
+          )
+          select pt.id as "partyId", pt.name, tt.outstanding::text as amount
+            from total tt
+            join parties pt on pt.id = tt.party_id
+           where (select max(w.d) from walk w
+                   where w.party_id = tt.party_id and w.cum >= tt.outstanding)
+                 <= current_date - ${OVERDUE_DAYS}
+           order by tt.outstanding desc
            limit 10
         ) t) as overdue,
 

@@ -1126,6 +1126,65 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
     ).toBe(false);
   });
 
+  /**
+   * The overdue alert is a state, like low stock: true exactly while the money
+   * is outstanding, and false the moment it is paid. A payment that the alert
+   * cannot see is the same class of bug as a stored status.
+   */
+  it("stops calling a customer overdue once they have paid", async () => {
+    const iso = (daysAgo: number): string =>
+      new Date(Date.parse(`${todayIso()}T00:00:00Z`) - daysAgo * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+
+    // createProduct, not seedProduct: the helper writes product_stock straight
+    // and posts nothing, which is fine in a block of its own and is not fine
+    // here — the invariant test below this one compares that cache against the
+    // inventory control account, and caught it doing exactly that.
+    const productId = await createProduct(tenant.session, {
+      nameBn: "বকেয়ার পণ্য",
+      kind: "finished_good",
+      unitId: tenant.unitKgId,
+      purchasePrice: "50",
+      salePrice: "80",
+      openingQuantity: "100",
+      openingRate: "50",
+    });
+    const partyId = await seedParty(tenant, "দেরিতে দেওয়া কাস্টমার");
+
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: iso(60),
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "10", rate: "80" }],
+      payments: [],
+    });
+
+    const owing = await getNotifications(tenant.session);
+    expect(
+      owing.alerts.some(
+        (a) => a.kind === "overdue_due" && a.titleBn.includes("দেরিতে দেওয়া কাস্টমার"),
+      ),
+    ).toBe(true);
+
+    // Paid in full, today. Nothing is outstanding any more.
+    await createTransaction(tenant.session, {
+      type: "customer_payment",
+      date: todayIso(),
+      source: "manual",
+      partyId,
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "800" }],
+    });
+
+    const settled = await getNotifications(tenant.session);
+    expect(
+      settled.alerts.some(
+        (a) => a.kind === "overdue_due" && a.titleBn.includes("দেরিতে দেওয়া কাস্টমার"),
+      ),
+    ).toBe(false);
+  });
+
   it("finds a voucher by the taka, without the poisha", async () => {
     // Nobody remembers ৳1,234.56 as ৳1,234.56. Exact equality meant the only
     // findable amounts were the ones that happened to be round.

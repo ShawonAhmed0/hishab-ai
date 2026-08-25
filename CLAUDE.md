@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 221 passing instead of 335. Check the count.
+skip** and you get 221 passing instead of 336. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -488,6 +488,14 @@ mistake again, in a new table. So low stock, aged receivables and negative
 wallets are **derived on read** in `notifications.ts` and there is nothing to
 go stale. Aged receivables come from `journal_lines`, not
 `transactions.due_amount`, for the reason above.
+
+**An alert that cannot see a payment is a stored status in disguise.** The
+overdue alert used to filter every journal line by `date <= current_date - 30`,
+which hid the *payments* along with the recent charges — so a customer who
+cleared a 60-day-old bill last week still appeared, for the amount they no
+longer owed. The balance has to be the whole ledger; only the *age* is a
+question about dates, and it is answered by the same FIFO walk `ageing.ts`
+uses.
 
 ## WhatsApp: queue inside the transaction, send outside it
 
