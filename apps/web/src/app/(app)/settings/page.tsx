@@ -1,6 +1,8 @@
+import Link from "next/link";
 import {
   Building2,
   CalendarClock,
+  MessageSquare,
   KeyRound,
   Layers,
   Ruler,
@@ -11,6 +13,7 @@ import {
 import { getCompanyPolicy, getSettings, overridePinIsSet } from "@hishabai/core";
 import { formatPercent, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
@@ -47,9 +50,20 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t.nav.settings}</h1>
-        <p className="text-sm text-muted-foreground">{t.settings.hint}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t.nav.settings}</h1>
+          <p className="text-sm text-muted-foreground">{t.settings.hint}</p>
+        </div>
+        {/* R4.6's log is only worth writing if somebody can read it. */}
+        {editable ? (
+          <Button asChild variant="secondary">
+            <Link href="/settings/deliveries">
+              <MessageSquare className="size-4" aria-hidden />
+              {t.delivery.title}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {!editable ? (

@@ -211,6 +211,35 @@ export const en: Dictionary = {
     customerCount: (count: string) => `${count} customers`,
   },
 
+  delivery: {
+    title: "WhatsApp log",
+    hint: "Which messages went to whom, and why the rest did not",
+    inertNotice:
+      "WhatsApp is not switched on yet — messages are written and kept, but nothing is sent.",
+    status: {
+      pending: "Waiting",
+      sent: "Sent",
+      failed: "Failed",
+      skipped: "Skipped",
+    },
+    template: {
+      paymentReceived: "Payment received",
+      entryRecorded: "Entry recorded",
+      dailySummary: "Daily summary",
+      customerAtRisk: "Customer at risk",
+    },
+    whenColumn: "When",
+    templateColumn: "Message",
+    recipientColumn: "To",
+    messageColumn: "What it said",
+    statusColumn: "Status",
+    attemptsColumn: "Tries",
+    attemptsValue: (count: string) => `${count}`,
+    noRecipient: "No number",
+    empty: "No messages yet",
+    emptyHint: "They appear here once an entry is recorded against a customer",
+  },
+
   due: {
     previousDue: "Previous due",
     currentBill: "This bill",

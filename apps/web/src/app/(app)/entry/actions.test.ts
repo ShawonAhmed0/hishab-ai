@@ -98,7 +98,7 @@ describe("a rule that refuses the entry", () => {
     // An unbalanced entry is not a policy an admin may disagree with; it is
     // arithmetic. No PIN lifts it.
     createTransaction.mockRejectedValue(
-      new PostingError("UNBALANCED", { rule: "unbalancedEntry" }, "unbalanced"),
+      new PostingError("UNBALANCED_ENTRY", { rule: "unbalancedEntry" }, "unbalanced"),
     );
     const result = await createEntryAction({});
     expect(result.ok).toBe(false);
@@ -110,7 +110,7 @@ describe("a rule that refuses the entry", () => {
 
 describe("a PIN that did not work", () => {
   it("keeps the dialog open on a wrong PIN, so it can be retyped", async () => {
-    createTransaction.mockRejectedValue(new OverrideError("wrong_pin"));
+    createTransaction.mockRejectedValue(new OverrideError("wrong_pin", "ভুল পিন", "wrong pin"));
     const result = await createEntryAction({}, { override: { pin: "0000", rules: [] } });
 
     expect(result.ok).toBe(false);
@@ -123,7 +123,7 @@ describe("a PIN that did not work", () => {
     // No PIN set, not an admin, or a rule that is not overridable: another
     // attempt at the same PIN is not the answer to any of these.
     for (const kind of ["no_pin", "not_admin", "not_overridable"] as const) {
-      createTransaction.mockRejectedValue(new OverrideError(kind));
+      createTransaction.mockRejectedValue(new OverrideError(kind, "বাংলা", "english"));
       const result = await createEntryAction({}, { override: { pin: "1234", rules: [] } });
       expect(result.ok).toBe(false);
       if (result.ok) return;

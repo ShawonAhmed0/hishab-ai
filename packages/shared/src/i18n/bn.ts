@@ -13,6 +13,7 @@
 import type {
   AccountSubtype,
   ActivityStatus,
+  DeliveryStatus,
   FinancialAccountKind,
   MfsProvider,
   NotificationSeverity,
@@ -1167,6 +1168,40 @@ export const activity = {
   customerCount: (count: string) => `${count} জন কাস্টমার`,
 } as const;
 
+/**
+ * হোয়াটসঅ্যাপ লগ — spec R4.6 asks for delivery attempts and failures to be
+ * logged. The log is only useful if somebody can read it, and the question it
+ * has to answer is "why did this customer never hear from us?".
+ */
+export const delivery = {
+  title: "হোয়াটসঅ্যাপ লগ",
+  hint: "কোন বার্তা কাকে গেছে, আর কোনটা কেন যায়নি",
+  inertNotice:
+    "হোয়াটসঅ্যাপ এখনো চালু হয়নি — বার্তা তৈরি ও সংরক্ষণ হচ্ছে, কিন্তু পাঠানো হচ্ছে না।",
+  status: {
+    pending: "অপেক্ষায়",
+    sent: "পাঠানো হয়েছে",
+    failed: "ব্যর্থ",
+    skipped: "বাদ পড়েছে",
+  } as Record<DeliveryStatus, string>,
+  template: {
+    paymentReceived: "টাকা পাওয়া গেছে",
+    entryRecorded: "এন্ট্রি হয়েছে",
+    dailySummary: "দিনের হিসাব",
+    customerAtRisk: "কাস্টমার ঝুঁকিতে",
+  },
+  whenColumn: "কখন",
+  templateColumn: "বার্তা",
+  recipientColumn: "প্রাপক",
+  messageColumn: "যা লেখা ছিল",
+  statusColumn: "অবস্থা",
+  attemptsColumn: "চেষ্টা",
+  attemptsValue: (count: string) => `${count} বার`,
+  noRecipient: "নম্বর নেই",
+  empty: "এখনো কোনো বার্তা তৈরি হয়নি",
+  emptyHint: "কাস্টমারের নামে এন্ট্রি হলে এখানে দেখা যাবে",
+} as const;
+
 export const bn = {
   nav,
   actions,
@@ -1175,6 +1210,7 @@ export const bn = {
   fields,
   dashboard,
   activity,
+  delivery,
   due,
   role,
   financialAccountKind,

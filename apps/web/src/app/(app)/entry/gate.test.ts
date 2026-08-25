@@ -59,7 +59,11 @@ describe("which question the entry form asks", () => {
   });
 
   it("carries both figures when the amount is unusual for this party", () => {
-    const detail = { total: "৳ 8,00,000.00", usual: "৳ 10,000.00" };
+    const detail = {
+      total: "৳ 8,00,000.00",
+      usual: "৳ 10,000.00",
+      trigger: "multiple" as const,
+    };
     expect(
       deriveGate({
         result: refusal({ unusual: detail }),
@@ -88,7 +92,7 @@ describe("precedence, when more than one is true at once", () => {
     // it would say that it is.
     expect(
       deriveGate({
-        result: refusal({ canOverride: true, duplicate: candidate, unusual: { total: "৳ 1" } }),
+        result: refusal({ canOverride: true, duplicate: candidate, unusual: { total: "৳ 1", trigger: "absolute" as const } }),
         pendingPayload: payload,
         askingFinal: false,
       }),
@@ -100,7 +104,7 @@ describe("precedence, when more than one is true at once", () => {
     // "that is a lot" does.
     expect(
       deriveGate({
-        result: refusal({ duplicate: candidate, unusual: { total: "৳ 1" } }),
+        result: refusal({ duplicate: candidate, unusual: { total: "৳ 1", trigger: "absolute" as const } }),
         pendingPayload: payload,
         askingFinal: false,
       }),

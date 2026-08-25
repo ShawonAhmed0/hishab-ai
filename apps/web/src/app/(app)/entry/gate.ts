@@ -1,4 +1,4 @@
-import type { DuplicateCandidate } from "@hishabai/core";
+import type { DuplicateCandidate, UnusualAmount } from "@hishabai/core";
 import type { EntryResult } from "./actions";
 
 /**
@@ -19,7 +19,7 @@ export type Gate =
   | { kind: "final" }
   | { kind: "override" }
   | { kind: "duplicate"; candidate: DuplicateCandidate }
-  | { kind: "unusual"; detail: { total: string; usual?: string } };
+  | { kind: "unusual"; detail: UnusualAmount };
 
 export interface GateInput {
   /** The last reply from the server, or null before the first submit. */
