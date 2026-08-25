@@ -206,3 +206,50 @@ begin
 
   return v_target;
 end $$;
+
+-- -----------------------------------------------------------------------------
+-- Who a scheduled job runs as — spec R4.6's daily summary and R5.6's reminders.
+--
+-- Those two events are not caused by anything a user did: a summary happens
+-- because the day ended, and a customer turns yellow because *nothing*
+-- happened. So there is no session to run them under, and no request whose
+-- `app.user_id` the policies could check.
+--
+-- Enumerating companies is therefore the one thing a cron genuinely cannot do
+-- through RLS, and the answer is emphatically **not** to let the runtime role
+-- bypass it — BYPASSRLS at runtime would silently disable every policy in the
+-- application, which is the failure CLAUDE.md and 04_grants.sql both exist to
+-- prevent.
+--
+-- Instead this returns the narrowest possible thing: one active admin per
+-- active company, as (company_id, user_id) pairs and nothing else. No names, no
+-- balances, no rows from any tenant table. The caller then opens an ordinary
+-- `withTenant` transaction as that admin, and every policy applies normally
+-- from there — the job has exactly the reach one admin already has, and the
+-- audit trail names a real person rather than "the system".
+--
+-- `distinct on` picks the longest-standing admin, so the same job attributes
+-- itself to the same person every night rather than shuffling.
+-- -----------------------------------------------------------------------------
+create or replace function app.scheduled_job_targets()
+returns table (company_id uuid, user_id uuid)
+language sql security definer set search_path = public, pg_temp stable as $$
+  select distinct on (cm.company_id) cm.company_id, cm.user_id
+    from company_members cm
+    join companies c on c.id = cm.company_id
+   where cm.role = 'admin'
+     and cm.is_active
+     and c.is_active
+   order by cm.company_id, cm.created_at, cm.user_id
+$$;
+
+-- Deliberately not granted to the runtime role by default. The cron route is
+-- the only caller, and it reaches the database through the same `hishabai_app`
+-- role as everything else, so it does need this one grant — but keeping it on
+-- its own line makes the widening visible in a diff.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'hishabai_app') then
+    grant execute on function app.scheduled_job_targets() to hishabai_app;
+  end if;
+end $$;

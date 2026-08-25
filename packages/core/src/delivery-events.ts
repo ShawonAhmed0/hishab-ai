@@ -28,6 +28,7 @@ import {
   type Transaction as Tx,
 } from "@hishabai/db";
 import {
+  BUSINESS_TIME_ZONE,
   DEFAULT_LOCALE,
   formatMoney,
   todayIso,
@@ -151,6 +152,13 @@ export async function queueTransactionDeliveries(
  * The scheduled events below have no natural key of their own — "the summary
  * for the 23rd" is not a row anywhere — so the guard is the delivery log
  * itself: same template, same subject, same calendar day.
+ *
+ * The day is **Dhaka's**, not the database's. `created_at` is a timestamptz and
+ * a bare `::date` renders it in the session's time zone, which is UTC on a
+ * hosted Postgres — so between midnight and 6 a.m. local it lands on yesterday
+ * and never matches the `todayIso()` the caller passed. The guard then silently
+ * never fires, and a cron that retried sent the summary again. Same UTC-vs-
+ * Dhaka trap `calendar.ts` was written for.
  */
 async function alreadyQueuedToday(
   tx: Tx,
@@ -169,7 +177,7 @@ async function alreadyQueuedToday(
         entityId
           ? eq(messageDeliveries.entityId, entityId)
           : sql`${messageDeliveries.entityId} is null`,
-        sql`${messageDeliveries.createdAt}::date = ${today}::date`,
+        sql`(${messageDeliveries.createdAt} at time zone ${BUSINESS_TIME_ZONE})::date = ${today}::date`,
       ),
     )
     .limit(1);

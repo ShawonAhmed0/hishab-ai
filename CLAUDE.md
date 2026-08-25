@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 191 passing instead of 301. Check the count.
+skip** and you get 191 passing instead of 305. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -47,6 +47,16 @@ code that fails to build.
 
 `npm run lint` does not work: `next lint` with no eslint config drops into an
 interactive setup prompt. This codebase has never been linted.
+
+**A test file inside `apps/web` breaks the production build if the app's
+tsconfig can see it.** `next build` type-checks everything its config includes,
+and the tests import vitest and @testing-library — devDependencies. Any install
+that omits dev (which `NODE_ENV=production` on Vercel does) then fails with
+"Cannot find module 'vitest'". `apps/web/tsconfig.json` excludes them and
+`tsconfig.test.json` picks them back up, so they are still type-checked by
+`npm run typecheck` and never by `next build`. Reproduce a Vercel build with
+`npm ci --omit=dev && npm run build` in a fresh clone — a plain `npm ci` passes
+either way and proves nothing.
 
 ## Money
 
@@ -224,10 +234,8 @@ what is missing is a `WHATSAPP_*` token and Meta's approval of the template
 bodies in `packages/shared/src/whatsapp.ts`. Until both exist, messages are
 queued, logged and marked `skipped`.
 
-Two things still need a scheduler that this app does not have:
-`queueDailySummary` and `queueAtRiskReminders` are written and idempotent per
-day, but nothing calls them. And R5.6's "assigned sales person" has no column to
-live in, so at-risk reminders go to the admins.
+R5.6's "assigned sales person" has no column to live in, so at-risk reminders
+go to the admins.
 
 ## Refuse, but leave a door — and it is a door, not a hint
 
@@ -512,9 +520,40 @@ delivers to nobody, quietly.
 
 Two events have no posting to hang off — a daily summary happens because the day
 ended, and a customer turns yellow because *nothing happened*. `queueDailySummary`
-and `queueAtRiskReminders` are functions something scheduled must call, and both
-refuse to queue the same thing twice on the same day, because a cron that fires
-twice is a Tuesday.
+and `queueAtRiskReminders` are called by `runDailyJobs`, behind
+`GET /api/cron/daily`, which `vercel.json` schedules at 14:30 UTC — 20:30 in
+Dhaka, after a trading day has closed. Both refuse to queue the same thing twice
+on the same day, because a cron that fires twice is a Tuesday.
+
+**That guard has to compare Dhaka's day.** `created_at` is a timestamptz, and a
+bare `::date` renders it in the session time zone — UTC on a hosted Postgres —
+so between midnight and 6 a.m. local it lands on yesterday, never matches
+`todayIso()`, and the guard silently never fires. A retried cron then sent the
+summary twice. It is the same UTC-vs-Dhaka trap `calendar.ts` was written for,
+and it was invisible until a test ran the job twice in one call.
+
+### A cron has no session, and must not have BYPASSRLS
+
+RLS checks `app.user_id` on every row, and there is no user behind a clock. The
+tempting fix — let the runtime role bypass RLS — turns every policy in the
+application inert while `pg_class` still reports them enabled, which is exactly
+what `04_grants.sql` exists to prevent.
+
+So `app.scheduled_job_targets()` is SECURITY DEFINER and returns the narrowest
+thing that answers the question: one active admin per active company, as
+`(company_id, user_id)` pairs and nothing else — no names, no balances, no rows
+from any tenant table. Each company's work then runs in an ordinary
+`withTenant` transaction as that admin, so every policy applies normally, the
+job reaches exactly as far as one real person already could, and what it writes
+is attributed to them rather than to "the system". A target naming a company
+the user is not in does not fail — it returns nothing and does nothing, which
+is the policies working.
+
+The route fails **closed**: with `CRON_SECRET` unset it answers 503 rather than
+running. An open endpoint that messages every customer of every company is not
+something to protect with obscurity, and the token is compared with
+`timingSafeEqual` after a length check, because that function throws rather
+than returning false when the lengths differ.
 
 R5.6 asks for the reminder to reach "the assigned sales person". **There is no
 such column** — `parties` has no owner — so it goes to the admins. That is the

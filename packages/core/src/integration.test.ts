@@ -63,6 +63,7 @@ import {
   MAX_ATTEMPTS,
   type WhatsAppTransport,
 } from "./delivery";
+import { runDailyJobs, scheduledJobTargets } from "./scheduled";
 import { getCompanyPolicy, updateCompanyPolicy } from "./policy";
 import type { Session } from "./session";
 
@@ -2941,4 +2942,102 @@ describeDb("হোয়াটসঅ্যাপ ডেলিভারি", () =
       await dropTenant(other);
     }
   }, 60_000);
+});
+
+/**
+ * Spec R4.6's daily summary and R5.6's reminders — the two events with no
+ * posting behind them, and the cron that has to stand in for one.
+ */
+describeDb("সময়মতো চলা কাজ", () => {
+  let tenant: Tenant;
+  let productId: string;
+  let customerId: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Cron");
+    productId = await seedProduct(tenant, "রুটিনের পণ্য", "100000", "50");
+    customerId = await seedParty(tenant, "রুটিনের কাস্টমার");
+    await withTenant(tenant.session, (tx) =>
+      tx.execute(sql`update parties set phone = '01712345678' where id = ${customerId}::uuid`),
+    );
+    await withUser(tenant.userId, (tx) =>
+      tx.execute(sql`update profiles set phone = '01911112222' where id = ${tenant.userId}::uuid`),
+    );
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    await closeDb();
+  }, 60_000);
+
+  /**
+   * The one thing a cron cannot do through RLS is find out which companies
+   * exist. It must not do it by bypassing RLS either.
+   */
+  it("names one admin per company, and nothing else about them", async () => {
+    const targets = await scheduledJobTargets();
+    const mine = targets.filter((t) => t.companyId === tenant.companyId);
+
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.userId).toBe(tenant.userId);
+    // The pair is the whole payload: no names, no balances, no tenant rows.
+    expect(Object.keys(mine[0]!).sort()).toEqual(["companyId", "userId"]);
+  });
+
+  it("queues the day's summary to the admin", async () => {
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: todayIso(),
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "20", rate: "80" }],
+      payments: [{ financialAccountId: tenant.cashWalletId, amount: "600" }],
+    });
+
+    const targets = (await scheduledJobTargets()).filter(
+      (t) => t.companyId === tenant.companyId,
+    );
+    const report = await runDailyJobs({ targets });
+
+    expect(report.companies).toBe(1);
+    expect(report.failures).toEqual([]);
+
+    const summaries = (await listDeliveries(tenant.session, 200)).filter(
+      (row) => row.template === "dailySummary",
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.recipient).toBe("8801911112222");
+    // ৳1,600 of sales that day: the figures come off the journal, so a
+    // cancelled voucher would net itself out without this query knowing.
+    expect(summaries[0]!.preview).toContain("1,600");
+  });
+
+  it("refuses to send the same day twice, because a cron that fires twice is a Tuesday", async () => {
+    const targets = (await scheduledJobTargets()).filter(
+      (t) => t.companyId === tenant.companyId,
+    );
+    await runDailyJobs({ targets });
+    await runDailyJobs({ targets });
+
+    const summaries = (await listDeliveries(tenant.session, 200)).filter(
+      (row) => row.template === "dailySummary",
+    );
+    // Still one, from the test above.
+    expect(summaries).toHaveLength(1);
+  });
+
+  it("does nothing at all for a company the caller is not a member of", async () => {
+    // Worth stating rather than assuming: a bogus target does not throw. RLS
+    // returns zero rows, so there are no admins to message and the run is a
+    // no-op. Silence here is the policies working, not the job failing.
+    const bogus = { companyId: randomUUID(), userId: randomUUID() };
+    const before = (await listDeliveries(tenant.session, 200)).length;
+
+    const report = await runDailyJobs({ targets: [bogus], today: "2026-01-15" });
+
+    expect(report.queued).toBe(0);
+    expect(report.sent).toBe(0);
+    // And nothing leaked into the company that does exist.
+    expect((await listDeliveries(tenant.session, 200)).length).toBe(before);
+  });
 });
