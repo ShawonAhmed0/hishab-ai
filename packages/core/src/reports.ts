@@ -13,7 +13,9 @@
 import { raw, tenantQuery, tenantRead, token } from "@hishabai/db";
 import {
   currentMonthRange,
+  deriveRate,
   moneyFromDb,
+  qtyFromDb,
   todayIso,
   type FinancialAccountKind,
   type Money,
@@ -365,6 +367,13 @@ export async function getRegister(
            where tr.company_id = app.current_company_id()
              and tr.type = ${token(input.type)}
              and tr.status = 'posted'
+             -- A cancellation writes a mirror row that is also status='posted'
+             -- and carries the original's type, with every amount at zero. The
+             -- money was therefore already right — the original drops out as
+             -- cancelled and the mirror adds nothing — but count(*) still saw
+             -- it, so a cancelled sale registered as "1 লেনদেন, ৳0". That is
+             -- the phantom zero row the লাভ-ক্ষতি report drops on purpose.
+             and tr.reversal_of_id is null
              and tr.date between ${period.from}::date and ${period.to}::date
            group by tr.party_id, p.name
         ) t) as by_party,
@@ -381,6 +390,11 @@ export async function getRegister(
            where tr.company_id = app.current_company_id()
              and tr.type = ${token(input.type)}
              and tr.status = 'posted'
+             -- Belt and braces: a reversal writes journal lines and stock
+             -- movements but no transaction_lines, so it cannot reach this
+             -- join today. Saying so keeps the two halves of the report
+             -- agreeing if that ever changes.
+             and tr.reversal_of_id is null
              and tr.date between ${period.from}::date and ${period.to}::date
            group by tl.product_id, pr.name_bn, u.symbol
         ) t) as by_product
@@ -463,21 +477,36 @@ export async function getStockReport(
   const rows = await tenantRead<{ rows: StockReportRow[] | null }>(
     scope,
     tenantQuery`
+      -- Balances are *summed*, never read off quantity_after.
+      --
+      -- quantity_after and stock_value_after are running totals stamped in the
+      -- order the rows were inserted. Reading the latest one by occurred_at is
+      -- only the balance as of that date while the two orders agree — which
+      -- they did only for as long as occurred_at was left to its now() default.
+      -- Once a back-dated entry exists, the newest row *by date* carries
+      -- whatever the running total happened to be when it was typed, and a
+      -- shop entering last week's চালান got last week's closing stock wrong.
+      --
+      -- Signed sums have no such dependency. Under weighted average costing an
+      -- issue is valued at the average ruling at the time, so the signed value
+      -- sum is the stock value by construction.
       with opening as (
-        select distinct on (product_id)
-               product_id, quantity_after, stock_value_after
+        select product_id,
+               coalesce(sum(case when direction = 'in' then quantity else -quantity end), 0) as qty,
+               coalesce(sum(case when direction = 'in' then value else -value end), 0) as val
           from stock_movements
          where company_id = app.current_company_id()
            and occurred_at < ${period.from}::date
-         order by product_id, occurred_at desc, id desc
+         group by product_id
       ),
       closing as (
-        select distinct on (product_id)
-               product_id, quantity_after, stock_value_after, avg_cost_after
+        select product_id,
+               coalesce(sum(case when direction = 'in' then quantity else -quantity end), 0) as qty,
+               coalesce(sum(case when direction = 'in' then value else -value end), 0) as val
           from stock_movements
          where company_id = app.current_company_id()
            and occurred_at < (${period.to}::date + 1)
-         order by product_id, occurred_at desc, id desc
+         group by product_id
       ),
       flow as (
         select product_id,
@@ -491,13 +520,12 @@ export async function getStockReport(
       )
       select (select coalesce(json_agg(t order by t.name), '[]'::json) from (
         select pr.id as "productId", pr.name_bn as name, u.symbol as "unitSymbol",
-               coalesce(o.quantity_after, 0)::text     as "openingQty",
-               coalesce(f.in_qty, 0)::text             as "inQty",
-               coalesce(f.out_qty, 0)::text            as "outQty",
-               coalesce(c.quantity_after, o.quantity_after, 0)::text as "closingQty",
-               coalesce(c.avg_cost_after, 0)::text     as "avgCost",
-               coalesce(o.stock_value_after, 0)::text  as "openingValue",
-               coalesce(c.stock_value_after, o.stock_value_after, 0)::text as "closingValue"
+               coalesce(o.qty, 0)::text     as "openingQty",
+               coalesce(f.in_qty, 0)::text  as "inQty",
+               coalesce(f.out_qty, 0)::text as "outQty",
+               coalesce(c.qty, 0)::text     as "closingQty",
+               coalesce(o.val, 0)::text     as "openingValue",
+               coalesce(c.val, 0)::text     as "closingValue"
           from products pr
           join units u on u.id = pr.unit_id
           left join opening o on o.product_id = pr.id
@@ -525,7 +553,11 @@ export async function getStockReport(
       inQty: row.inQty,
       outQty: row.outQty,
       closingQty: row.closingQty,
-      avgCost: moneyFromDb(String(row.avgCost)),
+      // Derived from the closing value rather than read off the last movement,
+      // for the same reason the balances are: avg_cost_after is stamped in
+      // insertion order too. `deriveRate` is what crosses the Money (1e4) and
+      // Qty (1e6) scales; a plain division here is wrong by 100x.
+      avgCost: deriveRate(closing, qtyFromDb(row.closingQty)),
       closingValue: closing,
     };
   });

@@ -369,7 +369,7 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
   }
 
   await insertJournal(tx, companyId, transactionId, input.date, result, voucherNo);
-  await applyStock(tx, companyId, transactionId, result.stockMovements);
+  await applyStock(tx, companyId, transactionId, result.stockMovements, input.date);
 }
 
 async function insertLines(
@@ -527,14 +527,30 @@ async function applyStock(
   companyId: string,
   transactionId: string,
   movements: readonly StockMovementDraft[],
+  /**
+   * The entry's own date, not the moment it was typed.
+   *
+   * `occurred_at` used to be left to its `now()` default, and স্টক রিপোর্ট
+   * filters on it — so a shopkeeper entering last week's চালান on Monday got
+   * the goods counted into *this* week. Back-dated entry is ordinary practice
+   * here, which is exactly what made the bug invisible: it only shows when the
+   * entry date and the typing date fall in different periods.
+   *
+   * Midnight UTC is 6 a.m. in Dhaka, so the stored instant lands on the same
+   * calendar day under either time zone.
+   */
+  date: string,
 ): Promise<void> {
   if (movements.length === 0) return;
+
+  const occurred = new Date(`${date}T00:00:00Z`);
 
   await tx.insert(stockMovements).values(
     movements.map((movement) => ({
       companyId,
       productId: movement.productId,
       transactionId,
+      occurredAt: occurred,
       direction: movement.direction,
       movementType: movement.movementType,
       quantity: qtyToDb(movement.quantity),
@@ -724,7 +740,16 @@ export async function cancelTransaction(
       reversalVoucherNo,
     );
 
-    await applyStock(tx, session.companyId, reversalId, reversal.stockMovements);
+    // The original's date, per spec §18: a cancellation is a mirror entry
+    // dated as the entry it reverses, so the two net to zero inside whatever
+    // period the original landed in rather than smearing across two.
+    await applyStock(
+      tx,
+      session.companyId,
+      reversalId,
+      reversal.stockMovements,
+      original.date,
+    );
 
     await tx
       .update(transactions)

@@ -561,6 +561,7 @@ describeDb("the report suite", () => {
   let tenant: Tenant;
   let customerId: string;
   let vendorId: string;
+  let paperId: string;
   const period = { from: "2026-08-01", to: "2026-08-31" };
 
   beforeAll(async () => {
@@ -580,6 +581,7 @@ describeDb("the report suite", () => {
       openingQuantity: "1000",
       openingRate: "120",
     });
+    paperId = productId;
 
     await createTransaction(tenant.session, {
       type: "sale",
@@ -675,6 +677,77 @@ describeDb("the report suite", () => {
     expect(purchases.byProduct[0]?.quantity).toBe("400.000000");
   });
 
+  it("counts stock into the period the entry is dated, not the day it was typed", async () => {
+    // occurred_at used to take its now() default, and স্টক রিপোর্ট filters on
+    // it — so last week's চালান, entered on Monday, landed in this week. The
+    // bug is invisible whenever the two dates share a month, which is most of
+    // the time, and that is what kept it alive.
+    const july = { from: "2026-07-01", to: "2026-07-31" };
+
+    // Its own product, so the August figures the tests below assert are not
+    // quietly rewritten by this one.
+    const backdatedId = await createProduct(tenant.session, {
+      nameBn: "পুরনো তারিখের কাগজ",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "120",
+      salePrice: "0",
+    });
+
+    await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-07-14",
+      source: "manual",
+      partyId: vendorId,
+      lines: [{ productId: backdatedId, unitId: tenant.unitKgId, quantity: "25", rate: "120" }],
+      payments: [],
+    });
+
+    const backdated = await getStockReport(tenant.session, july);
+    const inJuly = backdated.rows.find((row) => row.name === "পুরনো তারিখের কাগজ")!;
+    expect(Number(inJuly.inQty)).toBe(25);
+    expect(Number(inJuly.closingQty)).toBe(25);
+
+    // …and it is not also sitting in the month it was typed in. Before the
+    // fix, occurred_at was now() and every one of these 25 kg landed here.
+    const august = await getStockReport(tenant.session, { from: "2026-08-01", to: "2026-08-31" });
+    const inAugust = august.rows.find((row) => row.name === "পুরনো তারিখের কাগজ")!;
+    expect(Number(inAugust.inQty)).toBe(0);
+    // Still on the books in August, though — it was bought in July and not sold.
+    expect(Number(inAugust.openingQty)).toBe(25);
+    expect(Number(inAugust.closingQty)).toBe(25);
+  });
+
+  it("does not count a cancelled sale as a sale", async () => {
+    // September, so the August assertions above are untouched. Cancellation
+    // writes a mirror transaction rather than deleting anything, and that
+    // mirror is status='posted' with every amount at zero — so the money in
+    // the register is already right. The question is whether the register
+    // still says a sale happened.
+    const september = { from: "2026-09-01", to: "2026-09-30" };
+    const doomed = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-09-08",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId: paperId, unitId: tenant.unitKgId, quantity: "10", rate: "160" }],
+      payments: [],
+    });
+
+    const before = await getRegister(tenant.session, { ...september, type: "sale" });
+    expect(before.totals.count).toBe(1);
+    expect(moneyToDb(before.totals.total)).toBe("1600.0000");
+
+    await cancelTransaction(tenant.session, doomed.transactionId, "ভুল এন্ট্রি");
+
+    const after = await getRegister(tenant.session, { ...september, type: "sale" });
+    // Nothing was sold in September. A row reading "1 লেনদেন, ৳0" is the
+    // phantom zero row the profit-loss report deliberately drops.
+    expect(after.totals.count).toBe(0);
+    expect(moneyToDb(after.totals.total)).toBe("0.0000");
+    expect(after.byParty).toEqual([]);
+  });
+
   it("moves stock from opening to closing without losing any", async () => {
     const stock = await getStockReport(tenant.session, period);
     const paper = stock.rows.find((row) => row.name === "অফসেট পেপার")!;
@@ -685,8 +758,11 @@ describeDb("the report suite", () => {
     expect(Number(paper.inQty)).toBe(1400);
     expect(Number(paper.outQty)).toBe(500);
     expect(Number(paper.closingQty)).toBe(900);
-    // 1,000 at ৳120 plus 400 at ৳125, weighted.
-    expect(moneyToDb(stock.totals.closingValue)).toBe("110000.0000");
+    // 1,000 at ৳120 plus 400 at ৳125, weighted. This paper's own closing
+    // value, not the company total — the total is every product on the books,
+    // and asserting it here made this test fail whenever another test above it
+    // bought something.
+    expect(moneyToDb(paper.closingValue)).toBe("110000.0000");
   });
 
   it("ties the cash book to the wallet balance the trigger maintains", async () => {

@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 221 passing instead of 336. Check the count.
+skip** and you get 227 passing instead of 342. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -420,6 +420,32 @@ Either set to 0 turns it off. The multiple wins when both fire, because "eight
 times what they usually spend" tells the person more than "over a lakh" does.
 `confirmEveryEntry` is off by default: a second tap on every entry is a cost
 paid by the person who makes no mistakes as well as the one who does.
+
+## A stock movement happens on the entry's date, not on the day it was typed
+
+`stock_movements.occurred_at` was never set, so it took its `now()` default, and
+স্টক রিপোর্ট filters on it. Entering last week's চালান on Monday counted the
+goods into *this* week. Back-dating is ordinary practice here — it is the very
+case `calendar.ts` exists for — and that is exactly what hid the bug: the entry
+date and the typing date usually fall in the same month.
+
+`applyStock` now takes the entry's date, and a cancellation passes the
+*original's* date so both halves land in one period. `05_backfill.sql` brings
+the rows written before that into line, idempotently.
+
+### …which means a running total cannot be read off the newest row
+
+`quantity_after`, `stock_value_after` and `avg_cost_after` are stamped in the
+order rows were **inserted**. The stock report used to take the latest one
+ordered by `occurred_at`, which is the same thing only while those two orders
+agree — and they agreed only for as long as every row said `now()`. The first
+back-dated entry made the newest-by-date row carry whatever the running total
+happened to be when it was typed.
+
+So opening and closing are **signed sums** over the movements, and the average
+cost is derived from the closing value with `deriveRate`. Under weighted average
+costing an issue is valued at the average ruling at the time, so the signed
+value sum *is* the stock value — no ordering assumption anywhere.
 
 ## Ageing is derived, every time
 
