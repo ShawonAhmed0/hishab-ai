@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 191 passing instead of 305. Check the count.
+skip** and you get 204 passing instead of 318. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -391,6 +391,16 @@ the wording, the buttons and the dismiss behaviour drift apart.
 
 The state is one payload plus a `gate` **derived from the last reply**, so the
 banner and the dialog cannot disagree about what happened.
+
+`deriveGate` lives in `entry/gate.ts` rather than inline in the form, because
+the precedence *is* the rule and a 2000-line component is nowhere to test it
+from. An overridable block outranks both questions — a block is not one click
+from saving, and offering "save anyway" beside it says that it is. The
+duplicate outranks the unusual amount, because "you already saved this" is a
+better explanation of a surprising figure than "that is a lot". And no reply
+raises a dialog once `pendingPayload` is null: the user has gone back to
+editing, and a modal about a submit they already dismissed is one they cannot
+explain.
 
 Behind it, `packages/core/src/confirmations.ts` asks all of it in **one
 statement**. Inside the posting transaction every statement is a serial round

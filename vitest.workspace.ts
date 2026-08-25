@@ -23,10 +23,11 @@ export default defineWorkspace([
     extends: "./vitest.config.ts",
     test: {
       name: "web",
-      // A `.test.tsx` renders something, so it gets a DOM. Nothing in
-      // `packages` does, and none of it should pay for one.
+      // Everything under apps/web, component or not — a pure helper extracted
+      // from a component still belongs beside it, and a DOM it does not use
+      // costs it nothing.
       environment: "jsdom",
-      include: ["apps/web/**/*.test.tsx"],
+      include: ["apps/web/**/*.test.ts", "apps/web/**/*.test.tsx"],
       setupFiles: ["./apps/web/vitest.setup.ts"],
     },
   },

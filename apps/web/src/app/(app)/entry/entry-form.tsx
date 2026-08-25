@@ -59,6 +59,7 @@ import {
   type CategoryChoice,
 } from "@/components/master-data/create-forms";
 import { Dialog } from "@/components/ui/dialog";
+import { deriveGate } from "./gate";
 import { createEntryAction, type EntryResult, type EntrySuccess } from "./actions";
 import { VoiceScanPanel, type ParsedDraft } from "./voice-scan";
 
@@ -998,16 +999,13 @@ export function EntryForm({
    * What, if anything, the user is being asked — spec R4.2.
    *
    * Derived from the last reply rather than held in its own state, so the
-   * dialog and the banner can never disagree about what happened.
+   * dialog and the banner can never disagree about what happened. The rule
+   * itself lives in `./gate` so it can be tested without this form.
    */
-  const gate = React.useMemo(() => {
-    if (pendingPayload !== null && askingFinal) return { kind: "final" as const };
-    if (!result || result.ok || pendingPayload === null) return null;
-    if (result.canOverride) return { kind: "override" as const };
-    if (result.duplicate) return { kind: "duplicate" as const, candidate: result.duplicate };
-    if (result.unusual) return { kind: "unusual" as const, detail: result.unusual };
-    return null;
-  }, [result, pendingPayload]);
+  const gate = React.useMemo(
+    () => deriveGate({ result, pendingPayload, askingFinal }),
+    [result, pendingPayload, askingFinal],
+  );
 
   const gateTitle =
     gate?.kind === "final"
