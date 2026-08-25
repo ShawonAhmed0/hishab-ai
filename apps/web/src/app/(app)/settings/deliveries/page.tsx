@@ -99,7 +99,7 @@ export default async function DeliveryLogPage() {
                   {data.map((row) => (
                     <TR key={row.id}>
                       <TD className="whitespace-nowrap text-muted-foreground">
-                        {formatDateTime(String(row.createdAt), t)}
+                        {formatDateTime(row.createdAt, t)}
                       </TD>
                       <TD>
                         {t.delivery.template[row.template as WhatsAppTemplateKey] ??

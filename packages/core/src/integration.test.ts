@@ -3010,6 +3010,14 @@ describeDb("সময়মতো চলা কাজ", () => {
     // ৳1,600 of sales that day: the figures come off the journal, so a
     // cancelled voucher would net itself out without this query knowing.
     expect(summaries[0]!.preview).toContain("1,600");
+    // …and ৳600 of it actually collected. `credit - debit` on the receivable
+    // control account is *not* this figure — it is collections minus new
+    // billing, which goes negative on any day with a credit sale, and a
+    // summary reading "আদায় −৳1,000" is worse than no summary.
+    expect(summaries[0]!.preview).toContain("আদায় ৳ 600.00");
+    // U+2212, which is what formatMoney emits for a negative. Not the ASCII
+    // hyphen — the ISO date in the same sentence is full of those.
+    expect(summaries[0]!.preview).not.toContain("−");
   });
 
   it("refuses to send the same day twice, because a cron that fires twice is a Tuesday", async () => {

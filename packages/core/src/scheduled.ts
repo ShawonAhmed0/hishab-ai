@@ -77,8 +77,13 @@ async function dayTotals(session: Session, date: string): Promise<DayTotals> {
       select
         coalesce(sum(case when a.subtype = 'sales'
                           then jl.credit - jl.debit else 0 end), 0)::text as sales,
+        -- Credits *only*, not credit - debit. A credit on the receivable
+        -- control account is what reduces the amount a customer owes, which
+        -- is what "আদায়" means. Netting the day's new billing off it reports
+        -- collections minus billing, which goes negative on any day with a
+        -- credit sale — "আদায় −৳ 1,000.00" on an admin's phone.
         coalesce(sum(case when a.subtype = 'receivable'
-                          then jl.credit - jl.debit else 0 end), 0)::text as collected
+                          then jl.credit else 0 end), 0)::text as collected
         from journal_lines jl
         join accounts a on a.id = jl.account_id
        where jl.company_id = ${session.companyId}::uuid
@@ -92,8 +97,6 @@ async function dayTotals(session: Session, date: string): Promise<DayTotals> {
 
     return {
       sales: moneyFromDb(rows[0]?.sales ?? "0"),
-      // Credits on the receivable control account are money coming in; a new
-      // credit sale debits it, so this nets to what was actually collected.
       collected: moneyFromDb(rows[0]?.collected ?? "0"),
       outstanding: moneyFromDb(outstanding[0]?.total ?? "0"),
     };
