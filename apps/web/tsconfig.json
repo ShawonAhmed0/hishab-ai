@@ -22,5 +22,12 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "// exclude": [
+    "`next build` type-checks everything this config includes, and the test",
+    "files import vitest and @testing-library — devDependencies. An install",
+    "that omits dev (NODE_ENV=production, which is a Vercel default people hit)",
+    "then fails the build with 'Cannot find module vitest'. The tests are still",
+    "type-checked, by tsconfig.test.json; they are just not the app's problem."
+  ],
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "vitest.setup.ts"]
 }
