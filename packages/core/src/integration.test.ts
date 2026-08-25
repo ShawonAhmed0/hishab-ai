@@ -718,6 +718,46 @@ describeDb("the report suite", () => {
     expect(Number(inAugust.closingQty)).toBe(25);
   });
 
+  it("keeps the movement history readable when an entry is back-dated", async () => {
+    // quantity_after is stamped in posting order — it is the balance as the
+    // stock stood when the entry was typed. Sorting the history by the entry
+    // date instead would put a back-dated চালান in the middle of the list
+    // carrying a balance from the future, and the running column would appear
+    // to jump backwards for no reason a reader could see.
+    const productId = await createProduct(tenant.session, {
+      nameBn: "পিছিয়ে দেওয়া কাগজ",
+      kind: "raw_material",
+      unitId: tenant.unitKgId,
+      purchasePrice: "100",
+      salePrice: "0",
+    });
+
+    const buy = (date: string, quantity: string) =>
+      createTransaction(tenant.session, {
+        type: "purchase",
+        date,
+        source: "manual",
+        partyId: vendorId,
+        lines: [{ productId, unitId: tenant.unitKgId, quantity, rate: "100" }],
+        payments: [],
+      });
+
+    await buy("2026-08-20", "100");
+    // Entered second, dated earlier — the ordinary case of catching up on a
+    // week's paperwork.
+    await buy("2026-07-05", "50");
+
+    const detail = await getProductDetail(tenant.session, productId);
+    const history = detail!.movements;
+
+    // Newest *posting* first, which is the order the stamps were computed in.
+    expect(history.map((m) => m.date)).toEqual(["2026-07-05", "2026-08-20"]);
+    // So the balance column only ever climbs as you read upwards, and the top
+    // line is the headline figure.
+    expect(history.map((m) => m.quantityAfter)).toEqual(["150.000000", "100.000000"]);
+    expect(detail!.product.quantity).toBe("150.000000");
+  });
+
   it("does not count a cancelled sale as a sale", async () => {
     // September, so the August assertions above are untouched. Cancellation
     // writes a mirror transaction rather than deleting anything, and that

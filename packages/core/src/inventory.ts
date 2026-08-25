@@ -221,7 +221,19 @@ export interface ProductDetailView {
  *
  * `quantity_after` and `avg_cost_after` come straight off each row, so the
  * table reads as an audit trail: every line shows what the balance became, and
- * the last line has to equal the headline figure.
+ * the newest line has to equal the headline figure.
+ *
+ * That only holds when the rows are read in **posting** order, which is what
+ * those stamps were computed in — so the sort is `created_at`, not
+ * `occurred_at`. The two used to be the same thing, because `occurred_at` was
+ * left to its `now()` default; it now carries the entry's own date, so a
+ * back-dated চালান sorts into the middle of the history while its stamp was
+ * calculated against the stock as it stood when it was typed. Sorting by date
+ * would leave the balance column jumping backwards and forwards for no reason
+ * a reader could see.
+ *
+ * The date shown is still the entry's. A log of what was recorded, in the order
+ * it was recorded, each line saying when it actually happened.
  */
 export async function getProductDetail(
   scope: TenantScope,
@@ -258,13 +270,13 @@ export async function getProductDetail(
                   tr.voucher_no as "voucherNo",
                   sm.transaction_id as "transactionId",
                   p.name as "partyName",
-                  sm.occurred_at as sort_at
+                  sm.created_at as sort_at
              from stock_movements sm
              left join transactions tr on tr.id = sm.transaction_id
              left join parties p on p.id = tr.party_id
             where sm.company_id = app.current_company_id()
               and sm.product_id = ${productId}::uuid
-            order by sm.occurred_at desc, sm.id desc
+            order by sm.created_at desc, sm.id desc
             limit 200
          ) t) as movements
     `,

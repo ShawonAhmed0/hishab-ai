@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 227 passing instead of 342. Check the count.
+skip** and you get 228 passing instead of 343. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -446,6 +446,13 @@ So opening and closing are **signed sums** over the movements, and the average
 cost is derived from the closing value with `deriveRate`. Under weighted average
 costing an issue is valued at the average ruling at the time, so the signed
 value sum *is* the stock value — no ordering assumption anywhere.
+
+The product's movement history in `inventory.ts` is the one screen that *keeps*
+those stamps, because showing what each entry did to the balance is the whole
+point of an audit trail. It therefore sorts by **`created_at`** — posting order,
+which is the order the stamps were computed in — while displaying `occurred_at`
+as the date. A log of what was recorded, in the order it was recorded, each line
+saying when it actually happened.
 
 ## Ageing is derived, every time
 
