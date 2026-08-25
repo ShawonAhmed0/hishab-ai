@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 234 passing instead of 352. Check the count.
+skip** and you get 236 passing instead of 357. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -232,6 +232,16 @@ port; Drizzle routes everything through `client.unsafe()`, which hard-codes
   is not `/login`.
 - Testing the handler is not testing the endpoint. `runDailyJobs` had ten tests
   and the route it lives behind was unreachable.
+- **A Next route file may only export its handlers.** Exporting a helper from
+  one is a build error that `tsc --noEmit` does not see, which is the same
+  reason `CLAUDE.md` says to run the build rather than the typecheck. Anything
+  a test needs to reach lives in `lib/`.
+- The password reset now completes: `/auth/callback` exchanges the emailed code
+  for a session and `/new-password` sets the password from it. `safeNext` keeps
+  the redirect on this domain — a leading `//` is protocol-relative and goes
+  off-site while still starting with a slash. **Supabase's redirect allow-list
+  must contain `<origin>/auth/callback`** or it will refuse to send the user
+  back.
 
 ## Still open
 

@@ -590,6 +590,16 @@ export const auth = {
   confirmByEmail: "ইমেইলে পাঠানো লিংকে ক্লিক করে অ্যাকাউন্ট নিশ্চিত করুন।",
   // Deliberately non-committal: saying "no such account" would confirm which
   // addresses are registered.
+  newPasswordTitle: "নতুন পাসওয়ার্ড দিন",
+  newPasswordSubtitle: "এই লিংকটি একবারই কাজ করে",
+  newPassword: "নতুন পাসওয়ার্ড",
+  confirmPassword: "আবার লিখুন",
+  savePassword: "পাসওয়ার্ড সংরক্ষণ করুন",
+  passwordsDoNotMatch: "দুটি পাসওয়ার্ড এক হয়নি।",
+  resetLinkExpired: "লিংকটির মেয়াদ শেষ। আবার অনুরোধ করুন।",
+  resetFailed: "পাসওয়ার্ড বদলানো যায়নি। আবার চেষ্টা করুন।",
+  signUpFailed: "অ্যাকাউন্ট তৈরি করা যায়নি। আবার চেষ্টা করুন।",
+  linkProblem: "লিংকটি কাজ করেনি। আবার অনুরোধ করুন।",
   resetSent: "যদি অ্যাকাউন্ট থেকে থাকে, রিসেট লিংক পাঠানো হয়েছে।",
 } as const;
 

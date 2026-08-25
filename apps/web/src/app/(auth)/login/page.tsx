@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Field, FieldLabel, Input } from "@/components/ui/field";
@@ -9,8 +10,21 @@ import { useT } from "@/components/locale-provider";
 import { signIn, type AuthState } from "../actions";
 
 export default function LoginPage() {
+  return (
+    // useSearchParams needs a boundary, and the form does not depend on it.
+    <Suspense fallback={<LoginForm />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const t = useT();
   const [state, action, pending] = useActionState<AuthState, FormData>(signIn, {});
+  // /auth/callback sends an expired or already-used recovery link here rather
+  // than showing a stack trace. A link is single use and time limited, so this
+  // is an ordinary Tuesday, not an exception.
+  const linkFailed = useSearchParams().get("error") === "link";
 
   return (
     <Card>
@@ -20,9 +34,9 @@ export default function LoginPage() {
           <p className="mt-0.5 text-sm text-muted-foreground">{t.auth.loginSubtitle}</p>
         </div>
 
-        {state.error ? (
+        {state.error || linkFailed ? (
           <div role="alert" className="rounded-md border border-debit bg-debit-soft p-3 text-sm text-debit">
-            {state.error}
+            {state.error ?? t.auth.linkProblem}
           </div>
         ) : null}
 
