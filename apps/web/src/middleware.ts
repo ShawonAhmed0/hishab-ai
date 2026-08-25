@@ -1,10 +1,9 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { VERIFIED_USER_HEADER } from "@/lib/headers";
+import { requiresSession } from "@/lib/route-access";
 
 type CookiesToSet = { name: string; value: string; options?: CookieOptions }[];
-
-const PUBLIC_PATHS = ["/login", "/register", "/reset-password", "/auth"];
 
 /**
  * `getUser()` is a network call to the auth service. Doing it here and again
@@ -78,9 +77,11 @@ export async function middleware(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
-  if (!user && !isPublic) {
+  // `requiresSession` is false for the login pages and for the routes that
+  // authenticate their own caller — see lib/route-access. The header is still
+  // stripped and re-set for every one of them.
+  if (!user && requiresSession(path)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);

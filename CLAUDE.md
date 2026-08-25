@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 228 passing instead of 346. Check the count.
+skip** and you get 234 passing instead of 352. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -220,6 +220,18 @@ port; Drizzle routes everything through `client.unsafe()`, which hard-codes
   time.
 - The `x-hishabai-verified-user` header must always be stripped from inbound
   requests before middleware sets it.
+- **The middleware redirects anything without a session, including API routes.**
+  `/api/cron` authenticates its own caller with a bearer token and therefore has
+  no cookie to present — before it was exempted, Vercel's scheduler was answered
+  with a 307 to `/login` and the job never ran once, while its own check sat
+  there refusing nothing. `lib/route-access.ts` holds that decision, out of the
+  middleware so it can be tested, and keeps "public" and "authenticates itself"
+  as two separate lists: a path on the second one inherits the obligation to
+  check its own caller, and calling it public is how somebody would come to
+  believe it need not. The prefixes match at a segment boundary, so `/loginish`
+  is not `/login`.
+- Testing the handler is not testing the endpoint. `runDailyJobs` had ten tests
+  and the route it lives behind was unreachable.
 
 ## Still open
 
