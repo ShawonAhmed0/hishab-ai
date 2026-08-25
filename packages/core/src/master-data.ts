@@ -5,6 +5,7 @@
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import {
   accounts,
+  companyMembers,
   financialAccounts,
   parties,
   partyBalances,
@@ -90,6 +91,40 @@ export async function listParties(
   });
 }
 
+/**
+ * The sales person a party is assigned to, proved to be one of ours — X.2.
+ *
+ * A foreign key is enforced by a trigger that runs as the table owner, and that
+ * bypasses RLS entirely: a crafted `assignedTo` naming somebody in another
+ * company would satisfy the constraint and land in this company's row. So the
+ * id is checked against a company-scoped read before it is used, the same way
+ * `posting-context.ts` checks the ids the client picks on an entry.
+ *
+ * Returns null for an empty selection, which is the ordinary case.
+ */
+async function resolveAssignee(
+  tx: Tx,
+  companyId: string,
+  assignedTo: string | undefined,
+): Promise<string | null> {
+  if (!assignedTo) return null;
+
+  const [member] = await tx
+    .select({ userId: companyMembers.userId })
+    .from(companyMembers)
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, assignedTo),
+        eq(companyMembers.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  if (!member) throw new Error("এই ব্যবহারকারী এই কোম্পানির সদস্য নন");
+  return member.userId;
+}
+
 export async function createParty(session: Session, rawInput: unknown): Promise<string> {
   requirePermission(session, "party.manage");
   const input = partyInputSchema.parse(rawInput);
@@ -106,6 +141,7 @@ export async function createParty(session: Session, rawInput: unknown): Promise<
         notes: input.notes ?? null,
         openingBalance: moneyToDb(money(input.openingBalance)),
         creditLimit: input.creditLimit ? moneyToDb(money(input.creditLimit)) : null,
+        assignedTo: await resolveAssignee(tx, session.companyId, input.assignedTo),
         createdBy: session.userId,
       })
       .returning({ id: parties.id });

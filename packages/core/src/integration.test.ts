@@ -57,6 +57,7 @@ import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./confirmations";
 import { loadAgeing } from "./ageing";
 import { dailyAlertsFrom, getCustomerHealth, reactivationList } from "./customer-health";
+import { queueAtRiskReminders } from "./delivery-events";
 import {
   flushDeliveries,
   listDeliveries,
@@ -3107,6 +3108,95 @@ describeDb("হোয়াটসঅ্যাপ ডেলিভারি", () =
     expect(row.status).toBe("skipped");
     expect(row.lastError).toBe("no usable phone number");
   });
+
+  /**
+   * R5.6 — "generate a reminder for the assigned sales person". The column
+   * exists now, and the spec's own table says *plus* the admin, not instead.
+   */
+  it("tells the assigned sales person and the admins, once each", async () => {
+    const repId = randomUUID();
+    await withUser(repId, (tx) =>
+      tx.execute(sql`select app.ensure_profile('বিক্রয় প্রতিনিধি', '01755556666')`),
+    );
+    await withTenant(tenant.session, (tx) =>
+      tx.execute(sql`
+        insert into company_members (company_id, user_id, role, is_active)
+        values (${tenant.companyId}::uuid, ${repId}::uuid, 'operator', true)
+      `),
+    );
+
+    const partyId = await createParty(tenant.session, {
+      name: "প্রতিনিধির কাস্টমার",
+      type: "customer",
+      assignedTo: repId,
+    });
+
+    // Crossed into the doubtful band this very morning: ordered exactly
+    // doubtfulDays + 1 days ago, which is the one day enteredBandToday fires.
+    const crossed = new Date(Date.parse(`${todayIso()}T00:00:00Z`) - 8 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: crossed,
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "7", rate: "80" }],
+      payments: [],
+    });
+
+    const queued = await queueAtRiskReminders(tenant.session);
+    expect(queued).toBeGreaterThan(0);
+
+    const sent = (await listDeliveries(tenant.session, 200)).filter(
+      (row) => row.template === "customerAtRisk" && row.entityId === partyId,
+    );
+    const recipients = sent.map((row) => row.recipient).sort();
+    // The rep, and the admin. Each exactly once.
+    expect(recipients).toEqual(["8801755556666", "8801911111111"]);
+  });
+
+  it("falls back to the admins when nobody is assigned", async () => {
+    const partyId = await createParty(tenant.session, {
+      name: "কারো নয় এমন কাস্টমার",
+      type: "customer",
+    });
+    const crossed = new Date(Date.parse(`${todayIso()}T00:00:00Z`) - 8 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await createTransaction(tenant.session, {
+      type: "sale",
+      date: crossed,
+      source: "manual",
+      partyId,
+      lines: [{ productId, unitId: tenant.unitKgId, quantity: "6", rate: "80" }],
+      payments: [],
+    });
+
+    await queueAtRiskReminders(tenant.session);
+
+    const sent = (await listDeliveries(tenant.session, 200)).filter(
+      (row) => row.template === "customerAtRisk" && row.entityId === partyId,
+    );
+    // A reminder addressed to nobody is worse than one addressed to the admins.
+    expect(sent.map((row) => row.recipient)).toEqual(["8801911111111"]);
+  });
+
+  /** X.2 — every client-chosen id is proved against a company-scoped read. */
+  it("refuses to assign a customer to somebody in another company", async () => {
+    const outsider = await makeTenant("Outsider");
+    try {
+      await expect(
+        createParty(tenant.session, {
+          name: "চুরি করা কাস্টমার",
+          type: "customer",
+          assignedTo: outsider.userId,
+        }),
+      ).rejects.toThrow(/সদস্য নন/);
+    } finally {
+      await dropTenant(outsider);
+    }
+  }, 60_000);
 
   /** X.1 — a new read path is a new way into the data. */
   it("shows one company's delivery log to nobody else", async () => {

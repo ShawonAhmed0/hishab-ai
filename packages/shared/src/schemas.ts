@@ -349,6 +349,12 @@ export const partyInputSchema = z.object({
   openingBalance: signedMoneyString.default("0"),
   creditLimit: moneyString.optional(),
   notes: z.string().trim().max(1000).optional(),
+  /**
+   * R5.6 — whose customer this is. A member of *this* company, proved against
+   * a company-scoped read before use, per X.2: a foreign key is enforced by a
+   * trigger running as the table owner, which bypasses RLS entirely.
+   */
+  assignedTo: uuid.optional().or(z.literal("")),
 });
 export type PartyInput = z.infer<typeof partyInputSchema>;
 

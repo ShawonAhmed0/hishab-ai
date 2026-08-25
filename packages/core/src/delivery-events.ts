@@ -19,10 +19,11 @@
  * There is no per-user language column, so everything goes out in Bengali, the
  * product default. A recipient-locale column is the obvious next thing here.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   companyMembers,
   messageDeliveries,
+  parties,
   profiles,
   withTenant,
   type Transaction as Tx,
@@ -53,6 +54,30 @@ async function adminPhones(tx: Tx, companyId: string): Promise<(string | null)[]
       ),
     );
   return rows.map((row) => row.phone);
+}
+
+/**
+ * The phone number of whoever each of these parties is assigned to — R5.6.
+ *
+ * One statement for the whole batch rather than one per customer: the caller
+ * already holds every party that crossed a band this morning.
+ */
+async function assignedPhones(
+  tx: Tx,
+  companyId: string,
+  partyIds: readonly string[],
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (partyIds.length === 0) return found;
+
+  const rows = await tx
+    .select({ partyId: parties.id, phone: profiles.phone })
+    .from(parties)
+    .innerJoin(profiles, eq(profiles.id, parties.assignedTo))
+    .where(and(eq(parties.companyId, companyId), inArray(parties.id, [...partyIds])));
+
+  for (const row of rows) if (row.phone) found.set(row.partyId, row.phone);
+  return found;
 }
 
 /** Entry types that are worth telling the customer about. */
@@ -229,9 +254,12 @@ export async function queueDailySummary(
  * health screen is for, and sending it every morning would train everyone to
  * ignore the messages inside a week.
  *
- * Spec R5.6 addresses this to "the assigned sales person". There is no such
- * column — `parties` has no owner — so it goes to the admins, who are the
- * people this app currently knows how to reach.
+ * Spec R5.6 addresses this to "the assigned sales person" — `parties.assigned_to`.
+ * Most parties have nobody assigned, and a reminder addressed to no one is
+ * worse than one addressed to the admins, so the admins are the fallback rather
+ * than the rule. When somebody *is* assigned they get it **as well as** the
+ * admins, not instead of them: the spec's own table says "assigned sales person
+ * + admin".
  */
 export async function queueAtRiskReminders(
   session: Session,
@@ -244,7 +272,11 @@ export async function queueAtRiskReminders(
 
   return withTenant(session, async (tx) => {
     const admins = await adminPhones(tx, session.companyId);
-    if (admins.length === 0) return 0;
+    const assignees = await assignedPhones(
+      tx,
+      session.companyId,
+      crossed.map((c) => c.partyId),
+    );
 
     const requests: DeliveryRequest[] = [];
     for (const customer of crossed) {
@@ -259,7 +291,16 @@ export async function queueAtRiskReminders(
       ) {
         continue;
       }
-      for (const phone of admins) {
+
+      // The rep who owns this customer, plus the admins. Deduplicated by
+      // number, because the admin who assigned the account to themselves
+      // should not get told twice.
+      const recipients = new Set<string>();
+      const assigned = assignees.get(customer.partyId);
+      if (assigned) recipients.add(assigned);
+      for (const phone of admins) if (phone) recipients.add(phone);
+
+      for (const phone of recipients) {
         requests.push({
           template: "customerAtRisk",
           locale: DEFAULT_LOCALE,

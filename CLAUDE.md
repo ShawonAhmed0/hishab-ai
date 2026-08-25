@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 228 passing instead of 343. Check the count.
+skip** and you get 228 passing instead of 346. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -234,8 +234,8 @@ what is missing is a `WHATSAPP_*` token and Meta's approval of the template
 bodies in `packages/shared/src/whatsapp.ts`. Until both exist, messages are
 queued, logged and marked `skipped`.
 
-R5.6's "assigned sales person" has no column to live in, so at-risk reminders
-go to the admins.
+R5.6's "assigned sales person" now has a column; what is still missing is a way
+to *re*-assign an existing party, since only the create form offers the choice.
 
 ## Refuse, but leave a door — and it is a door, not a hint
 
@@ -606,9 +606,18 @@ something to protect with obscurity, and the token is compared with
 `timingSafeEqual` after a length check, because that function throws rather
 than returning false when the lengths differ.
 
-R5.6 asks for the reminder to reach "the assigned sales person". **There is no
-such column** — `parties` has no owner — so it goes to the admins. That is the
-gap to close first if this is picked up again.
+R5.6's "assigned sales person" is `parties.assigned_to`, nullable and null for
+most parties. When somebody is assigned they get the reminder **as well as** the
+admins, not instead — the spec's own table says "assigned sales person + admin"
+— deduplicated by phone number, so an admin who owns the account is not told
+twice. With nobody assigned it falls back to the admins, because a reminder
+addressed to no one is worse than one addressed to everyone.
+
+The id is proved against a company-scoped read before it is written (X.2): the
+foreign key is enforced by a trigger running as the table owner, which bypasses
+RLS, so `assigned_to` naming somebody in another company would otherwise satisfy
+the constraint and land in this company's row. `on delete set null`, because a
+rep leaving must not take their customers' rows with them.
 
 ## Nothing happening is what changes a customer's status
 

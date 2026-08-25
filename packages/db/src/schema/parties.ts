@@ -41,6 +41,19 @@ export const parties = pgTable(
     /** Positive means they owed us from before HishabAI. */
     openingBalance: moneyColumn("opening_balance").notNull().default(ZERO_NUMERIC),
     creditLimit: moneyColumn("credit_limit"),
+    /**
+     * The sales person this customer is theirs to chase — spec R5.6.
+     *
+     * Nullable, and stays null for most parties: a shop with one admin has
+     * nobody to assign to, and a reminder addressed to no one is worse than one
+     * addressed to the admins. `queueAtRiskReminders` falls back to them.
+     *
+     * `on delete set null` rather than cascade — a rep leaving the company must
+     * not take their customers' rows with them.
+     */
+    assignedTo: uuid("assigned_to").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
     isActive: boolean("is_active").notNull().default(true),
     createdBy: uuid("created_by").references(() => profiles.id),
     createdAt: createdAt(),
@@ -50,6 +63,7 @@ export const parties = pgTable(
     index("parties_company_type_idx").on(table.companyId, table.type, table.isActive),
     index("parties_company_name_idx").on(table.companyId, table.name),
     index("parties_phone_idx").on(table.companyId, table.phone),
+    index("parties_assigned_idx").on(table.companyId, table.assignedTo),
   ],
 );
 

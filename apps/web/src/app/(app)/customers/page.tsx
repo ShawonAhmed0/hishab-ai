@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { HeartPulse, PlusCircle, Users, UserCheck, Wallet } from "lucide-react";
-import { can, getParties } from "@hishabai/core";
+import { can, getParties, getUsers } from "@hishabai/core";
 import { moneyFromDb } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
@@ -45,6 +45,16 @@ export default async function CustomersPage({
     ),
     dict(),
   ]);
+
+  // R5.6 — who a new customer can be assigned to. Only worth asking when
+  // somebody else works here; `getUsers` needs the permission the add form
+  // needs anyway.
+  const canManage = can(session, "party.manage");
+  const assignees = canManage
+    ? (await getUsers(session)).members
+        .filter((member) => member.isActive)
+        .map((member) => ({ userId: member.userId, fullName: member.fullName }))
+    : [];
 
   return (
     <div className="space-y-5">
@@ -133,9 +143,9 @@ export default async function CustomersPage({
           <CardTitle>{t.masterData.customerCountTitle(String(parties.length))}</CardTitle>
         </CardHeader>
 
-        {can(session, "party.manage") ? (
+        {canManage ? (
           <CardBody className="pt-0">
-            <AddPartyPanel type="customer" />
+            <AddPartyPanel type="customer" assignees={assignees} />
           </CardBody>
         ) : null}
 

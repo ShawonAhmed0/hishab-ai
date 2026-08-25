@@ -115,12 +115,20 @@ function useCreateResult<T>() {
 // পক্ষ
 // ---------------------------------------------------------------------------
 
+export interface AssigneeChoice {
+  userId: string;
+  fullName: string;
+}
+
 export function PartyFields({
   defaultType,
+  assignees = [],
   onCreated,
   onCancel,
 }: {
   defaultType: "customer" | "vendor";
+  /** R5.6 — who chases this customer. Empty in a one-person shop. */
+  assignees?: AssigneeChoice[];
   onCreated?: (party: CreatedParty) => void;
   onCancel?: () => void;
 }) {
@@ -135,6 +143,7 @@ export function PartyFields({
   const [address, setAddress] = React.useState("");
   const [openingBalance, setOpeningBalance] = React.useState("");
   const [creditLimit, setCreditLimit] = React.useState("");
+  const [assignedTo, setAssignedTo] = React.useState("");
 
   function submit() {
     setResult(null);
@@ -145,6 +154,7 @@ export function PartyFields({
         ...(phone ? { phone } : {}),
         ...(address ? { address } : {}),
         ...(creditLimit ? { creditLimit } : {}),
+        ...(assignedTo ? { assignedTo } : {}),
         openingBalance: openingBalance || "0",
       });
       setResult(outcome);
@@ -233,6 +243,29 @@ export function PartyFields({
             />
           </Field>
         ) : null}
+
+        {/* R5.6 — whose customer this is. Hidden entirely in a one-person shop,
+            where there is nobody to assign to and the choice is noise. */}
+        {type !== "vendor" && assignees.length > 0 ? (
+          <Field
+            fieldId="assignedTo"
+            error={fieldErrors["assignedTo"]}
+            hint={t.masterData.assignedToHint}
+          >
+            <FieldLabel>{t.masterData.assignedTo}</FieldLabel>
+            <Select
+              value={assignedTo}
+              onChange={(event) => setAssignedTo(event.target.value)}
+            >
+              <option value="">{t.masterData.assignedToNobody}</option>
+              {assignees.map((person) => (
+                <option key={person.userId} value={person.userId}>
+                  {person.fullName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
       </div>
 
       <Field>
@@ -258,14 +291,22 @@ export function PartyFields({
   );
 }
 
-export function AddPartyPanel({ type }: { type: "customer" | "vendor" }) {
+export function AddPartyPanel({
+  type,
+  assignees = [],
+}: {
+  type: "customer" | "vendor";
+  assignees?: AssigneeChoice[];
+}) {
   const t = useT();
 
   return (
     <Disclosure
       label={type === "vendor" ? t.masterData.newVendor : t.masterData.newCustomer}
     >
-      {(close) => <PartyFields defaultType={type} onCancel={close} />}
+      {(close) => (
+        <PartyFields defaultType={type} assignees={assignees} onCancel={close} />
+      )}
     </Disclosure>
   );
 }
