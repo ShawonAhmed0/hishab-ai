@@ -23,6 +23,7 @@ export {
   products,
   profiles,
   stockMovements,
+  transactionCosts,
   transactionLines,
   transactionPayments,
   transactions,

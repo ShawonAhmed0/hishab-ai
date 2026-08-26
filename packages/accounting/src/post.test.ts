@@ -108,7 +108,7 @@ describe("বিক্রয় — edge cases", () => {
         lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "100", rate: "150" }],
         transportCost: "500",
         laborCost: "300",
-        otherCost: "200",
+        otherCosts: [{ accountId: ID.rentExpense, amount: "200" }],
         discount: "1000",
       }),
       makeContext(),
@@ -1301,29 +1301,31 @@ describe("R3.4 — a discount can be a percentage", () => {
   });
 });
 
-describe("R3.4 — naming the other cost changes where it posts", () => {
-  const purchase = (otherCostAccountId?: string) =>
+describe("R3.4 — a named cost is expensed, an unnamed one is in the goods", () => {
+  const purchase = (otherCosts: { accountId: string; label?: string; amount: string }[] = []) =>
     parse({
       ...base,
       type: "purchase",
       partyId: ID.vendor,
       lines: [{ productId: ID.jumbo, unitId: ID.unitKg, quantity: "100", rate: "100" }],
       transportCost: "500",
-      otherCost: "2000",
-      ...(otherCostAccountId ? { otherCostAccountId } : {}),
+      otherCosts,
       payments: [],
     });
 
-  it("capitalises an unnamed cost, exactly as before", () => {
+  it("keeps freight in the goods when there is nothing else", () => {
     const result = postTransaction(purchase(), makeContext());
-    // ৳10,000 goods + ৳500 freight + ৳2,000 other, all into the goods.
-    expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("12500.0000");
-    expect(moneyToDb(result.stockMovements[0]!.value)).toBe("12500.0000");
+    // ৳10,000 goods + ৳500 freight, all into the goods.
+    expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("10500.0000");
+    expect(moneyToDb(result.stockMovements[0]!.value)).toBe("10500.0000");
     expectBalanced(result.journalLines);
   });
 
-  it("expenses a named one, and leaves the stock valuation alone", () => {
-    const result = postTransaction(purchase(ID.rentExpense), makeContext());
+  it("expenses a named cost, and leaves the stock valuation alone", () => {
+    const result = postTransaction(
+      purchase([{ accountId: ID.rentExpense, amount: "2000" }]),
+      makeContext(),
+    );
 
     // Freight is still a product cost; the named ৳2,000 is not.
     expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("10500.0000");
@@ -1336,17 +1338,52 @@ describe("R3.4 — naming the other cost changes where it posts", () => {
     expectBalanced(result.journalLines);
   });
 
+  it("posts each named cost to its own খাত, not one lump", () => {
+    // The point of naming a cost is that it turns up under that name in
+    // লাভ-ক্ষতি. Two costs on one purchase are two debits.
+    const result = postTransaction(
+      purchase([
+        { accountId: ID.rentExpense, amount: "1200" },
+        { accountId: ID.serviceExpense, label: "ক্রেন ভাড়া", amount: "800" },
+      ]),
+      makeContext(),
+    );
+
+    expect(moneyToDb(netOn(result.journalLines, ID.rentExpense))).toBe("1200.0000");
+    expect(moneyToDb(netOn(result.journalLines, ID.serviceExpense))).toBe("800.0000");
+    // Still only freight in the goods.
+    expect(moneyToDb(netOn(result.journalLines, ID.inventory))).toBe("10500.0000");
+    expect(moneyToDb(result.totals.total)).toBe("12500.0000");
+    expectBalanced(result.journalLines);
+  });
+
+  it("carries the label a user typed into the narration", () => {
+    const result = postTransaction(
+      purchase([{ accountId: ID.rentExpense, label: "ক্রেন ভাড়া", amount: "800" }]),
+      makeContext(),
+    );
+    const line = result.journalLines.find((l) => l.accountId === ID.rentExpense)!;
+    // Without it a reprinted voucher says "অন্যান্য" and means nothing to the
+    // person holding it.
+    expect(line.narration).toBe("ক্রেন ভাড়া");
+  });
+
   it("counts an expensed cost against capital, since it is now an expense", () => {
     expect(() =>
-      postTransaction(purchase(ID.rentExpense), makeContext({ equity: money("1500") })),
+      postTransaction(
+        purchase([{ accountId: ID.rentExpense, amount: "2000" }]),
+        makeContext({ equity: money("1500") }),
+      ),
     ).toThrow(/NEGATIVE_CAPITAL/);
 
-    // Unnamed, the same purchase moves no equity at all.
+    // With nothing named, the same purchase moves no equity at all.
     const capitalised = postTransaction(purchase(), makeContext({ equity: money("1500") }));
     expectBalanced(capitalised.journalLines);
   });
 
-  it("bills a sale's charges to the খাত the user picked", () => {
+  it("bills every charge on a sale as income, whatever it was called", () => {
+    // Goods are leaving, so nothing here can be capitalised into them. The
+    // customer is being charged, and a charge is income.
     const result = postTransaction(
       parse({
         ...base,
@@ -1354,14 +1391,17 @@ describe("R3.4 — naming the other cost changes where it posts", () => {
         partyId: ID.customer,
         lines: [{ productId: ID.paper, unitId: ID.unitKg, quantity: "100", rate: "160" }],
         transportCost: "300",
-        otherCostAccountId: ID.serviceIncome,
+        otherCosts: [{ accountId: ID.rentExpense, label: "ক্রেন ভাড়া", amount: "200" }],
         payments: [],
       }),
       makeContext(),
     );
 
-    expect(moneyToDb(netOn(result.journalLines, ID.serviceIncome))).toBe("-300.0000");
-    expect(moneyToDb(netOn(result.journalLines, ID.otherIncome))).toBe("0.0000");
+    expect(moneyToDb(netOn(result.journalLines, ID.otherIncome))).toBe("-500.0000");
+    // Not debited to the expense খাত the row names: on a sale that খাত is
+    // where the cost would have gone if we had borne it, and we did not.
+    expect(moneyToDb(netOn(result.journalLines, ID.rentExpense))).toBe("0.0000");
+    expect(moneyToDb(result.totals.total)).toBe("16500.0000");
     expectBalanced(result.journalLines);
   });
 });

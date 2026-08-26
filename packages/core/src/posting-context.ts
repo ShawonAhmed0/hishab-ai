@@ -103,9 +103,11 @@ export function collectAccountIds(input: TransactionInput): string[] {
   if ("categoryAccountId" in input && input.categoryAccountId) {
     ids.add(input.categoryAccountId);
   }
-  // R3.4 / X.2: a third id the client chooses, so a third one to prove.
-  if ("otherCostAccountId" in input && input.otherCostAccountId) {
-    ids.add(input.otherCostAccountId);
+  // R3.4 / X.2: every খাত the cost list names is a client-chosen id, so every
+  // one of them gets proved. A list makes this easier to forget than the
+  // single field it replaced, not harder to get right.
+  if ("otherCosts" in input) {
+    for (const row of input.otherCosts) ids.add(row.accountId);
   }
   if (input.type === "other") for (const entry of input.entries) ids.add(entry.accountId);
   return [...ids];

@@ -250,6 +250,20 @@ const NEEDS_PARTY: TransactionType[] = [
   "purchase_return",
 ];
 const NEEDS_CATEGORY: TransactionType[] = ["income", "expense"];
+/** One row of the cost list — spec R3.4. */
+interface CostState {
+  key: string;
+  /** The খাত it posts to. Empty until the user picks one. */
+  accountId: string;
+  /** What they called it, when the খাত alone does not say enough. */
+  label: string;
+  amount: string;
+}
+
+function emptyCost(): CostState {
+  return { key: crypto.randomUUID(), accountId: "", label: "", amount: "" };
+}
+
 const NEEDS_TRADE_COSTS: TransactionType[] = ["sale", "purchase"];
 const VENDOR_SIDE: TransactionType[] = ["purchase", "vendor_payment", "purchase_return"];
 
@@ -529,9 +543,21 @@ export function EntryForm({
   const [lines, setLines] = React.useState<LineState[]>([emptyLine()]);
   const [transportCost, setTransportCost] = React.useState("");
   const [laborCost, setLaborCost] = React.useState("");
-  const [otherCost, setOtherCost] = React.useState("");
+  /**
+   * R3.4. Every cost that is not freight or labour, each named and each
+   * posting where it is named. A trade rarely has exactly one, and folding
+   * three into a single "অন্যান্য" figure puts a number on the voucher that
+   * means nothing to the person holding it.
+   */
+  const [otherCosts, setOtherCosts] = React.useState<CostState[]>([]);
+  /**
+   * উৎপাদনের অন্যান্য খরচ, which is a different thing and stays a single
+   * figure: conversion cost is what turns inputs into outputs, and the engine
+   * requires it to be matched by real payments. It is not a cost of *buying*
+   * anything, so it does not belong in the list above.
+   */
+  const [productionOtherCost, setProductionOtherCost] = React.useState("");
   // R3.4: what the "other cost" actually was. Unset keeps the old posting.
-  const [otherCostAccountId, setOtherCostAccountId] = React.useState("");
   const [discount, setDiscount] = React.useState("");
   const [discountType, setDiscountType] = React.useState<DiscountType>("amount");
   const [payments, setPayments] = React.useState<PaymentState[]>([
@@ -608,9 +634,13 @@ export function EntryForm({
   const charges = React.useMemo<Money>(
     () =>
       NEEDS_TRADE_COSTS.includes(type)
-        ? addMoney(money(transportCost || "0"), money(laborCost || "0"), money(otherCost || "0"))
+        ? addMoney(
+            money(transportCost || "0"),
+            money(laborCost || "0"),
+            otherCosts.reduce<Money>((sum, row) => addMoney(sum, money(row.amount || "0")), ZERO),
+          )
         : ZERO,
-    [type, transportCost, laborCost, otherCost],
+    [type, transportCost, laborCost, otherCosts],
   );
 
   const paidTotal = React.useMemo<Money>(
@@ -641,8 +671,8 @@ export function EntryForm({
 
   /** Conversion cost the engine insists is matched by real payments. */
   const conversionCost = React.useMemo<Money>(
-    () => addMoney(money(laborCost || "0"), money(otherCost || "0")),
-    [laborCost, otherCost],
+    () => addMoney(money(laborCost || "0"), money(productionOtherCost || "0")),
+    [laborCost, productionOtherCost],
   );
 
   const sourceTotal = React.useMemo<Money>(
@@ -683,8 +713,8 @@ export function EntryForm({
     ]);
     setTransportCost("");
     setLaborCost("");
-    setOtherCost("");
-    setOtherCostAccountId("");
+    setOtherCosts([]);
+    setProductionOtherCost("");
     setGiverName("");
     setRecipientName("");
     setDiscount("");
@@ -728,6 +758,12 @@ export function EntryForm({
       },
     ]);
     setWastage([]);
+  }
+
+  function updateCost(key: string, patch: Partial<CostState>) {
+    setOtherCosts((current) =>
+      current.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+    );
   }
 
   function updateLine(key: string, patch: Partial<LineState>) {
@@ -848,8 +884,15 @@ export function EntryForm({
           payments: activePayments,
           transportCost: transportCost || "0",
           laborCost: laborCost || "0",
-          otherCost: otherCost || "0",
-          ...(otherCostAccountId ? { otherCostAccountId } : {}),
+          // Only the rows the user actually filled in. A half-typed row is not
+          // a cost yet, and the server would refuse it for a missing খাত.
+          otherCosts: otherCosts
+            .filter((row) => row.accountId && row.amount)
+            .map((row) => ({
+              accountId: row.accountId,
+              ...(row.label ? { label: row.label } : {}),
+              amount: row.amount,
+            })),
           discountType,
           discount: discount || "0",
         };
@@ -870,7 +913,7 @@ export function EntryForm({
           outputs: stockRows(prodOutputs, "description"),
           wastage: stockRows(wastage, "reason"),
           laborCost: laborCost || "0",
-          otherCost: otherCost || "0",
+          otherCost: productionOtherCost || "0",
           payments: activePayments,
         };
       case "stock_adjustment":
@@ -1406,45 +1449,33 @@ export function EntryForm({
             })}
 
             {NEEDS_TRADE_COSTS.includes(type) ? (
-              <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-4">
-                <Field>
-                  <FieldLabel>{t.fields.transportCost}</FieldLabel>
-                  <Input numeric value={transportCost} onChange={(e) => setTransportCost(e.target.value)} placeholder="0" />
-                </Field>
-                <Field>
-                  <FieldLabel>{t.fields.laborCost}</FieldLabel>
-                  <Input numeric value={laborCost} onChange={(e) => setLaborCost(e.target.value)} placeholder="0" />
-                </Field>
-                {/*
-                  R3.4. Naming it moves it: expensed to this খাত on a purchase
-                  instead of going into the goods, billed to it on a sale.
-                */}
-                <Field hint={otherCost ? t.entry.otherCostHint : undefined}>
-                  <FieldLabel>{t.fields.otherCost}</FieldLabel>
-                  <div className="flex gap-2">
+              <div className="space-y-3 border-t border-border pt-3">
+                <div className="grid gap-3 sm:grid-cols-4">
+                  {/*
+                    Freight and labour keep boxes of their own because they are
+                    not just two more costs: they are the two that go into what
+                    the goods are worth. Putting them in the list below would
+                    hide the one distinction R3.4 is about.
+                  */}
+                  <Field hint={VENDOR_SIDE.includes(type) ? t.entry.costCapitalised : undefined}>
+                    <FieldLabel>{t.fields.transportCost}</FieldLabel>
                     <Input
                       numeric
-                      value={otherCost}
-                      onChange={(e) => setOtherCost(e.target.value)}
+                      value={transportCost}
+                      onChange={(e) => setTransportCost(e.target.value)}
                       placeholder="0"
                     />
-                    <Select
-                      aria-label={t.entry.otherCostCategory}
-                      className="w-40 shrink-0"
-                      value={otherCostAccountId}
-                      onChange={(e) => setOtherCostAccountId(e.target.value)}
-                    >
-                      <option value="">{t.entry.otherCostUnnamed}</option>
-                      {(VENDOR_SIDE.includes(type) ? expenseCategories : incomeCategories).map(
-                        (category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.nameBn}
-                          </option>
-                        ),
-                      )}
-                    </Select>
-                  </div>
-                </Field>
+                  </Field>
+                  <Field hint={VENDOR_SIDE.includes(type) ? t.entry.costCapitalised : undefined}>
+                    <FieldLabel>{t.fields.laborCost}</FieldLabel>
+                    <Input
+                      numeric
+                      value={laborCost}
+                      onChange={(e) => setLaborCost(e.target.value)}
+                      placeholder="0"
+                    />
+                  </Field>
+
                 {/* R3.4: how the discount is expressed, then the figure. */}
                 <Field
                   hint={
@@ -1472,6 +1503,85 @@ export function EntryForm({
                     />
                   </div>
                 </Field>
+                </div>
+
+                {/*
+                  R3.4's cost list. One row per cost, each naming the খাত it
+                  posts to — on a purchase it is expensed there rather than
+                  buried in the stock value; on a sale it is all billed to the
+                  customer as income, so the খাত is only a description.
+                */}
+                <div className="space-y-2">
+                  {otherCosts.map((row, index) => (
+                    <div
+                      key={row.key}
+                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem_auto]"
+                    >
+                      <Field fieldId={`otherCosts.${index}.accountId`} error={fieldErrors[`otherCosts.${index}.accountId`]}>
+                        <FieldLabel required>{t.entry.costKind}</FieldLabel>
+                        <Select
+                          value={row.accountId}
+                          onChange={(e) => updateCost(row.key, { accountId: e.target.value })}
+                        >
+                          <option value="">{t.entry.choosePrompt}</option>
+                          {expenseCategories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.nameBn}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+
+                      <Field>
+                        <FieldLabel>{t.entry.costName}</FieldLabel>
+                        <Input
+                          value={row.label}
+                          onChange={(e) => updateCost(row.key, { label: e.target.value })}
+                          placeholder={t.entry.costNamePlaceholder}
+                        />
+                      </Field>
+
+                      <Field fieldId={`otherCosts.${index}.amount`} error={fieldErrors[`otherCosts.${index}.amount`]}>
+                        <FieldLabel required>{t.entry.costAmount}</FieldLabel>
+                        <Input
+                          numeric
+                          value={row.amount}
+                          onChange={(e) => updateCost(row.key, { amount: e.target.value })}
+                          placeholder="0"
+                        />
+                      </Field>
+
+                      <div className="flex items-end pb-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t.entry.removeCost(String(index + 1))}
+                          onClick={() =>
+                            setOtherCosts((rows) => rows.filter((r) => r.key !== row.key))
+                          }
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setOtherCosts((rows) => [...rows, emptyCost()])}
+                    >
+                      <Plus className="size-4" aria-hidden />
+                      {t.entry.addCost}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {VENDOR_SIDE.includes(type) ? t.entry.costsHint : t.entry.costsHintSale}
+                    </span>
+                  </div>
+                </div>
               </div>
             ) : null}
           </CardBody>
@@ -1577,7 +1687,12 @@ export function EntryForm({
               </Field>
               <Field>
                 <FieldLabel>{t.fields.otherCost}</FieldLabel>
-                <Input numeric value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" />
+                <Input
+                  numeric
+                  value={productionOtherCost}
+                  onChange={(e) => setProductionOtherCost(e.target.value)}
+                  placeholder="0"
+                />
               </Field>
             </div>
 

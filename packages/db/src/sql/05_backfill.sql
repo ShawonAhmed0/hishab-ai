@@ -23,3 +23,23 @@ update stock_movements sm
   from transactions tr
  where tr.id = sm.transaction_id
    and sm.occurred_at <> tr.date::timestamptz;
+
+-- -----------------------------------------------------------------------------
+-- The single `other_cost` figure became a list — spec R3.4.
+--
+-- Entries posted before that carry the amount and its খাত in two columns on
+-- `transactions`. Copying them into `transaction_costs` means the voucher has
+-- one place to read from rather than two, and an old entry reprints with the
+-- cost it was actually charged.
+--
+-- Only rows that named an account: an unnamed `other_cost` was capitalised into
+-- the goods, so it was never a separate cost and has no row to become.
+-- -----------------------------------------------------------------------------
+insert into transaction_costs (company_id, transaction_id, account_id, amount, sort_order)
+select tr.company_id, tr.id, tr.other_cost_account_id, tr.other_cost, 0
+  from transactions tr
+ where tr.other_cost_account_id is not null
+   and tr.other_cost > 0
+   and not exists (
+     select 1 from transaction_costs tc where tc.transaction_id = tr.id
+   );

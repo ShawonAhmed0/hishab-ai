@@ -182,6 +182,19 @@ function resolvePayments(
 const paymentTotal = (payments: readonly PaymentDraft[]): Money =>
   sumMoney(payments.map((p) => p.amount));
 
+/**
+ * What the named costs come to — spec R3.4.
+ *
+ * Separate from freight and labour on purpose: those two are capitalised into
+ * the goods and these are not, and that is the only distinction the accounting
+ * cares about.
+ */
+function otherCostTotal(rows: readonly { amount: string }[]): Money {
+  let total = ZERO;
+  for (const row of rows) total = addMoney(total, money(row.amount));
+  return total;
+}
+
 function lineAmounts(lines: readonly LineInput[]): { amounts: Money[]; subtotal: Money } {
   const amounts = lines.map((line) => multiplyRate(qty(line.quantity), money(line.rate)));
   return { amounts, subtotal: sumMoney(amounts) };
@@ -256,7 +269,11 @@ function postSaleSide(
 
   const charges = isReturn
     ? ZERO
-    : addMoney(money(input.transportCost), money(input.laborCost), money(input.otherCost));
+    : addMoney(
+        money(input.transportCost),
+        money(input.laborCost),
+        otherCostTotal(input.otherCosts),
+      );
   const discount = isReturn ? ZERO : resolveDiscount(input, subtotal);
   const total = subMoney(addMoney(subtotal, charges), discount);
   assertNonNegativeTotal(total, discount);
@@ -279,10 +296,19 @@ function postSaleSide(
     // receipt as two separate movements (spec §13).
     journal.debit(accounts.receivable, total, { partyId: input.partyId });
     journal.credit(accounts.sales, subMoney(subtotal, discount));
-    // R3.4: billed to the খাত the user picked, when they picked one.
-    journal.credit(input.otherCostAccountId ?? accounts.other_income, charges, {
-      narration: "পরিবহন/লেবার/অন্যান্য আদায়",
-    });
+    // R3.4. On a sale every cost is something the customer is being charged
+    // for, so all of it is income — the goods are leaving, and nothing here
+    // can be capitalised into them. Itemising it across separate income খাত is
+    // a refinement nobody has asked for; what the charge *was* travels in the
+    // narration, where a reprinted voucher can show it.
+    if (charges > ZERO) {
+      const named = input.otherCosts
+        .map((row) => row.label)
+        .filter((label): label is string => Boolean(label));
+      journal.credit(accounts.other_income, charges, {
+        narration: named.length > 0 ? named.join(", ") : "পরিবহন/লেবার/অন্যান্য আদায়",
+      });
+    }
     for (const payment of payments) {
       journal.debit(payment.accountId, payment.amount);
       journal.credit(accounts.receivable, payment.amount, { partyId: input.partyId });
@@ -388,7 +414,11 @@ function postPurchaseSide(
   // they are capitalised into inventory rather than expensed (landed cost).
   const charges = isReturn
     ? ZERO
-    : addMoney(money(input.transportCost), money(input.laborCost), money(input.otherCost));
+    : addMoney(
+        money(input.transportCost),
+        money(input.laborCost),
+        otherCostTotal(input.otherCosts),
+      );
   const discount = isReturn ? ZERO : resolveDiscount(input, subtotal);
   const total = subMoney(addMoney(subtotal, charges), discount);
   assertNonNegativeTotal(total, discount);
@@ -415,10 +445,10 @@ function postPurchaseSide(
       narration: "ক্রয় ফেরতে মূল্য পার্থক্য",
     });
   } else {
-    // R3.4. Freight and labour stay in the goods; a named "other" cost is a
+    // R3.4. Freight and labour stay in the goods; every other named cost is a
     // period cost and leaves the stock valuation alone. What the vendor is
     // owed is `total` either way — only the debit side splits.
-    const expensed = input.otherCostAccountId ? money(input.otherCost) : ZERO;
+    const expensed = otherCostTotal(input.otherCosts);
     const capitalised = subMoney(total, expensed);
 
     const quantities = input.lines.map((line) => qty(line.quantity));
@@ -431,9 +461,11 @@ function postPurchaseSide(
     }
 
     journal.debit(accounts.inventory, capitalised);
-    if (expensed !== ZERO) {
-      journal.debit(input.otherCostAccountId!, expensed, {
-        narration: "ক্রয়ের অন্যান্য খরচ",
+    // One debit per named cost, not one lump: the whole point of naming a cost
+    // is that it turns up under that name in লাভ-ক্ষতি.
+    for (const row of input.otherCosts) {
+      journal.debit(row.accountId, money(row.amount), {
+        narration: row.label ?? "ক্রয়ের অন্যান্য খরচ",
       });
     }
     journal.credit(accounts.payable, total, { partyId: input.partyId });

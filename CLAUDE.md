@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 236 passing instead of 367. Check the count.
+skip** and you get 236 passing instead of 371. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -378,19 +378,32 @@ Spec R3.4. পরিবহন and লেবার on a purchase are **capitalise
 landed cost, deliberately, and `transaction_lines.allocated_cost` exists for it.
 That has not changed and should not: they are textbook product costs.
 
-`otherCostAccountId` is different. "Other" is by definition the bucket that is
-neither, and an unnamed lump buried in stock valuation is how stock value drifts
-away from what the godown is actually worth. So when the user names it:
+Everything else is a **list**, `otherCosts`, one row per cost, each naming the
+খাত it posts to. It was a single `otherCost` figure with one খাত beside it; a
+trade rarely has exactly one miscellaneous cost, and folding three into one
+number puts "অন্যান্য ৳2,400" on a voucher, meaning nothing to the person
+holding it.
 
-- **on a purchase** it is expensed to that খাত instead of going into the goods.
-  What the vendor is owed is unchanged — only the debit side splits, and the
-  stock movement is written at the capitalised figure alone;
-- **on a sale** it is the income খাত the charge is billed to, instead of the
-  generic অন্যান্য আয়.
+- **on a purchase** each row is expensed to its own খাত instead of going into
+  the goods, one journal line each. What the vendor is owed is unchanged — only
+  the debit side splits, and the stock movement is written at the capitalised
+  figure alone;
+- **on a sale** every cost is billed to the customer and credited to অন্যান্য
+  আয়. Nothing can be capitalised into goods that are leaving, so the খাত on the
+  row is a description; the label travels to the narration. This is why the
+  form no longer offers an income খাত picker there — it read as a cost field
+  listing সেবা আয়, which is correct accounting and confusing to look at.
 
-Leave it unset and both behave exactly as before. It is a third client-chosen
-id, so `collectAccountIds` proves it against a company-scoped read like the
-other two — see "RLS does not check the ids you *write*".
+Each row's `accountId` is client-chosen, so `collectAccountIds` proves every one
+of them against a company-scoped read — see "RLS does not check the ids you
+*write*". A list makes that easier to forget than the single field it replaced.
+
+`transaction_costs` holds the rows so a reprinted voucher can say "ক্রেন ভাড়া
+৳800" rather than "অন্যান্য ৳800". The old `other_cost` / `other_cost_account_id`
+columns are kept and no longer written: entries posted before the change still
+have to reprint, and `05_backfill.sql` copies them forward so there is one place
+to read from. Production's own `otherCost` is untouched — conversion cost is a
+different thing from a trade's named costs, and it stays a single figure.
 
 A discount is the same shape: `discountType` says whether `discount` is taka or
 a percentage, and the **server** resolves a percentage against its own subtotal.

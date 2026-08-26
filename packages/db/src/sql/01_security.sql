@@ -109,7 +109,7 @@ begin
     'parties', 'party_balances',
     'units', 'product_categories', 'products', 'product_stock', 'stock_movements',
     'production_recipes', 'production_recipe_inputs',
-    'transactions', 'transaction_lines', 'transaction_payments',
+    'transactions', 'transaction_lines', 'transaction_payments', 'transaction_costs',
     'journal_entries', 'journal_lines', 'attachments',
     'audit_logs', 'notifications', 'counters', 'message_deliveries'
   ]

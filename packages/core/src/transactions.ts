@@ -18,6 +18,7 @@ import {
   products,
   profiles,
   stockMovements,
+  transactionCosts,
   transactionLines,
   transactionPayments,
   transactions,
@@ -335,9 +336,11 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
     subtotal: moneyToDb(result.totals.subtotal),
     transportCost: "transportCost" in input ? moneyToDb(money(input.transportCost)) : "0",
     laborCost: "laborCost" in input ? moneyToDb(money(input.laborCost)) : "0",
+    // Production still carries a scalar `otherCost` of its own — conversion
+    // cost, which is a different thing from a trade's named costs. Sale and
+    // purchase write `transaction_costs` rows instead; these two columns are
+    // left at zero and exist only for the entries posted before the change.
     otherCost: "otherCost" in input ? moneyToDb(money(input.otherCost)) : "0",
-    otherCostAccountId:
-      "otherCostAccountId" in input ? (input.otherCostAccountId ?? null) : null,
     // The engine's figure, not the input's: on a percentage discount the input
     // holds "10" and the taka it works out to is what the books record.
     discount: moneyToDb(result.totals.discount),
@@ -352,6 +355,7 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
   });
 
   await insertLines(tx, companyId, transactionId, input, result);
+  await insertCosts(tx, companyId, transactionId, input);
 
   if (result.payments.length > 0) {
     await tx.insert(transactionPayments).values(
@@ -370,6 +374,34 @@ async function persist(tx: Tx, args: PersistArgs): Promise<void> {
 
   await insertJournal(tx, companyId, transactionId, input.date, result, voucherNo);
   await applyStock(tx, companyId, transactionId, result.stockMovements, input.date);
+}
+
+/**
+ * The named costs — spec R3.4.
+ *
+ * Written as rows rather than folded into a total, so a reprinted voucher can
+ * say "ক্রেন ভাড়া ৳800" instead of "অন্যান্য ৳800". The account on each row was
+ * proved against a company-scoped read in `posting-context.ts` before the
+ * engine ever saw it.
+ */
+async function insertCosts(
+  tx: Tx,
+  companyId: string,
+  transactionId: string,
+  input: TransactionInput,
+): Promise<void> {
+  if (!("otherCosts" in input) || input.otherCosts.length === 0) return;
+
+  await tx.insert(transactionCosts).values(
+    input.otherCosts.map((row, index) => ({
+      companyId,
+      transactionId,
+      accountId: row.accountId,
+      label: row.label ?? null,
+      amount: moneyToDb(money(row.amount)),
+      sortOrder: index,
+    })),
+  );
 }
 
 async function insertLines(
@@ -954,7 +986,7 @@ export async function getTransactionDetail(session: Session, transactionId: stri
 
     if (!header) return null;
 
-    const [lines, payments, ledger, movements] = await Promise.all([
+    const [lines, costs, payments, ledger, movements] = await Promise.all([
       tx
         .select({
           id: transactionLines.id,
@@ -975,6 +1007,19 @@ export async function getTransactionDetail(session: Session, transactionId: stri
         .leftJoin(units, eq(units.id, transactionLines.unitId))
         .where(eq(transactionLines.transactionId, transactionId))
         .orderBy(transactionLines.sortOrder),
+
+      tx
+        .select({
+          id: transactionCosts.id,
+          accountId: transactionCosts.accountId,
+          accountName: accounts.nameBn,
+          label: transactionCosts.label,
+          amount: transactionCosts.amount,
+        })
+        .from(transactionCosts)
+        .leftJoin(accounts, eq(accounts.id, transactionCosts.accountId))
+        .where(eq(transactionCosts.transactionId, transactionId))
+        .orderBy(transactionCosts.sortOrder),
 
       tx
         .select({
@@ -1022,7 +1067,7 @@ export async function getTransactionDetail(session: Session, transactionId: stri
         .where(eq(stockMovements.transactionId, transactionId)),
     ]);
 
-    return { ...header, lines, payments, ledger, movements };
+    return { ...header, lines, costs, payments, ledger, movements };
   });
 }
 

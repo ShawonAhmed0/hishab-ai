@@ -145,25 +145,47 @@ const baseFields = {
   source: z.enum(TRANSACTION_SOURCES).default("manual"),
 };
 
+/**
+ * One line of the cost list on an entry — spec R3.4.
+ *
+ * Freight and labour keep fields of their own because they are not just two
+ * more costs: they are the two that are *capitalised into the goods*, and that
+ * difference is the whole of R3.4. Making the distinction structural rather
+ * than a runtime branch on a string means a reader of this type can see which
+ * costs change what the stock is worth.
+ *
+ * Everything else the user names goes in `otherCosts`, and is expensed.
+ */
+export const otherCostSchema = z.object({
+  /**
+   * The expense খাত it lands in. Required, because "an unnamed lump" is
+   * exactly what R3.4 exists to stop — the chart already ships an অন্যান্য খরচ
+   * for the genuinely miscellaneous.
+   */
+  accountId: uuid,
+  /**
+   * What the user called it, when the খাত alone does not say enough — "ক্রেন
+   * ভাড়া" against অন্যান্য খরচ. Free text, and it travels to the narration so
+   * a reprinted voucher says what was actually charged.
+   */
+  label: z.string().trim().max(80).optional(),
+  amount: positiveMoneyString,
+});
+export type OtherCostInput = z.infer<typeof otherCostSchema>;
+
 const tradeCosts = {
   transportCost: moneyString.default("0"),
   laborCost: moneyString.default("0"),
-  otherCost: moneyString.default("0"),
   /**
-   * Spec R3.4. What the "other cost" actually was, chosen from the chart of
-   * accounts, and it *posts* there rather than decorating the entry:
+   * Every other cost on the entry, each named and each posting where it is
+   * named — spec R3.4.
    *
-   *   - on a purchase it is expensed to this account instead of being
-   *     capitalised into the goods, because "other" is by definition the
-   *     bucket that is neither freight nor labour, and burying an unnamed lump
-   *     in stock valuation is how stock value drifts from reality;
-   *   - on a sale it is the income account the charge is billed to, instead of
-   *     the generic অন্যান্য আয়.
-   *
-   * Left unset, both behave exactly as they did before — freight and labour
-   * are untouched either way, since those are textbook product costs.
+   * This replaced a single `otherCost` figure with one খাত beside it. A trade
+   * rarely has exactly one miscellaneous cost, and forcing three of them into
+   * one number is how "অন্যান্য ৳2,400" ends up on a voucher meaning nothing
+   * to the person holding it.
    */
-  otherCostAccountId: uuid.optional(),
+  otherCosts: z.array(otherCostSchema).max(20).default([]),
   /**
    * Spec R3.4. `discountType` says what `discount` means — a flat ৳ figure, or
    * a percentage of the subtotal that the *server* resolves. The client never

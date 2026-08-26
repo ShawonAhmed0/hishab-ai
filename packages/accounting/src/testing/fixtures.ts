@@ -53,6 +53,8 @@ export const ID = {
   // Category accounts
   rentExpense: id(40),
   serviceIncome: id(41),
+  /** A second expense খাত, so R3.4 can show two named costs at once. */
+  serviceExpense: id(42),
 
   // Master data
   customer: id(50),
@@ -120,6 +122,7 @@ export const ACCOUNT_TYPES: ReadonlyMap<string, AccountType> = new Map([
   [ID.stockAdjustment, "expense"],
   [ID.rentExpense, "expense"],
   [ID.serviceIncome, "income"],
+  [ID.serviceExpense, "expense"],
 ]);
 
 export interface ProductSeed {

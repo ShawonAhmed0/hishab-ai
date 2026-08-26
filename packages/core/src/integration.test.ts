@@ -707,6 +707,63 @@ describeDb("the report suite", () => {
     expect(detail!.lines[0]!.pieces).toBeNull();
   });
 
+  it("posts each named cost to its own খাত and keeps it on the voucher", async () => {
+    // R3.4, after costs became a list. Two named costs on one purchase are two
+    // debits and two rows — not "অন্যান্য ৳2,000", which means nothing to the
+    // person holding the paper.
+    const rent = await expenseAccount(tenant, "দোকান ভাড়া");
+    const other = await expenseAccount(tenant, "অন্যান্য খরচ");
+
+    const purchase = await createTransaction(tenant.session, {
+      type: "purchase",
+      date: "2026-10-05",
+      source: "manual",
+      partyId: vendorId,
+      lines: [{ productId: paperId, unitId: tenant.unitKgId, quantity: "10", rate: "100" }],
+      transportCost: "200",
+      otherCosts: [
+        { accountId: rent, amount: "300" },
+        { accountId: other, label: "ক্রেন ভাড়া", amount: "500" },
+      ],
+      payments: [],
+    });
+
+    const detail = await getTransactionDetail(tenant.session, purchase.transactionId);
+
+    // ৳1,000 goods + ৳200 freight capitalised; the two named costs are not.
+    const movement = detail!.movements.find((m) => m.direction === "in")!;
+    expect(movement.value).toBe("1200.0000");
+    // The vendor is owed all of it either way.
+    expect(detail!.transaction.total).toBe("2000.0000");
+
+    // And the voucher can name them.
+    expect(detail!.costs.map((c) => [c.label, c.amount])).toEqual([
+      [null, "300.0000"],
+      ["ক্রেন ভাড়া", "500.0000"],
+    ]);
+  });
+
+  /** X.2 — every খাত the cost list names is a client-chosen id. */
+  it("refuses a cost posted to another company's খাত", async () => {
+    const outsider = await makeTenant("CostThief");
+    try {
+      const theirs = await expenseAccount(outsider, "দোকান ভাড়া");
+      await expect(
+        createTransaction(tenant.session, {
+          type: "purchase",
+          date: "2026-10-06",
+          source: "manual",
+          partyId: vendorId,
+          lines: [{ productId: paperId, unitId: tenant.unitKgId, quantity: "1", rate: "100" }],
+          otherCosts: [{ accountId: theirs, amount: "50" }],
+          payments: [],
+        }),
+      ).rejects.toMatchObject({ name: "MissingSetupError" });
+    } finally {
+      await dropTenant(outsider);
+    }
+  }, 60_000);
+
   it("registers the sale and the purchase on their own sides", async () => {
     const sales = await getRegister(tenant.session, { ...period, type: "sale" });
     const purchases = await getRegister(tenant.session, { ...period, type: "purchase" });
@@ -920,6 +977,20 @@ async function otherIncomeAccount(tenant: Tenant): Promise<string> {
       select id from accounts
        where company_id = ${tenant.companyId}::uuid
          and subtype = 'other_income'
+       limit 1
+    `),
+  )) as unknown as { id: string }[];
+  return rows[0]!.id;
+}
+
+/** An operating-expense খাত by its Bengali name — the ones a cost list offers. */
+async function expenseAccount(tenant: Tenant, nameBn: string): Promise<string> {
+  const rows = (await withTenant(tenant.session, async (tx) =>
+    tx.execute(sql`
+      select id from accounts
+       where company_id = ${tenant.companyId}::uuid
+         and subtype = 'operating_expense'
+         and name_bn = ${nameBn}
        limit 1
     `),
   )) as unknown as { id: string }[];
@@ -1145,8 +1216,7 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
         source: "manual",
         partyId: await seedParty(tenant, "খাতের ভেন্ডর", "vendor"),
         lines: [{ productId: flourId, unitId: tenant.unitKgId, quantity: "1", rate: "100" }],
-        otherCost: "50",
-        otherCostAccountId: strayAccountId,
+        otherCosts: [{ accountId: strayAccountId, amount: "50" }],
         payments: [],
       }),
     ).rejects.toMatchObject({

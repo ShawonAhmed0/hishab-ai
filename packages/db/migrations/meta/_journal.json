@@ -50,6 +50,13 @@
       "when": 1787693319296,
       "tag": "0006_party_assigned_to",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787763956846,
+      "tag": "0007_transaction_costs",
+      "breakpoints": true
     }
   ]
 }

@@ -74,12 +74,15 @@ export const transactions = pgTable(
     subtotal: moneyColumn("subtotal").notNull().default(ZERO_NUMERIC),
     transportCost: moneyColumn("transport_cost").notNull().default(ZERO_NUMERIC),
     laborCost: moneyColumn("labor_cost").notNull().default(ZERO_NUMERIC),
-    otherCost: moneyColumn("other_cost").notNull().default(ZERO_NUMERIC),
     /**
-     * R3.4. Where the "other cost" was posted, when the user named it —
-     * expensed on a purchase, billed as income on a sale. Null keeps the old
-     * behaviour: capitalised into the goods, or credited to অন্যান্য আয়.
+     * Kept for the entries posted before costs became a list — R3.4.
+     *
+     * Nothing writes these two any more; `transaction_costs` does. They are not
+     * dropped because a voucher from before the change still has to reprint
+     * what it was actually charged, and `06_backfill_costs.sql` copies them
+     * forward rather than leaving two places to look.
      */
+    otherCost: moneyColumn("other_cost").notNull().default(ZERO_NUMERIC),
     otherCostAccountId: uuid("other_cost_account_id").references(() => accounts.id),
     /** What the discount came to in taka — resolved by the server. */
     discount: moneyColumn("discount").notNull().default(ZERO_NUMERIC),
@@ -294,7 +297,46 @@ export const transactionLinesRelations = relations(transactionLines, ({ one }) =
   }),
 }));
 
+/**
+ * The named costs on an entry — spec R3.4.
+ *
+ * A list rather than the single `other_cost` figure it replaced: a trade
+ * rarely has exactly one miscellaneous cost, and forcing three of them into
+ * one number puts "অন্যান্য ৳2,400" on a voucher, meaning nothing to the
+ * person holding it.
+ *
+ * Freight and labour stay as columns on `transactions`, because they are not
+ * two more costs — they are the two that are capitalised into the goods, and
+ * that difference is the whole of R3.4.
+ */
+export const transactionCosts = pgTable(
+  "transaction_costs",
+  {
+    id: primaryId(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    /** The খাত it posts to. Proved against a company-scoped read first (X.2). */
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    /** What the user called it, when the খাত alone does not say enough. */
+    label: varchar("label", { length: 80 }),
+    amount: moneyColumn("amount").notNull().default(ZERO_NUMERIC),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("transaction_costs_transaction_idx").on(table.transactionId, table.sortOrder),
+    index("transaction_costs_company_idx").on(table.companyId, table.accountId),
+  ],
+);
+
 export type Transaction = typeof transactions.$inferSelect;
+export type TransactionCost = typeof transactionCosts.$inferSelect;
 export type TransactionLine = typeof transactionLines.$inferSelect;
 export type TransactionPayment = typeof transactionPayments.$inferSelect;
 export type JournalLine = typeof journalLines.$inferSelect;
