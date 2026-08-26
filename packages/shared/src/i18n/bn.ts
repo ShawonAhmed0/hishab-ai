@@ -1008,6 +1008,28 @@ export const shell = {
   toDarkTheme: "রাতের রঙে দেখুন",
 } as const;
 
+/**
+ * When the app itself fails, rather than the entry.
+ *
+ * A refusal from the engine has its own vocabulary (`BlockedReason`); this is
+ * the other kind — the request never arrived, the page threw, the link was
+ * wrong. All of it happens to somebody standing at a counter with a customer
+ * waiting, so the first thing each message says is what is still true about
+ * their work.
+ */
+export const errors = {
+  connectionTitle: "সংযোগ পাওয়া যায়নি",
+  /* Said first, because it is the only question they actually have. */
+  connectionBody: "আপনার লেখা মুছে যায়নি। সংযোগ ফিরলে আবার সংরক্ষণ করুন।",
+  pageTitle: "পাতাটি খোলা যায়নি",
+  pageBody: "সাময়িক একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+  retry: "আবার চেষ্টা করুন",
+  notFoundTitle: "পাতাটি খুঁজে পাওয়া যায়নি",
+  notFoundBody: "লিংকটি ভুল হতে পারে, অথবা জিনিসটি মুছে ফেলা হয়েছে।",
+  backToDashboard: "ড্যাশবোর্ডে ফিরে যান",
+  reference: (code: string) => `রেফারেন্স: ${code}`,
+} as const;
+
 export const emptyStates = {
   noTransactions: "এখনো কোনো লেনদেন নেই",
   noTransactionsHint: "প্রথম এন্ট্রি যোগ করে শুরু করুন",
@@ -1279,6 +1301,7 @@ export const bn = {
   severity,
   messages,
   emptyStates,
+  errors,
   blocked,
   confirm,
   warned,

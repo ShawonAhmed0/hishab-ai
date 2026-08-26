@@ -7,6 +7,7 @@ import { PRODUCT_KINDS, type ProductKind } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/locale-provider";
 import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
+import { attempt } from "@/lib/attempt";
 import {
   createPartyAction,
   createProductAction,
@@ -148,15 +149,21 @@ export function PartyFields({
   function submit() {
     setResult(null);
     start(async () => {
-      const outcome = await createPartyAction({
-        name,
-        type,
-        ...(phone ? { phone } : {}),
-        ...(address ? { address } : {}),
-        ...(creditLimit ? { creditLimit } : {}),
-        ...(assignedTo ? { assignedTo } : {}),
-        openingBalance: openingBalance || "0",
-      });
+      const [outcome, failure] = await attempt(() =>
+        createPartyAction({
+          name,
+          type,
+          ...(phone ? { phone } : {}),
+          ...(address ? { address } : {}),
+          ...(creditLimit ? { creditLimit } : {}),
+          ...(assignedTo ? { assignedTo } : {}),
+          openingBalance: openingBalance || "0",
+        }),
+      );
+      if (failure) {
+        setResult({ ok: false, error: t.errors.connectionTitle });
+        return;
+      }
       setResult(outcome);
       if (outcome.ok) {
         onCreated?.(outcome.created);
@@ -347,8 +354,8 @@ export function ProductFields({
   function submit() {
     setResult(null);
     start(async () => {
-      const outcome = await createProductAction(
-        {
+      const [outcome, failure] = await attempt(() =>
+        createProductAction({
           nameBn,
           kind,
           unitId,
@@ -360,8 +367,12 @@ export function ProductFields({
           openingQuantity: openingQuantity || "0",
           openingRate: openingRate || purchasePrice || "0",
         },
-        unit?.symbol ?? "",
+        unit?.symbol ?? ""),
       );
+      if (failure) {
+        setResult({ ok: false, error: t.errors.connectionTitle });
+        return;
+      }
       setResult(outcome);
       if (outcome.ok) {
         onCreated?.(outcome.created);

@@ -1015,6 +1015,18 @@ export const en: Dictionary = {
     toDarkTheme: "Switch to dark",
   },
 
+
+  errors: {
+    connectionTitle: "Could not reach HishabAI",
+    connectionBody: "Nothing you typed was lost. Save again once you are back online.",
+    pageTitle: "This page did not load",
+    pageBody: "Something went wrong for a moment. Try again.",
+    retry: "Try again",
+    notFoundTitle: "That page was not found",
+    notFoundBody: "The link may be wrong, or the thing it pointed at was removed.",
+    backToDashboard: "Back to the dashboard",
+    reference: (code: string) => `Reference: ${code}`,
+  },
   emptyStates: {
     noTransactions: "No entries yet",
     noTransactionsHint: "Start by adding your first entry",

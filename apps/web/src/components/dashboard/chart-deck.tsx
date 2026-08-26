@@ -7,7 +7,7 @@ import {
   ProfitTrendChart,
   SalesTrendChart,
   type ChartPoint,
-} from "@/components/charts/trend-charts";
+} from "@/components/charts/chart-loader";
 import { cn } from "@/lib/utils";
 
 export type DeckKind = "flow" | "sales" | "profit";

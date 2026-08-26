@@ -21,6 +21,7 @@ import {
   type SettingsState,
 } from "./actions";
 import type { CompanyPolicy, CompanyProfile } from "@hishabai/core";
+import { attempt } from "@/lib/attempt";
 
 /** Success and failure look the same everywhere on this page. */
 function Feedback({ state, done }: { state: SettingsState; done: string }) {
@@ -382,7 +383,8 @@ export function RecipeForm({
     event.preventDefault();
     setState({});
     start(async () => {
-      const result = await saveRecipeAction(recipe?.id ?? null, {
+      const [result, failure] = await attempt(() =>
+        saveRecipeAction(recipe?.id ?? null, {
         outputProductId,
         ...(nameBn ? { nameBn } : {}),
         ...(yieldPercent ? { expectedYieldPercent: yieldPercent } : {}),
@@ -393,7 +395,12 @@ export function RecipeForm({
             productId: row.productId,
             quantityPerUnit: row.quantityPerUnit,
           })),
-      });
+        }),
+      );
+      if (failure) {
+        setState({ error: t.errors.connectionTitle });
+        return;
+      }
       setState(result);
       if (result.ok) onDone?.();
     });
@@ -547,7 +554,8 @@ export function DeactivateRecipeButton({ id, name }: { id: string; name: string 
         onClick={() => {
           if (!window.confirm(t.settings.confirmDisableWallet(name))) return;
           start(async () => {
-            const result = await deactivateRecipeAction(id);
+            const [result, failure] = await attempt(() => deactivateRecipeAction(id));
+            if (failure) return setError(t.errors.connectionTitle);
             if (result.error) setError(result.error);
           });
         }}
@@ -601,7 +609,8 @@ export function DeactivateButton({
         onClick={() => {
           if (!window.confirm(t.settings.confirmDisableCategory(name))) return;
           start(async () => {
-            const result = await deactivateAction(target, id);
+            const [result, failure] = await attempt(() => deactivateAction(target, id));
+            if (failure) return setError(t.errors.connectionTitle);
             if (result.error) setError(result.error);
           });
         }}

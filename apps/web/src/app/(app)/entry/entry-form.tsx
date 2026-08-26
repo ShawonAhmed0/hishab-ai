@@ -52,6 +52,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorSummary, Field, FieldLabel, Input, Select, Textarea } from "@/components/ui/field";
 import { MoneyText } from "@/components/ui/money";
 import { useToast } from "@/components/ui/toast";
+import { attempt } from "@/lib/attempt";
 import { cn, formatDateTime, todayIso } from "@/lib/utils";
 import {
   PartyFields,
@@ -962,7 +963,19 @@ export function EntryForm({
     setResult(null);
 
     startTransition(async () => {
-      const outcome = await createEntryAction(payload, options);
+      // Wrapped, because the *call* can fail even though the action catches
+      // everything inside itself. An unhandled rejection here used to reach
+      // the root error boundary and replace the page — destroying the entry
+      // being typed, at a counter, with a customer waiting.
+      const [outcome, failure] = await attempt(() => createEntryAction(payload, options));
+
+      if (failure) {
+        toast.error(t.errors.connectionTitle, t.errors.connectionBody);
+        // The payload is kept, so the same entry re-posts on the next tap
+        // rather than having to be typed again.
+        return;
+      }
+
       setResult(outcome);
 
       if (outcome.ok) {

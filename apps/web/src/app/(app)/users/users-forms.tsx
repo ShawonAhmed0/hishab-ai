@@ -6,6 +6,7 @@ import { ROLES, type Role } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Input, Select } from "@/components/ui/field";
+import { attempt } from "@/lib/attempt";
 import {
   addMemberAction,
   changeRoleAction,
@@ -119,7 +120,14 @@ export function RoleSelect({
           setValue(next);
           setError(undefined);
           start(async () => {
-            const result = await changeRoleAction(userId, next);
+            const [result, failure] = await attempt(() => changeRoleAction(userId, next));
+            // The select was moved optimistically. A dropped request has to
+            // put it back too, or the screen shows a role nobody was given.
+            if (failure) {
+              setError(t.errors.connectionTitle);
+              setValue(previous);
+              return;
+            }
             if (result.error) {
               setError(result.error);
               setValue(previous);
@@ -163,7 +171,8 @@ export function RemoveMemberButton({
           if (!window.confirm(t.users.confirmRemove(name))) return;
           setError(undefined);
           start(async () => {
-            const result = await removeMemberAction(userId);
+            const [result, failure] = await attempt(() => removeMemberAction(userId));
+            if (failure) return setError(t.errors.connectionTitle);
             if (result.error) setError(result.error);
           });
         }}

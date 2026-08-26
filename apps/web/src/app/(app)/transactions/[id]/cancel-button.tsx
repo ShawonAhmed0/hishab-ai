@@ -9,6 +9,7 @@ import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Textarea } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { cancelTransactionAction } from "./actions";
+import { attempt } from "@/lib/attempt";
 
 export function CancelTransactionButton({
   transactionId,
@@ -28,7 +29,13 @@ export function CancelTransactionButton({
   function confirm() {
     setError(undefined);
     startTransition(async () => {
-      const result = await cancelTransactionAction(transactionId, reason);
+      const [result, failure] = await attempt(() =>
+        cancelTransactionAction(transactionId, reason),
+      );
+      if (failure) {
+        setError(t.errors.connectionTitle);
+        return;
+      }
       if (result.error) {
         setError(result.error);
         return;
