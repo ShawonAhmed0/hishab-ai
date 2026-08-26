@@ -28,6 +28,7 @@ import {
   type ChartPoint,
 } from "@/components/charts/trend-charts";
 import { DailyAlertBlock } from "@/components/customers/health";
+import { PrintButton } from "@/components/ui/print-button";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
@@ -74,7 +75,23 @@ async function DailyAlerts() {
   return <DailyAlertBlock alerts={dailyAlertsFrom(view)} t={t} limit={5} />;
 }
 
-export default async function DashboardPage() {
+/** Only a real ISO date reaches the query; anything else falls back. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const params = await searchParams;
+  const fallback = currentMonthRange();
+  const range = {
+    from: params.from && ISO_DATE.test(params.from) ? params.from : fallback.from,
+    to: params.to && ISO_DATE.test(params.to) ? params.to : fallback.to,
+  };
+  // A reversed range would return nothing and look like an empty company.
+  const period = range.from <= range.to ? range : fallback;
+
   // One round trip for the whole page — tiles, charts, lists and alerts — and
   // it runs alongside the session lookup rather than after it.
   const [
@@ -82,13 +99,12 @@ export default async function DashboardPage() {
       data: { tiles, previous, trend, recent, topDueCustomers, lowStock },
     },
     t,
-  ] = await Promise.all([sessionWithData(getDashboard), dict()]);
+  ] = await Promise.all([sessionWithData((scope) => getDashboard(scope, period)), dict()]);
 
   // R5.7 — every figure below leads to the ledger detail that produced it, and
   // all of those reports read `journal_lines`, so a cancelled voucher nets to
   // zero on the way down without the drill-down knowing cancellation exists.
-  const month = currentMonthRange();
-  const monthReport = `/reports/profit-loss?from=${month.from}&to=${month.to}` as Route;
+  const monthReport = `/reports/profit-loss?from=${period.from}&to=${period.to}` as Route;
 
   // Money is a bigint and cannot cross to a client component. Charts get plain
   // taka — exact figures are rendered from the real values in the tiles and
@@ -155,17 +171,49 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t.nav.dashboard}</h1>
           <p className="text-sm text-muted-foreground">{t.shell.motto}</p>
         </div>
-        <Button asChild>
-          <Link href="/entry">
-            <PlusCircle className="size-4" aria-hidden />
-            {t.nav.newEntry}
-          </Link>
-        </Button>
+
+        {/*
+          The range every figure on this page is measured over. A GET form, so
+          the chosen period is in the URL: it survives a reload, it can be
+          bookmarked, and the deltas below it always say what they are against.
+        */}
+        <form className="flex flex-wrap items-end gap-2 no-print">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            {t.dashboard.periodFrom}
+            <input
+              type="date"
+              name="from"
+              defaultValue={period.from}
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            {t.dashboard.periodTo}
+            <input
+              type="date"
+              name="to"
+              defaultValue={period.to}
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            />
+          </label>
+          <Button type="submit" variant="secondary" size="sm">
+            {t.dashboard.applyRange}
+          </Button>
+          {/* Printing is how this app makes a PDF — same route the statements
+              take, rather than a second layout that could disagree. */}
+          <PrintButton />
+          <Button asChild size="sm" className="no-print">
+            <Link href="/entry">
+              <PlusCircle className="size-4" aria-hidden />
+              {t.nav.newEntry}
+            </Link>
+          </Button>
+        </form>
       </div>
 
       {/* ---- money on hand ---- */}
@@ -296,7 +344,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>{t.dashboard.salesTrend}</CardTitle>
             <Link
-              href={`/reports/register?type=sale&from=${month.from}&to=${month.to}` as Route}
+              href={`/reports/register?type=sale&from=${period.from}&to=${period.to}` as Route}
               className="text-sm text-primary hover:underline"
             >
               {t.actions.viewAll}

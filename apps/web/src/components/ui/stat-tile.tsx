@@ -41,7 +41,7 @@ function DeltaChip({ delta, t }: { delta: Delta; t: Dictionary }) {
     <p className={cn("mt-1.5 flex items-center gap-1 text-xs font-medium", tone)}>
       <Icon className="size-3.5 shrink-0" aria-hidden />
       <span className="num">{label}</span>
-      <span className="font-normal text-subtle-foreground">{t.dashboard.vsLastMonth}</span>
+      <span className="font-normal text-subtle-foreground">{t.dashboard.vsPrevious}</span>
     </p>
   );
 }

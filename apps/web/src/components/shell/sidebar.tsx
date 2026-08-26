@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet } from "lucide-react";
-import { NAV_ITEMS } from "./nav-items";
+import { NAV_GROUPS, NAV_ITEMS, type NavGroup } from "./nav-items";
 import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
 
@@ -20,9 +20,11 @@ function allowedItems(allowed: string[]) {
 /**
  * Desktop navigation.
  *
- * Nine destinations is a lot, so the list is not collapsed behind a menu —
+ * Nine destinations is a lot, so the list is not collapsed behind a menu:
  * hiding frequent destinations behind a click is the overloaded-nav
- * anti-pattern, and this is a tool people use all day.
+ * anti-pattern, and this is a tool people use all day. They are grouped
+ * instead, by how often a shop opens them, which is the thing that actually
+ * separates the dashboard from Settings.
  */
 export function Sidebar({ allowed }: { allowed: string[] }) {
   const t = useT();
@@ -44,29 +46,49 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
         <span className="font-bold tracking-tight">HishabAI</span>
       </Link>
 
-      <ul className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-        {items.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-2 pt-3">
+        {NAV_GROUPS.map((group) => {
+          const inGroup = items.filter((item) => item.group === group);
+          // A role that cannot reach anything in a group gets no heading for
+          // it. An operator does not need to be told there is an
+          // administration section they may not open.
+          if (inGroup.length === 0) return null;
+
           return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150",
-                  active
-                    ? "bg-primary-soft text-primary"
-                    : "text-muted-foreground hover:bg-surface-sunken hover:text-foreground",
-                )}
+            <section key={group} aria-labelledby={`nav-${group}`}>
+              <h2
+                id={`nav-${group}`}
+                className="px-3 pb-1.5 text-[0.6875rem] font-semibold tracking-wide text-subtle-foreground uppercase"
               >
-                <item.icon className="size-4 shrink-0" aria-hidden />
-                {t.nav[item.label]}
-              </Link>
-            </li>
+                {t.navGroup[group as NavGroup]}
+              </h2>
+              <ul className="flex flex-col gap-0.5">
+                {inGroup.map((item) => {
+                  const active =
+                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+                          active
+                            ? "bg-primary-soft text-primary"
+                            : "text-muted-foreground hover:bg-surface-sunken hover:text-foreground",
+                        )}
+                      >
+                        <item.icon className="size-4 shrink-0" aria-hidden />
+                        {t.nav[item.label]}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           );
         })}
-      </ul>
+      </div>
     </nav>
   );
 }

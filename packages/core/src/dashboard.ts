@@ -34,14 +34,14 @@ export interface DashboardTiles {
 }
 
 /**
- * The same month's figures, a month earlier.
+ * The same figures over the stretch of equal length immediately before.
  *
  * A figure on its own is not information: ৳1,99,000 of income is a good month
- * or a bad one depending entirely on what last month was, and the dashboard
- * used to make the reader remember. Only the *flows* are compared — income,
- * expense, profit. A wallet balance and a stock value are positions rather
- * than flows, and "12% more cash than last month" invites a conclusion the
- * number does not support.
+ * or a bad one depending entirely on what came before, and the dashboard used
+ * to make the reader remember. Only the *flows* are compared — income, expense,
+ * profit. A wallet balance and a stock value are positions rather than flows,
+ * and "12% more cash than last period" invites a conclusion the number does
+ * not support.
  */
 export interface PreviousPeriod {
   from: string;
@@ -95,21 +95,21 @@ function monthRange(reference = new Date()): { from: string; to: string } {
 }
 
 /**
- * The calendar month before the one given.
+ * The stretch of the same length immediately before this one.
  *
- * Taken from the period's own start rather than from today, so a dashboard
- * asked about March compares against February and not against last month.
+ * Not "last calendar month": once the dashboard takes a date range, a nine-day
+ * window has to be compared with the nine days before it, or the delta is
+ * measuring the length of the window rather than the trade in it. For the
+ * default month view this still lands on the previous month, which is what a
+ * shopkeeper expects.
  */
-function previousMonthOf(period: { from: string }): { from: string; to: string } {
-  const year = Number(period.from.slice(0, 4));
-  const month = Number(period.from.slice(5, 7));
-  const prev = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
-  const lastDay = new Date(Date.UTC(prev.y, prev.m, 0)).getUTCDate();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return {
-    from: `${prev.y}-${pad(prev.m)}-01`,
-    to: `${prev.y}-${pad(prev.m)}-${pad(lastDay)}`,
-  };
+function previousPeriodOf(period: { from: string; to: string }): { from: string; to: string } {
+  const day = 86_400_000;
+  const start = Date.parse(`${period.from}T00:00:00Z`);
+  const end = Date.parse(`${period.to}T00:00:00Z`);
+  const length = end - start + day;
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { from: iso(start - length), to: iso(start - day) };
 }
 
 /** `tx.execute` requires an index signature; the shape is documented above. */
@@ -134,7 +134,7 @@ export async function getDashboard(
     from: options.from ?? monthRange().from,
     to: options.to ?? monthRange().to,
   };
-  const prior = previousMonthOf(period);
+  const prior = previousPeriodOf(period);
   const months = options.months ?? 6;
 
   // One statement, one round trip. Each subquery returns JSON so the whole

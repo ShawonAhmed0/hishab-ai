@@ -41,6 +41,13 @@ export const nav = {
   notifications: "বিজ্ঞপ্তি",
 } as const;
 
+/** Sidebar group headings — see NAV_GROUPS for why these three. */
+export const navGroup = {
+  everyday: "রোজকার",
+  records: "খাতা",
+  admin: "ব্যবস্থাপনা",
+} as const;
+
 export const actions = {
   save: "এন্ট্রি সংরক্ষণ করুন",
   saveShort: "সংরক্ষণ করুন",
@@ -161,11 +168,16 @@ export const dashboard = {
   dueTrend: "বকেয়া",
   stockChart: "স্টক",
   lastSixMonths: "গত ৬ মাস",
-  vsLastMonth: "গত মাসের তুলনায়",
-  noComparison: "গত মাসে কিছু ছিল না",
+  dateRange: "সময়কাল",
+  periodFrom: "শুরু",
+  periodTo: "শেষ",
+  applyRange: "দেখুন",
+  thisMonth: "চলতি মাস",
+  vsPrevious: "আগের সময়ের তুলনায়",
+  noComparison: "আগে কিছু ছিল না",
   deltaUp: (percent: string) => `${percent}% বেশি`,
   deltaDown: (percent: string) => `${percent}% কম`,
-  deltaFlat: "গত মাসের সমান",
+  deltaFlat: "আগের সমান",
   balancesHeading: "ব্যালেন্স",
   thisMonthHeading: "চলতি মাস",
   duesAndStockHeading: "বকেয়া ও স্টক",
@@ -1228,6 +1240,7 @@ export const delivery = {
 
 export const bn = {
   nav,
+  navGroup,
   actions,
   transactionType,
   transactionTypeHint,

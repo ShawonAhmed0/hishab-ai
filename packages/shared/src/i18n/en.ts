@@ -32,6 +32,12 @@ export const en: Dictionary = {
     notifications: "Notifications",
   },
 
+  navGroup: {
+    everyday: "Everyday",
+    records: "Records",
+    admin: "Administration",
+  },
+
   actions: {
     save: "Save entry",
     saveShort: "Save",
@@ -151,11 +157,16 @@ export const en: Dictionary = {
     dueTrend: "Dues",
     stockChart: "Stock",
     lastSixMonths: "Last 6 months",
-    vsLastMonth: "vs. last month",
-    noComparison: "Nothing last month",
+    dateRange: "Period",
+    periodFrom: "From",
+    periodTo: "To",
+    applyRange: "Show",
+    thisMonth: "This month",
+    vsPrevious: "vs. period before",
+    noComparison: "Nothing before",
     deltaUp: (percent: string) => `${percent}% up`,
     deltaDown: (percent: string) => `${percent}% down`,
-    deltaFlat: "Same as last month",
+    deltaFlat: "No change",
     balancesHeading: "Balances",
     thisMonthHeading: "This month",
     duesAndStockHeading: "Dues and stock",
