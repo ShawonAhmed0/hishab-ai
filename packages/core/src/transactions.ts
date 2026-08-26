@@ -960,6 +960,10 @@ export async function getTransactionDetail(session: Session, transactionId: stri
           id: transactionLines.id,
           role: transactionLines.role,
           quantity: transactionLines.quantity,
+          // The count beside the weight — "১২ রোল, ৫০০ কেজি". Stored since the
+          // beginning and selected by nothing, so a voucher could not show what
+          // was actually handed over.
+          pieces: transactionLines.pieces,
           rate: transactionLines.rate,
           amount: transactionLines.amount,
           allocatedCost: transactionLines.allocatedCost,

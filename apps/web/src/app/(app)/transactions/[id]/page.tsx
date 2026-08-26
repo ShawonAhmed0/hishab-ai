@@ -209,6 +209,15 @@ export default async function TransactionDetailPage({
                           {formatQty(qtyFromDb(line.quantity), {
                             ...(line.unitSymbol ? { unit: line.unitSymbol } : {}),
                           })}
+                          {/* The count beside the weight, when there is one.
+                              Under the weight rather than in a column of its
+                              own: most trades have no count, and an empty
+                              column on every voucher earns nothing. */}
+                          {line.pieces && qtyFromDb(line.pieces) > 0n ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {formatQty(qtyFromDb(line.pieces), { unit: t.fields.pieces })}
+                            </span>
+                          ) : null}
                         </TD>
                         <TD numeric>
                           {rate === 0n ? (

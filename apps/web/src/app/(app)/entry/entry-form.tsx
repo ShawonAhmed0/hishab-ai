@@ -1313,7 +1313,7 @@ export function EntryForm({
               return (
                 <div
                   key={line.key}
-                  className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1fr_auto]"
+                  className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"
                 >
                   <Field
                     fieldId={`lines.${index}.productId`}
@@ -1346,6 +1346,29 @@ export function EntryForm({
                       numeric
                       value={line.quantity}
                       onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
+                      placeholder="0"
+                    />
+                  </Field>
+
+                  {/*
+                    The second measure. Paper is bought by weight and handed
+                    over by the roll — "১২ রোল, ৫০০ কেজি" is one delivery, not
+                    two numbers to choose between. `pieces` has been in the
+                    schema and on the wire since the beginning; the form simply
+                    never asked for it, so it went out empty on every entry.
+
+                    Optional on purpose: the money is the weight times the rate,
+                    and a shop selling loose goods has no count to give.
+                  */}
+                  <Field
+                    fieldId={`lines.${index}.pieces`}
+                    error={fieldErrors[`lines.${index}.pieces`]}
+                  >
+                    <FieldLabel>{t.fields.pieces}</FieldLabel>
+                    <Input
+                      numeric
+                      value={line.pieces}
+                      onChange={(e) => updateLine(line.key, { pieces: e.target.value })}
                       placeholder="0"
                     />
                   </Field>

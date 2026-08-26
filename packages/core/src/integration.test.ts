@@ -666,6 +666,47 @@ describeDb("the report suite", () => {
     expect(moneyToDb(aging.totals.all)).toBe("30000.0000");
   });
 
+  it("keeps the count beside the weight, all the way to the voucher", async () => {
+    // Paper is bought by weight and handed over by the roll: "১২ রোল, ৫০০ কেজি"
+    // is one delivery. `pieces` has been in the schema and persisted since the
+    // beginning, but the form never asked for it and the detail query never
+    // selected it — so it went in empty and came back invisible either way.
+    // October, clear of the August window the register and stock tests assert.
+    // Adding to a shared fixture is how a test rewrites another test's answer.
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-10-18",
+      source: "manual",
+      partyId: customerId,
+      lines: [
+        { productId: paperId, unitId: tenant.unitKgId, quantity: "50", pieces: "3", rate: "160" },
+      ],
+      payments: [],
+    });
+
+    const detail = await getTransactionDetail(tenant.session, sale.transactionId);
+    const line = detail!.lines[0]!;
+    expect(line.quantity).toBe("50.000000");
+    expect(line.pieces).toBe("3.000000");
+    // The money is the weight times the rate. The count is a description of
+    // what was handed over, not a second thing to charge for.
+    expect(line.amount).toBe("8000.0000");
+  });
+
+  it("leaves the count null when the goods are sold loose", async () => {
+    const sale = await createTransaction(tenant.session, {
+      type: "sale",
+      date: "2026-10-19",
+      source: "manual",
+      partyId: customerId,
+      lines: [{ productId: paperId, unitId: tenant.unitKgId, quantity: "25", rate: "160" }],
+      payments: [],
+    });
+
+    const detail = await getTransactionDetail(tenant.session, sale.transactionId);
+    expect(detail!.lines[0]!.pieces).toBeNull();
+  });
+
   it("registers the sale and the purchase on their own sides", async () => {
     const sales = await getRegister(tenant.session, { ...period, type: "sale" });
     const purchases = await getRegister(tenant.session, { ...period, type: "purchase" });

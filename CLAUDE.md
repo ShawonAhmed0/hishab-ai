@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 236 passing instead of 365. Check the count.
+skip** and you get 236 passing instead of 367. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
