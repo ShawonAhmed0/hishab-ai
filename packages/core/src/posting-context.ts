@@ -111,6 +111,31 @@ export function collectAccountIds(input: TransactionInput): string[] {
   return [...ids];
 }
 
+/**
+ * Units the client picks, on every line that carries a quantity.
+ *
+ * Missed until an audit went looking: `unitId` is as client-chosen as
+ * `categoryAccountId`, it lands in `transaction_lines.unit_id`, and a foreign
+ * key does not care which company it points at. The line then renders with no
+ * unit at all, because RLS quite correctly refuses to show the row it names.
+ */
+export function collectUnitIds(input: TransactionInput): string[] {
+  const ids = new Set<string>();
+  const add = (rows: readonly { unitId: string }[] | undefined) => {
+    for (const row of rows ?? []) ids.add(row.unitId);
+  };
+
+  if ("lines" in input) add(input.lines);
+  if (input.type === "production") {
+    add(input.inputs);
+    add(input.outputs);
+    add(input.wastage);
+  }
+  if (input.type === "stock_adjustment") add(input.adjustments);
+
+  return [...ids];
+}
+
 export function collectPartyIds(input: TransactionInput): string[] {
   const ids = new Set<string>();
   if ("partyId" in input && input.partyId) ids.add(input.partyId);
@@ -137,8 +162,9 @@ async function assertReferencesAreOurs(
 ): Promise<void> {
   const accountIds = collectAccountIds(input);
   const partyIds = collectPartyIds(input);
+  const unitIds = collectUnitIds(input);
 
-  const [ourAccounts, ourParties] = await Promise.all([
+  const [ourAccounts, ourParties, ourUnits] = await Promise.all([
     accountIds.length === 0
       ? Promise.resolve([])
       : tx
@@ -151,6 +177,12 @@ async function assertReferencesAreOurs(
           .select({ id: parties.id })
           .from(parties)
           .where(and(eq(parties.companyId, companyId), inArray(parties.id, partyIds))),
+    unitIds.length === 0
+      ? Promise.resolve([])
+      : tx
+          .select({ id: units.id })
+          .from(units)
+          .where(and(eq(units.companyId, companyId), inArray(units.id, unitIds))),
   ]);
 
   const found = new Set(ourAccounts.map((row) => row.id));
@@ -176,6 +208,15 @@ async function assertReferencesAreOurs(
     throw new MissingSetupError(
       "নির্বাচিত পক্ষটি এই কোম্পানির নয়।",
       `Party ${strayParty} does not belong to company ${companyId}`,
+    );
+  }
+
+  const knownUnits = new Set(ourUnits.map((row) => row.id));
+  const strayUnit = unitIds.find((id) => !knownUnits.has(id));
+  if (strayUnit) {
+    throw new MissingSetupError(
+      "নির্বাচিত এককটি এই কোম্পানির নয়।",
+      `Unit ${strayUnit} does not belong to company ${companyId}`,
     );
   }
 }

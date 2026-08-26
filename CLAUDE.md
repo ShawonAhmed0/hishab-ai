@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 236 passing instead of 363. Check the count.
+skip** and you get 236 passing instead of 365. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -195,11 +195,18 @@ runs as the table owner, and that bypasses RLS entirely**, so a crafted
 constraint and the insert policy and lands in this company's journal.
 
 Every client-supplied id therefore gets proved against a company-scoped read
-before it is used. `posting-context.ts` does this for the two the client
-chooses — `categoryAccountId` and `other.entries[].accountId` — plus
-`partyId`; products and wallets were already covered because the engine throws
-when an id is missing from its context map. `recipes.ts` does the same for the
-products a recipe names. A new user-chosen id is a new place to do it.
+before it is used. `posting-context.ts` does this for the accounts the client
+chooses — `categoryAccountId` and `other.entries[].accountId` — plus `partyId`
+and `unitId`; products and wallets are covered because the engine throws when an
+id is missing from its context map. `recipes.ts` does the same for the products
+a recipe names. A new user-chosen id is a new place to do it.
+
+`unitId` was the one that got missed, and it is worth knowing why it was quiet:
+a foreign unit landed in `transaction_lines.unit_id` and then rendered as
+*nothing*, because RLS correctly refused to show the row it named. No leak — a
+line that silently lost its একক. Four input shapes carry one (sale and purchase
+lines, production inputs, production outputs, stock adjustments) and checking
+only the first is how the gap got there.
 
 ### One round trip, and what it costs
 

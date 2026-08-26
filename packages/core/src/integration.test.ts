@@ -2034,6 +2034,65 @@ describeDb("স্টক না থাকলে বিক্রয় আটক�
     });
   });
 
+  /**
+   * X.2 — every user-chosen id proved against a company-scoped read.
+   *
+   * `unitId` is chosen by the client on every line, and it was the one that got
+   * missed. A foreign key is enforced by a trigger running as the table owner,
+   * which bypasses RLS, so a unit belonging to another company satisfies the
+   * constraint and lands in this company's transaction_lines — where it then
+   * renders as nothing at all, because RLS quite correctly hides the row it
+   * points at.
+   */
+  it("proves the unit on a stock adjustment too, not only on a sale", async () => {
+    // Four input shapes carry a unitId — sale/purchase lines, production
+    // inputs, production outputs, and stock adjustments. Checking one and
+    // trusting the rest is how the gap got there in the first place.
+    const other = await makeTenant("Unitless2");
+    try {
+      const productId = await seedProduct(tenant, "সমন্বয়ের পণ্য", "1000", "50");
+      await expect(
+        createTransaction(tenant.session, {
+          type: "stock_adjustment",
+          date: todayIso(),
+          source: "manual",
+          adjustments: [
+            { productId, unitId: other.unitKgId, countedQuantity: "5", reason: "গণনা" },
+          ],
+        }),
+      // MissingSetupError carries the developer's English on `message` and the
+      // shopkeeper's Bengali on `messageBn`, so this asserts both rather than
+      // guessing which one `toThrow` compares against.
+      ).rejects.toMatchObject({
+        name: "MissingSetupError",
+        message: expect.stringContaining("does not belong to company"),
+        messageBn: expect.stringContaining("এককটি এই কোম্পানির নয়"),
+      });
+    } finally {
+      await dropTenant(other);
+    }
+  }, 60_000);
+
+  it("refuses a line measured in another company's unit", async () => {
+    const other = await makeTenant("Unitless");
+    try {
+      const productId = await seedProduct(tenant, "একক পরীক্ষার পণ্য", "1000", "50");
+      await expect(
+        createTransaction(tenant.session, {
+          type: "sale",
+          date: todayIso(),
+          source: "manual",
+          partyId: await seedParty(tenant, "একক চোর"),
+          // Their kilogram, not ours.
+          lines: [{ productId, unitId: other.unitKgId, quantity: "1", rate: "80" }],
+          payments: [],
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await dropTenant(other);
+    }
+  }, 60_000);
+
   /** X.1 — a new read path is a new way in, and gets its own isolation test. */
   it("hides one admin's PIN hash from every other session", async () => {
     const other = await makeTenant("Peeper");
