@@ -5,7 +5,15 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-surface shadow-card",
+        // `min-w-0` is load-bearing, not tidying. A card is usually a grid or
+        // flex item, and such an item defaults to `min-width: auto` — it
+        // refuses to shrink below its contents' minimum. A card holding a
+        // ledger inherits that table's `min-w-[42rem]` as its own floor, so it
+        // grew past its track and pushed the *page* into a horizontal scroll:
+        // the dashboard's entries card was 191px wider than its column at
+        // every width between 768 and 1280. The table already scrolls inside
+        // its own box; the card has to be allowed to be narrower than it.
+        "min-w-0 rounded-lg border border-border bg-surface shadow-card",
         className,
       )}
       {...props}

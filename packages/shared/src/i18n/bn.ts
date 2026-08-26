@@ -60,6 +60,7 @@ export const actions = {
   search: "খুঁজুন",
   filter: "ফিল্টার",
   clear: "মুছুন",
+  clearFilters: "ফিল্টার মুছুন",
   back: "ফিরে যান",
   next: "পরবর্তী",
   review: "যাচাই করুন",

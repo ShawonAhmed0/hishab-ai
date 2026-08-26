@@ -50,6 +50,7 @@ export const en: Dictionary = {
     search: "Search",
     filter: "Filter",
     clear: "Clear",
+    clearFilters: "Clear filters",
     back: "Back",
     next: "Next",
     review: "Review",

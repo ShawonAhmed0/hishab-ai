@@ -105,6 +105,12 @@
     0 8px 12px -6px rgb(20 22 29 / 0.10),
     0 24px 40px -12px rgb(20 22 29 / 0.16);
 
+  /* A field is a recess, not a card: the light that lifts a surface has to
+     fall *into* an input or the two read as the same object. One inset
+     hairline at the top edge is the whole effect — enough for the eye to
+     place the plane, not enough to muddy a value typed into it. */
+  --shadow-control: inset 0 1px 2px rgb(20 22 29 / 0.05);
+
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -158,9 +164,7 @@
     --color-on-destructive: #2b0d10;
     --color-ring: #8f9cf0;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
-    --shadow-raised: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-    --shadow-overlay: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+    --shadow-control: inset 0 1px 2px rgb(0 0 0 / 0.28);
   }
 }
 

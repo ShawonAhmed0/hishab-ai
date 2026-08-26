@@ -11,6 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { FilterBar, FilterCheck, FilterField, FilterInput } from "@/components/ui/filter-bar";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
@@ -102,56 +104,6 @@ export default async function InventoryPage({
       </div>
 
       <Card>
-        <CardBody>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.actions.search}</span>
-              <input
-                name="q"
-                type="search"
-                defaultValue={params.q ?? ""}
-                placeholder={t.masterData.nameOrCode}
-                className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.masterData.productKindLabel}</span>
-              <select
-                name="kind"
-                defaultValue={params.kind ?? ""}
-                className="h-11 cursor-pointer rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              >
-                <option value="">{t.masterData.all}</option>
-                {PRODUCT_KINDS.map((option) => (
-                  <option key={option} value={option}>
-                    {t.productKind[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex items-end">
-              <Button type="submit" block>
-                {t.actions.filter}
-              </Button>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-4">
-              <input
-                type="checkbox"
-                name="low"
-                value="1"
-                defaultChecked={lowOnly}
-                className="size-4 cursor-pointer accent-[var(--color-primary)]"
-              />
-              {t.masterData.onlyLowStock}
-            </label>
-          </form>
-        </CardBody>
-      </Card>
-
-      <Card>
         <CardHeader>
           <CardTitle>{t.masterData.productCountTitle(String(products.length))}</CardTitle>
         </CardHeader>
@@ -163,6 +115,41 @@ export default async function InventoryPage({
             <AddProductPanel units={units} categories={categories} />
           </CardBody>
         ) : null}
+
+        <FilterBar
+          action="/inventory"
+          active={Boolean(params.q) || Boolean(params.kind) || lowOnly}
+          submitLabel={t.actions.filter}
+          clearLabel={t.actions.clearFilters}
+        >
+          <FilterField className="sm:col-span-2" label={t.actions.search}>
+            <FilterInput
+              name="q"
+              type="search"
+              defaultValue={params.q ?? ""}
+              placeholder={t.masterData.nameOrCode}
+            />
+          </FilterField>
+
+          <FilterField className="lg:col-span-2" label={t.masterData.productKindLabel}>
+            <FilterSelect name="kind" defaultValue={params.kind ?? ""}>
+              <option value="">{t.masterData.all}</option>
+              {PRODUCT_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {t.productKind[option]}
+                </option>
+              ))}
+            </FilterSelect>
+          </FilterField>
+
+          <FilterCheck
+            className="sm:col-span-2 lg:col-span-4"
+            name="low"
+            value="1"
+            defaultChecked={lowOnly}
+            label={t.masterData.onlyLowStock}
+          />
+        </FilterBar>
 
         {products.length === 0 ? (
           <EmptyState

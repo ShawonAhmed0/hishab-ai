@@ -66,7 +66,11 @@ export function SegmentedTotal({
         <div className="h-2 rounded-full bg-surface-sunken" role="presentation" />
       )}
 
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 sm:grid-cols-4">
+      {/* Four across at `lg`, not at `sm`. A media query asks the viewport,
+          and the viewport is not this element's width — with the sidebar taking
+          240px, a 769px window leaves 480px here, four cells of 110px, and
+          "Total stock value" truncated to "Total stock valu". */}
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 lg:grid-cols-4">
         {segments.map((segment) => {
           const body = (
             <>

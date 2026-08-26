@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { PrintButton } from "@/components/ui/print-button";
 import { StatTile } from "@/components/ui/stat-tile";
-import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { MobileCards, MobileRow, TD, TFoot, TH, THead, TR, TableScroll, TotalRow } from "@/components/ui/table";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
@@ -193,8 +193,8 @@ export default async function CustomerPage({
                     );
                   })}
                 </tbody>
-                <tfoot>
-                  <TR className="border-t-2 border-border-strong bg-surface-sunken">
+                <TFoot>
+                  <TotalRow>
                     <TD className="font-semibold" />
                     <TD />
                     <TD className="font-semibold">{t.masterData.currentDue}</TD>
@@ -208,8 +208,8 @@ export default async function CustomerPage({
                         className="font-bold"
                       />
                     </TD>
-                  </TR>
-                </tfoot>
+                  </TotalRow>
+                </TFoot>
               </TableScroll>
             </div>
 

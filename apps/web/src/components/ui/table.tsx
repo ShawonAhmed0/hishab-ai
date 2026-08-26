@@ -34,11 +34,18 @@ export function TableScroll({
   );
 }
 
+/**
+ * Column names sit under a rule rather than inside a grey band.
+ *
+ * The band was doing two jobs badly: it competed with the sunken filter strip
+ * directly above it on every list page — two recessed bars stacked, so neither
+ * read as recessed — and a filled header makes the head look like another row
+ * of data. A single decisive rule separates it and leaves the rows the only
+ * thing with weight.
+ */
 export function THead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="border-b border-border bg-surface-sunken text-left">
-      {children}
-    </thead>
+    <thead className="border-b border-border-strong text-left">{children}</thead>
   );
 }
 
@@ -52,7 +59,12 @@ export function TH({
     <th
       scope="col"
       className={cn(
-        "px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+        // Not uppercase, and not letter-spaced. Bengali has no case, so
+        // `uppercase` changes the English column headers and leaves the
+        // Bengali ones untouched — the two locales end up with structurally
+        // different headers, and the default locale is the one that loses the
+        // treatment. Weight and colour say "header" in both scripts.
+        "px-3 py-2.5 text-xs font-semibold text-muted-foreground",
         numeric && "text-right",
         className,
       )}
@@ -85,7 +97,18 @@ export function TD({
   ...props
 }: React.TdHTMLAttributes<HTMLTableCellElement> & { numeric?: boolean }) {
   return (
-    <td className={cn("px-3 py-2.5 align-middle", numeric && "text-right", className)} {...props}>
+    <td
+      className={cn(
+        "px-3 py-2.5 align-middle",
+        // A right-aligned column of proportional digits does not line up: the
+        // 1s are narrow and every row sits at a different width. `numeric`
+        // therefore carries the figures too, rather than each page
+        // remembering to add `.num` — which two of fifteen call sites did.
+        numeric && "num text-right",
+        className,
+      )}
+      {...props}
+    >
       {children}
     </td>
   );
@@ -173,4 +196,31 @@ export function MobileRow<T extends string>({
   }
 
   return <div className={className}>{content}</div>;
+}
+
+/**
+ * The totals under a ledger.
+ *
+ * Seven pages hand-wrote `border-t-2 border-border-strong bg-surface-sunken`
+ * on a plain `<TR>`, which also inherited the row hover — so a totals line lit
+ * up under the pointer as though it could be opened. A total is a conclusion,
+ * not a row you can click.
+ */
+export function TFoot({ children }: { children: React.ReactNode }) {
+  return <tfoot>{children}</tfoot>;
+}
+
+export function TotalRow({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLTableRowElement>) {
+  return (
+    <tr
+      className={cn(
+        "border-t-2 border-border-strong bg-surface-sunken font-medium text-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
 }

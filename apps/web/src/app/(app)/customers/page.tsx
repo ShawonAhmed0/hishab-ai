@@ -4,6 +4,7 @@ import { can, getParties, getUsers } from "@hishabai/core";
 import { moneyFromDb } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { FilterBar, FilterCheck, FilterField, FilterInput } from "@/components/ui/filter-bar";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
@@ -105,40 +106,6 @@ export default async function CustomersPage({
       </div>
 
       <Card>
-        <CardBody>
-          <form className="grid gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
-              <span className="font-medium">{t.actions.search}</span>
-              <input
-                name="q"
-                type="search"
-                defaultValue={params.q ?? ""}
-                placeholder={t.masterData.nameOrPhone}
-                className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              />
-            </label>
-
-            <div className="flex items-end">
-              <Button type="submit" block>
-                {t.actions.filter}
-              </Button>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm sm:col-span-3">
-              <input
-                type="checkbox"
-                name="due"
-                value="1"
-                defaultChecked={dueOnly}
-                className="size-4 cursor-pointer accent-[var(--color-primary)]"
-              />
-              {t.masterData.onlyWithDues}
-            </label>
-          </form>
-        </CardBody>
-      </Card>
-
-      <Card>
         <CardHeader>
           <CardTitle>{t.masterData.customerCountTitle(String(parties.length))}</CardTitle>
         </CardHeader>
@@ -148,6 +115,30 @@ export default async function CustomersPage({
             <AddPartyPanel type="customer" assignees={assignees} />
           </CardBody>
         ) : null}
+
+        <FilterBar
+          action="/customers"
+          active={Boolean(params.q) || dueOnly}
+          submitLabel={t.actions.filter}
+          clearLabel={t.actions.clearFilters}
+        >
+          <FilterField className="sm:col-span-2 lg:col-span-3" label={t.actions.search}>
+            <FilterInput
+              name="q"
+              type="search"
+              defaultValue={params.q ?? ""}
+              placeholder={t.masterData.nameOrPhone}
+            />
+          </FilterField>
+
+          <FilterCheck
+            className="sm:col-span-2 lg:col-span-4"
+            name="due"
+            value="1"
+            defaultChecked={dueOnly}
+            label={t.masterData.onlyWithDues}
+          />
+        </FilterBar>
 
         {parties.length === 0 ? (
           <EmptyState

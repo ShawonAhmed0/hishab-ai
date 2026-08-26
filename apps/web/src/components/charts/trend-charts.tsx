@@ -14,12 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  formatMoney,
-  formatMoneyCompact,
-  money,
-  type MoneyScaleWords,
-} from "@hishabai/shared";
+import { formatMoney, money } from "@hishabai/shared";
 import { useT } from "@/components/locale-provider";
 
 /**
@@ -61,8 +56,19 @@ function periodLabel(period: string, months: readonly string[]): string {
   return months[month - 1] ?? period;
 }
 
-const axisMoney = (value: number, scale: MoneyScaleWords) =>
-  formatMoneyCompact(money(Math.round(value)), { symbol: false, scale });
+/**
+ * An axis tick is a magnitude, not a sentence.
+ *
+ * These used to run through `formatMoneyCompact`, which appends the scale word
+ * — so every tick read "80 thousand" / "৮০ হাজার" inside a 56px gutter and was
+ * clipped to "usand". A tick repeated five times up the side of a chart is the
+ * worst place to spend a word: the grouped figure already tells a Bangladeshi
+ * reader the magnitude, which is the whole reason this app groups 2-2-3. The
+ * headline above the chart is where the compact wording belongs, and it is
+ * still there.
+ */
+const axisMoney = (value: number) =>
+  formatMoney(money(Math.round(value)), { symbol: false, decimals: 0 });
 
 function MoneyTooltip({
   active,
@@ -142,7 +148,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
     <ResponsiveContainer width="100%" height={240}>
       <BarChart
         data={rows}
-        margin={{ top: 4, right: 4, bottom: 0, left: -12 }}
+        margin={{ top: 4, right: 4, bottom: 0, left: -4 }}
         onClick={onSegmentClick}
         className="cursor-pointer"
       >
@@ -155,11 +161,11 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           tickLine={false}
         />
         <YAxis
-          tickFormatter={(value: number) => axisMoney(value, t.moneyScale)}
+          tickFormatter={axisMoney}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}
-          width={56}
+          width={68}
         />
         <Tooltip content={<MoneyTooltip />} cursor={{ fill: "var(--color-surface-sunken)" }} />
         <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />
@@ -197,7 +203,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
     <ResponsiveContainer width="100%" height={240}>
       <AreaChart
         data={rows}
-        margin={{ top: 4, right: 4, bottom: 0, left: -12 }}
+        margin={{ top: 4, right: 4, bottom: 0, left: -4 }}
         onClick={onSegmentClick}
         className="cursor-pointer"
       >
@@ -216,11 +222,11 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           tickLine={false}
         />
         <YAxis
-          tickFormatter={(value: number) => axisMoney(value, t.moneyScale)}
+          tickFormatter={axisMoney}
           tick={{ fontSize: 12, fill: AXIS }}
           axisLine={false}
           tickLine={false}
-          width={56}
+          width={68}
         />
         <Tooltip content={<MoneyTooltip />} />
         <Legend wrapperStyle={{ fontSize: 13, paddingTop: 8 }} />

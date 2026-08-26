@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { currentMonth, type ReportPeriod } from "@hishabai/core";
 import { todayIso } from "@hishabai/shared";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
+import { FilterField, FilterInput } from "@/components/ui/filter-bar";
 import { PrintButton } from "@/components/ui/print-button";
 import { dict } from "@/lib/locale.server";
 import { formatDate } from "@/lib/utils";
@@ -21,9 +21,6 @@ export function periodFrom(params: { from?: string; to?: string }): ReportPeriod
   const to = params.to && ISO_DATE.test(params.to) ? params.to : fallback.to;
   return from <= to ? { from, to } : fallback;
 }
-
-const inputClass =
-  "h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 
 /**
  * The chrome every report shares: where it sits, what it covers, and how to get
@@ -77,30 +74,28 @@ export async function ReportFrame({
         <PrintButton label={t.actions.print} />
       </div>
 
-      <Card className="no-print">
-        <CardBody>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {asOf ? null : (
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="font-medium">{t.reports.fromDate}</span>
-                <input type="date" name="from" defaultValue={period.from} className={inputClass} />
-              </label>
-            )}
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">
-                {asOf ? t.reports.asOfDate : t.reports.toDate}
-              </span>
-              <input type="date" name="to" defaultValue={period.to} className={inputClass} />
-            </label>
-            {filters}
-            <div className="flex items-end">
-              <Button type="submit" block>
-                {t.actions.filter}
-              </Button>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
+      {/* A toolbar, not a panel. This form governs every card below it, so
+          unlike a list page's filter strip it cannot live inside one of them —
+          but it should not spend an elevation step to say so either. A sunken
+          band under the title reads as the page's own controls. */}
+      <form className="no-print flex flex-col gap-3 rounded-lg border border-border bg-surface-sunken px-4 py-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {asOf ? null : (
+            <FilterField label={t.reports.fromDate}>
+              <FilterInput type="date" name="from" defaultValue={period.from} />
+            </FilterField>
+          )}
+          <FilterField label={asOf ? t.reports.asOfDate : t.reports.toDate}>
+            <FilterInput type="date" name="to" defaultValue={period.to} />
+          </FilterField>
+          {filters}
+        </div>
+        <div>
+          <Button type="submit" size="sm">
+            {t.actions.filter}
+          </Button>
+        </div>
+      </form>
 
       {children}
 
@@ -110,5 +105,3 @@ export async function ReportFrame({
     </div>
   );
 }
-
-export { inputClass as reportInputClass };

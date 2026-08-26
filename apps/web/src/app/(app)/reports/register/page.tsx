@@ -5,8 +5,10 @@ import { deriveRate, formatQty, qtyFromDb } from "@hishabai/shared";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
-import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
-import { ReportFrame, periodFrom, reportInputClass } from "@/components/reports/report-frame";
+import { MobileCards, MobileRow, TD, TFoot, TH, THead, TR, TableScroll, TotalRow } from "@/components/ui/table";
+import { ReportFrame, periodFrom } from "@/components/reports/report-frame";
+import { FilterField } from "@/components/ui/filter-bar";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 
@@ -41,13 +43,12 @@ export default async function RegisterPage({
       }
       period={period}
       filters={
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium">{t.fields.type}</span>
-          <select name="type" defaultValue={type} className={`${reportInputClass} cursor-pointer`}>
+        <FilterField label={t.fields.type}>
+          <FilterSelect name="type" defaultValue={type}>
             <option value="sale">{t.transactionType.sale}</option>
             <option value="purchase">{t.transactionType.purchase}</option>
-          </select>
-        </label>
+          </FilterSelect>
+        </FilterField>
       }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -137,8 +138,8 @@ export default async function RegisterPage({
                     </TR>
                   ))}
                 </tbody>
-                <tfoot>
-                  <TR className="border-t-2 border-border-strong bg-surface-sunken">
+                <TFoot>
+                  <TotalRow>
                     <TD className="font-semibold">{t.reports.grandTotalRow}</TD>
                     <TD numeric className="num font-semibold">
                       {data.totals.count}
@@ -169,8 +170,8 @@ export default async function RegisterPage({
                         className="font-bold"
                       />
                     </TD>
-                  </TR>
-                </tfoot>
+                  </TotalRow>
+                </TFoot>
               </TableScroll>
             </div>
 

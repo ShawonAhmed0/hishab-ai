@@ -4,6 +4,7 @@ import * as React from "react";
 import { AlertCircle } from "lucide-react";
 import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
+import { controlBase, controlBorder, controlSelect } from "./control";
 
 /**
  * Form field plumbing.
@@ -112,13 +113,6 @@ export function FieldLabel({
   );
 }
 
-const controlClass = [
-  "h-11 w-full rounded-md border bg-surface px-3 text-base text-foreground",
-  "placeholder:text-subtle-foreground",
-  "transition-colors duration-150",
-  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-  "disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:opacity-60",
-].join(" ");
 
 function describedBy(ctx: FieldContext): string | undefined {
   const ids = [ctx.hasError ? ctx.errorId : null, ctx.hasHint && !ctx.hasError ? ctx.hintId : null]
@@ -142,8 +136,8 @@ export const Input = React.forwardRef<
       // type="text" so Bengali digits and commas are not rejected by the browser.
       inputMode={numeric ? "decimal" : undefined}
       className={cn(
-        controlClass,
-        ctx.hasError ? "border-debit" : "border-border-strong",
+        controlBase,
+        ctx.hasError ? "border-debit" : controlBorder,
         numeric && "num text-right",
         className,
       )}
@@ -165,9 +159,9 @@ export const Textarea = React.forwardRef<
       aria-invalid={ctx.hasError || undefined}
       aria-describedby={describedBy(ctx)}
       className={cn(
-        controlClass,
+        controlBase,
         "h-auto min-h-20 py-2",
-        ctx.hasError ? "border-debit" : "border-border-strong",
+        ctx.hasError ? "border-debit" : controlBorder,
         className,
       )}
       {...props}
@@ -196,12 +190,12 @@ export const Select = React.forwardRef<
         if (document.activeElement === event.currentTarget) event.currentTarget.blur();
       }}
       className={cn(
-        controlClass,
+        controlBase,
         // `.select-chevron` carries the arrow, themed. It was an inline data
         // URI with the light theme's slate baked into it, which left the arrow
         // at about 1.9:1 once dark mode existed.
-        "select-chevron cursor-pointer appearance-none pr-9",
-        ctx.hasError ? "border-debit" : "border-border-strong",
+        controlSelect,
+        ctx.hasError ? "border-debit" : controlBorder,
         className,
       )}
       {...props}

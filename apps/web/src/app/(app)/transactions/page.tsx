@@ -4,7 +4,9 @@ import { listTransactions } from "@hishabai/core";
 import { TRANSACTION_TYPES, moneyFromDb, type TransactionType } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { FilterBar, FilterCheck, FilterField, FilterInput } from "@/components/ui/filter-bar";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { MoneyText } from "@/components/ui/money";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
 import { dict } from "@/lib/locale.server";
@@ -43,6 +45,10 @@ export default async function TransactionsPage({
     ? (params.type as TransactionType)
     : undefined;
 
+  const filtered = Boolean(
+    params.q || params.type || params.from || params.to || params.cancelled,
+  );
+
   const [{ data: rows }, t] = await Promise.all([
     sessionWithData((scope) =>
       listTransactions(scope, {
@@ -65,82 +71,57 @@ export default async function TransactionsPage({
         </Button>
       </div>
 
-      {/* Filtering is present on every list — the generated style flags its
-          absence as the anti-pattern for a data-dense dashboard. */}
-      <Card>
-        <CardBody>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.actions.search}</span>
-              <input
-                name="q"
-                type="search"
-                defaultValue={params.q ?? ""}
-                placeholder={t.transactions.searchPlaceholder}
-                className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.fields.type}</span>
-              <select
-                name="type"
-                defaultValue={params.type ?? ""}
-                className="h-11 cursor-pointer rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              >
-                <option value="">{t.transactions.all}</option>
-                {TRANSACTION_TYPES.map((option) => (
-                  <option key={option} value={option}>
-                    {t.transactionType[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.transactions.start}</span>
-              <input
-                name="from"
-                type="date"
-                defaultValue={params.from ?? ""}
-                className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">{t.transactions.end}</span>
-              <input
-                name="to"
-                type="date"
-                defaultValue={params.to ?? ""}
-                className="h-11 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-              />
-            </label>
-
-            <div className="flex items-end gap-2">
-              <Button type="submit" block>
-                {t.actions.filter}
-              </Button>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm lg:col-span-5">
-              <input
-                type="checkbox"
-                name="cancelled"
-                value="1"
-                defaultChecked={params.cancelled === "1"}
-                className="size-4 cursor-pointer accent-[var(--color-primary)]"
-              />
-              {t.transactions.includeCancelled}
-            </label>
-          </form>
-        </CardBody>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>{t.transactions.count(String(rows.length))}</CardTitle>
         </CardHeader>
+
+        {/* Filtering is present on every list — the generated style flags its
+            absence as the anti-pattern for a data-dense dashboard. It sits
+            inside this card rather than in one of its own: the filters and the
+            rows they filter are one object. */}
+        <FilterBar
+          action="/transactions"
+          active={filtered}
+          submitLabel={t.actions.filter}
+          clearLabel={t.actions.clearFilters}
+        >
+          <FilterField label={t.actions.search}>
+            <FilterInput
+              name="q"
+              type="search"
+              defaultValue={params.q ?? ""}
+              placeholder={t.transactions.searchPlaceholder}
+            />
+          </FilterField>
+
+          <FilterField label={t.fields.type}>
+            <FilterSelect name="type" defaultValue={params.type ?? ""}>
+              <option value="">{t.transactions.all}</option>
+              {TRANSACTION_TYPES.map((option) => (
+                <option key={option} value={option}>
+                  {t.transactionType[option]}
+                </option>
+              ))}
+            </FilterSelect>
+          </FilterField>
+
+          <FilterField label={t.transactions.start}>
+            <FilterInput name="from" type="date" defaultValue={params.from ?? ""} />
+          </FilterField>
+
+          <FilterField label={t.transactions.end}>
+            <FilterInput name="to" type="date" defaultValue={params.to ?? ""} />
+          </FilterField>
+
+          <FilterCheck
+            className="sm:col-span-2 lg:col-span-4"
+            name="cancelled"
+            value="1"
+            defaultChecked={params.cancelled === "1"}
+            label={t.transactions.includeCancelled}
+          />
+        </FilterBar>
 
         {rows.length === 0 ? (
           <EmptyState
@@ -175,7 +156,10 @@ export default async function TransactionsPage({
                       <TD className="whitespace-nowrap text-muted-foreground">
                         {formatDateShort(row.date)}
                       </TD>
-                      <TD>
+                      {/* A voucher number is one token. Left to wrap it broke
+                          as "OPEN-" over "000002", which is not a number
+                          anybody can read back to a customer. */}
+                      <TD className="whitespace-nowrap">
                         <Link
                           href={`/transactions/${row.id}`}
                           className="num text-primary hover:underline"

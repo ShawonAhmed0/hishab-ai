@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { CountTile, StatTile } from "@/components/ui/stat-tile";
-import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
-import { ReportFrame, periodFrom, reportInputClass } from "@/components/reports/report-frame";
+import { MobileCards, MobileRow, TD, TFoot, TH, THead, TR, TableScroll, TotalRow } from "@/components/ui/table";
+import { ReportFrame, periodFrom } from "@/components/reports/report-frame";
+import { FilterField } from "@/components/ui/filter-bar";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDate } from "@/lib/utils";
@@ -51,13 +53,12 @@ export default async function DuesReportPage({
       period={period}
       asOf
       filters={
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium">{t.reports.whichSide}</span>
-          <select name="side" defaultValue={side} className={`${reportInputClass} cursor-pointer`}>
+        <FilterField label={t.reports.whichSide}>
+          <FilterSelect name="side" defaultValue={side}>
             <option value="receivable">{t.accountSubtype.receivable}</option>
             <option value="payable">{t.accountSubtype.payable}</option>
-          </select>
-        </label>
+          </FilterSelect>
+        </FilterField>
       }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -148,8 +149,8 @@ export default async function DuesReportPage({
                     </TR>
                   ))}
                 </tbody>
-                <tfoot>
-                  <TR className="border-t-2 border-border-strong bg-surface-sunken">
+                <TFoot>
+                  <TotalRow>
                     <TD className="font-semibold">{t.reports.grandTotalRow}</TD>
                     {AGING_BUCKETS.map((bucket) => (
                       <TD key={bucket} numeric>
@@ -170,8 +171,8 @@ export default async function DuesReportPage({
                         className="font-bold"
                       />
                     </TD>
-                  </TR>
-                </tfoot>
+                  </TotalRow>
+                </TFoot>
               </TableScroll>
             </div>
 

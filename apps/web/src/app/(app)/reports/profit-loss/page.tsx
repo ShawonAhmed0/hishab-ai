@@ -3,7 +3,7 @@ import type { Dictionary, Money } from "@hishabai/shared";
 import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { MoneyText } from "@/components/ui/money";
 import { StatTile } from "@/components/ui/stat-tile";
-import { TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import { TD, TFoot, TH, THead, TR, TableScroll, TotalRow } from "@/components/ui/table";
 import { ReportFrame, periodFrom } from "@/components/reports/report-frame";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
@@ -136,14 +136,14 @@ function Section({
               </TR>
             ))}
           </tbody>
-          <tfoot>
-            <TR className="border-t-2 border-border-strong bg-surface-sunken">
+          <TFoot>
+            <TotalRow>
               <TD className="font-semibold">{t.reports.sectionTotal(title)}</TD>
               <TD numeric>
                 <MoneyText value={total} size="sm" symbol={false} tone={tone} className="font-bold" />
               </TD>
-            </TR>
-          </tfoot>
+            </TotalRow>
+          </TFoot>
         </TableScroll>
       )}
     </Card>
