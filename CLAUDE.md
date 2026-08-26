@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 236 passing instead of 357. Check the count.
+skip** and you get 236 passing instead of 361. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -175,6 +175,16 @@ only and must never be set in Vercel.
 
 Any new read path is a second way into the data and gets its own isolation
 test rather than inheriting trust from the one beside it.
+
+**Revoking a membership has to close both doors.** `removeMember` sets
+`company_members.is_active = false`, and that one column is read by
+`app.resolve_session` (so the session stops naming a role) *and* by
+`app.is_member`, which every `tenant_isolation` policy calls (so the rows stop
+coming back). The second is the half that matters: a stale session object still
+claiming the company and the role gets nothing, because RLS asks the database
+rather than the caller. Dropping the `is_active` clause from `is_member` alone
+leaves every revoked member still reading, and there is a test that fails when
+you do.
 
 ### RLS does not check the ids you *write*
 

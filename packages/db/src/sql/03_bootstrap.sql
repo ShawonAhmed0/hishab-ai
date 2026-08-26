@@ -167,6 +167,7 @@ declare
   v_actor uuid := app.current_user_id();
   v_target uuid;
   v_name text;
+  v_matches int;
 begin
   if v_actor is null then
     raise exception 'লগইন প্রয়োজন' using errcode = '42501';
@@ -180,15 +181,28 @@ begin
     raise exception 'ব্যবহারকারী যোগ করার অনুমতি আপনার নেই' using errcode = '42501';
   end if;
 
-  select id, full_name into v_target, v_name
+  -- No `limit 1` on an unordered read. `profiles.phone` is not unique, and two
+  -- accounts sharing a number is ordinary in a family business — a phone gets
+  -- handed to whoever is at the counter. Picking one of them arbitrarily adds
+  -- the wrong person to the company's books, silently and unrepeatably. Ask
+  -- instead: the admin knows which colleague they meant.
+  select count(*) into v_matches
     from profiles
-   where phone = regexp_replace(p_phone, '[^0-9+]', '', 'g')
-   limit 1;
+   where phone = regexp_replace(p_phone, '[^0-9+]', '', 'g');
 
-  if v_target is null then
+  if v_matches = 0 then
     raise exception 'এই নম্বরে কোনো HishabAI অ্যাকাউন্ট নেই। আগে রেজিস্টার করতে বলুন।'
       using errcode = 'P0002';
   end if;
+
+  if v_matches > 1 then
+    raise exception 'এই নম্বরে একাধিক অ্যাকাউন্ট আছে। আলাদা নম্বর ব্যবহার করতে বলুন।'
+      using errcode = 'P0002';
+  end if;
+
+  select id, full_name into v_target, v_name
+    from profiles
+   where phone = regexp_replace(p_phone, '[^0-9+]', '', 'g');
 
   -- Re-adding somebody who was removed restores them rather than failing on
   -- the primary key, which is what "যোগ করুন" means to the person clicking it.

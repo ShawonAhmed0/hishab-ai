@@ -52,6 +52,8 @@ import {
 } from "./master-data";
 import { createRecipe } from "./recipes";
 import { getNotifications, markAllNotificationsRead } from "./notifications";
+import { addMember, removeMember } from "./users";
+import { getMembership, resolveSession } from "./companies";
 import { getSettings } from "./settings";
 import { overridePinIsSet, updateOverridePin } from "./overrides";
 import type { DuplicateCandidate } from "./confirmations";
@@ -3312,5 +3314,108 @@ describeDb("সময়মতো চলা কাজ", () => {
     expect(report.sent).toBe(0);
     // And nothing leaked into the company that does exist.
     expect((await listDeliveries(tenant.session, 200)).length).toBe(before);
+  });
+});
+
+/**
+ * Revoking access.
+ *
+ * `resolveSession` says the role is read from `company_members` on every
+ * request "so revoking access takes effect on the next click". That is a
+ * security claim and nothing was checking it — and it has two halves, because
+ * a session lookup that says no is worth very little if the rows come back
+ * anyway.
+ */
+describeDb("সদস্যপদ বাতিল", () => {
+  let tenant: Tenant;
+  let colleagueId: string;
+  let colleaguePhone: string;
+
+  beforeAll(async () => {
+    tenant = await makeTenant("Revoke");
+
+    // A real second person: a profile of their own, added the way the users
+    // screen adds one.
+    //
+    // The number is unique per run on purpose. `profiles` outlives a tenant —
+    // dropTenant only removes the tenant's own — so a fixed number would leave
+    // one behind on every run, and `add_member_by_phone` now refuses a number
+    // that matches more than one account rather than guessing between them.
+    colleaguePhone = `019${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+    colleagueId = randomUUID();
+    await withUser(colleagueId, (tx) =>
+      tx.execute(sql`select app.ensure_profile('সহকর্মী', ${colleaguePhone})`),
+    );
+    await addMember(tenant.session, colleaguePhone, "operator");
+    await seedParty(tenant, "যে কাস্টমারকে দেখা যাবে না");
+  }, 60_000);
+
+  afterAll(async () => {
+    await dropTenant(tenant);
+    // The colleague's profile is not the tenant's to drop, so it is cleaned up
+    // here. A test that leaves rows behind is a test that passes once.
+    await withUser(colleagueId, (tx) =>
+      tx.execute(sql`delete from profiles where id = ${colleagueId}::uuid`),
+    );
+    await closeDb();
+  }, 60_000);
+
+  const colleagueSession = () => ({
+    userId: colleagueId,
+    companyId: tenant.companyId,
+    role: "operator" as const,
+  });
+
+  async function partiesVisibleTo(session: ReturnType<typeof colleagueSession>) {
+    const rows = (await withTenant(session, (tx) =>
+      tx.execute<{ n: number }>(sql`select count(*)::int as n from parties`),
+    )) as unknown as { n: number }[];
+    return rows[0]!.n;
+  }
+
+  it("lets a member in while the membership is active", async () => {
+    expect(await getMembership(colleagueId, tenant.companyId)).toEqual({ role: "operator" });
+    expect(await partiesVisibleTo(colleagueSession())).toBeGreaterThan(0);
+  });
+
+  it("closes both doors at once when the membership is revoked", async () => {
+    await removeMember(tenant.session, colleagueId);
+
+    // The session lookup stops naming a role…
+    expect(await getMembership(colleagueId, tenant.companyId)).toBeNull();
+    const resolved = await resolveSession(colleagueId, tenant.companyId);
+    expect(resolved.role).toBeNull();
+    expect(resolved.companies).toEqual([]);
+
+    // …and, the half that actually matters, the rows stop coming back even
+    // when a stale session object still claims the company and the role. RLS
+    // reads company_members itself; it does not take the caller's word.
+    expect(await partiesVisibleTo(colleagueSession())).toBe(0);
+  });
+
+  it("refuses a phone number that matches more than one account", async () => {
+    // Two accounts, one number — a phone handed to whoever is at the counter.
+    // Picking one arbitrarily adds the wrong person to the company's books,
+    // silently and differently each time.
+    const twinId = randomUUID();
+    try {
+      await withUser(twinId, (tx) =>
+        tx.execute(sql`select app.ensure_profile('একই নম্বরের কেউ', ${colleaguePhone})`),
+      );
+
+      await expect(
+        addMember(tenant.session, colleaguePhone, "operator"),
+      ).rejects.toThrow(/একাধিক অ্যাকাউন্ট/);
+    } finally {
+      await withUser(twinId, (tx) =>
+        tx.execute(sql`delete from profiles where id = ${twinId}::uuid`),
+      );
+    }
+  });
+
+  it("refuses to let an admin remove themselves", async () => {
+    // The policy on company_members only accepts writes from an admin, so the
+    // last one leaving would close the door behind them.
+    await expect(removeMember(tenant.session, tenant.userId)).rejects.toThrow();
   });
 });
