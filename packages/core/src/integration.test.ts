@@ -1304,6 +1304,48 @@ describeDb("উৎপাদন, স্টক সমন্বয় and অন্
     ).toBe(false);
   });
 
+  it("treats a wildcard in the search box as a character, not a wildcard", async () => {
+    // `%` and `_` are LIKE metacharacters. Unescaped they are not an injection
+    // — the pattern is a bound parameter either way — but they give a wrong
+    // answer: "১০০%" matches every name containing ১০০, and a party genuinely
+    // called "১০০% খাঁটি" cannot be told apart from one called "১০০ টাকার".
+    //
+    // Both pairs below are chosen so the escaped and unescaped answers differ.
+    await seedParty(tenant, "১০০% খাঁটি সরিষা");
+    await seedParty(tenant, "১০০ টাকার দোকান");
+    await seedParty(tenant, "A_B ট্রেডিং");
+    await seedParty(tenant, "AXB ট্রেডিং");
+
+    const percent = await search(tenant.session, "১০০%");
+    expect(percent.parties.map((p) => p.name)).toEqual(["১০০% খাঁটি সরিষা"]);
+
+    const underscore = await search(tenant.session, "A_B");
+    expect(underscore.parties.map((p) => p.name)).toEqual(["A_B ট্রেডিং"]);
+  });
+
+  it("bounds how long a search term can be", async () => {
+    // ilike costs pattern-length x row-length per row, so an unbounded term is
+    // an authenticated user's way of making their own company's search slow.
+    //
+    // Truncating rather than refusing only differs from refusing for a term
+    // longer than anything it could match — so the case worth testing is the
+    // one where the cap still helps: a genuinely long name, found by its first
+    // 120 characters.
+    const longName = `দীর্ঘ নামের প্রতিষ্ঠান ${"ক".repeat(120)}`;
+    expect(longName.length).toBeGreaterThan(120);
+    await seedParty(tenant, longName);
+
+    const found = await search(tenant.session, longName);
+    expect(found.query.length).toBe(120);
+    expect(found.parties.map((p) => p.name)).toContain(longName);
+
+    // And a term longer than the cap that matches nothing still matches
+    // nothing — it just does so without scanning a 200-character pattern.
+    const nonsense = await search(tenant.session, "য".repeat(300));
+    expect(nonsense.query.length).toBe(120);
+    expect(nonsense.parties).toEqual([]);
+  });
+
   it("finds a voucher by the taka, without the poisha", async () => {
     // Nobody remembers ৳1,234.56 as ৳1,234.56. Exact equality meant the only
     // findable amounts were the ones that happened to be round.

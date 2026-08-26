@@ -24,7 +24,7 @@ npm test && npm run build
 ```
 
 `npm test` needs `DATABASE_URL`; without it the integration tests **silently
-skip** and you get 236 passing instead of 361. Check the count.
+skip** and you get 236 passing instead of 363. Check the count.
 
 The suite is two vitest projects (`vitest.workspace.ts`): `packages` runs in
 node, `web` runs the `.test.tsx` component tests in jsdom with its own setup
@@ -212,6 +212,12 @@ already built from `tenantQuery`.
 Arbitrary user text cannot go through it. That is why `search()` uses
 `withTenant` with bound parameters and pays four round trips — on a keystroke
 the user chose to make, rather than on every page load.
+
+Bound parameters stop the injection; they do not stop `%` and `_`, which are
+LIKE metacharacters and which the search box treats as prose. `likePattern`
+escapes them, so "১০০%" finds the shop actually called that instead of every
+name containing ১০০. The term is capped at 120 characters as well: `ilike` costs
+pattern-length × row-length per row.
 
 Prepared statements depend on the pooler port: **:5432 session mode** keeps a
 dedicated backend and is safe, **:6543 transaction mode** is not.

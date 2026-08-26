@@ -58,12 +58,40 @@ const EMPTY: Omit<SearchResults, "query"> = {
   total: 0,
 };
 
+/**
+ * Longer than any name somebody types into a search box.
+ *
+ * `ilike` costs roughly pattern-length × row-length per row, so an unbounded
+ * term is an authenticated user's way of making their own company's search
+ * slow.
+ *
+ * Truncating rather than refusing, because the two differ only for a term
+ * longer than anything it could match: a 200-character paste finds nothing
+ * either way, while a genuinely long name is still found by its first 120
+ * characters. `query` comes back on the result so the screen can show what was
+ * actually searched for.
+ */
+const MAX_QUERY = 120;
+
+/**
+ * `%` and `_` are LIKE metacharacters, and the search box is prose.
+ *
+ * Not an injection — the pattern is a bound parameter either way — but an
+ * unescaped `%` matches anything, so searching "১০০%" returns every party whose
+ * name contains ১০০, and a shop genuinely called "১০০% খাঁটি" cannot be found
+ * by its own name. Backslash is Postgres's default LIKE escape, so escaping it
+ * first and then the two metacharacters is all this needs.
+ */
+function likePattern(query: string): string {
+  return `%${query.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+}
+
 export async function search(session: Session, rawQuery: string): Promise<SearchResults> {
-  const query = rawQuery.trim();
+  const query = rawQuery.trim().slice(0, MAX_QUERY);
   // One character matches most of the database and helps nobody.
   if (query.length < 2) return { query, ...EMPTY };
 
-  const pattern = `%${query}%`;
+  const pattern = likePattern(query);
   // Only when the whole term is a number — "1,20,000" and "80000" both count,
   // "SALE-000001" does not.
   const digits = query.replace(/[,\s]/g, "");
