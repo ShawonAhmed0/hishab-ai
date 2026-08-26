@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import {
@@ -142,14 +143,31 @@ const AXIS = "var(--color-subtle-foreground)";
  * short enough that the final figures are on screen before anyone has finished
  * reading the headline above them.
  */
-const ANIMATE = true;
 const ANIMATE_MS = 750;
+
+function useChartAnimation(): boolean {
+  // Start still so the server and the first client paint agree. Motion is
+  // enabled after hydration only when the operating-system preference allows
+  // it; CSS cannot reach Recharts' JavaScript interpolation loop.
+  const [animate, setAnimate] = React.useState(false);
+
+  React.useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setAnimate(!query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return animate;
+}
 
 /** One animation per dataset, not one per render. See `ANIMATE`. */
 const seriesKey = (data: { period: string }[]) => data.map((d) => d.period).join(",");
 
 export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
+  const animate = useChartAnimation();
   const onSegmentClick = useSegmentClick(data);
   const rows = data.map((d) => ({
     period: d.period,
@@ -189,7 +207,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           fill="var(--color-credit)"
           radius={[6, 6, 0, 0]}
           maxBarSize={26}
-          isAnimationActive={ANIMATE}
+          isAnimationActive={animate}
           animationDuration={ANIMATE_MS}
           animationEasing="ease-out"
         />
@@ -199,7 +217,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           fill="var(--color-debit)"
           radius={[6, 6, 0, 0]}
           maxBarSize={26}
-          isAnimationActive={ANIMATE}
+          isAnimationActive={animate}
           animationDuration={ANIMATE_MS}
           animationBegin={120}
           animationEasing="ease-out"
@@ -211,6 +229,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
 
 export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
+  const animate = useChartAnimation();
   const onSegmentClick = useSegmentClick(data);
   const rows = data.map((d) => ({
     period: d.period,
@@ -229,7 +248,8 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
       >
         <defs>
           <linearGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.24} />
+            {/* The fill can be the bright brand — nothing is read off it. */}
+            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.28} />
             <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.02} />
           </linearGradient>
         </defs>
@@ -254,10 +274,12 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           type="monotone"
           dataKey="sales"
           name={t.dashboard.seriesSales}
-          stroke="var(--color-primary)"
+          // The stroke is the data, so it takes the ink: the fill green is
+          // 2.2:1 on white and a 2px line of it is not a line anybody sees.
+          stroke="var(--color-primary-ink)"
           strokeWidth={2}
           fill="url(#salesFill)"
-          isAnimationActive={ANIMATE}
+          isAnimationActive={animate}
           animationDuration={ANIMATE_MS}
           animationEasing="ease-out"
         />
@@ -271,7 +293,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           strokeWidth={2}
           strokeDasharray="5 4"
           fill="none"
-          isAnimationActive={ANIMATE}
+          isAnimationActive={animate}
           animationDuration={ANIMATE_MS}
           animationBegin={150}
           animationEasing="ease-out"
@@ -295,6 +317,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
  */
 export function ProfitTrendChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
+  const animate = useChartAnimation();
   const onSegmentClick = useSegmentClick(data);
   const rows = data.map((d) => ({ period: d.period, profit: d.profit }));
   const anyLoss = rows.some((r) => r.profit < 0);
@@ -342,7 +365,7 @@ export function ProfitTrendChart({ data }: { data: ChartPoint[] }) {
           fill="url(#profitFill)"
           dot={{ r: 3, strokeWidth: 0, fill: "var(--color-credit)" }}
           activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-surface)" }}
-          isAnimationActive={ANIMATE}
+          isAnimationActive={animate}
           animationDuration={ANIMATE_MS}
           animationEasing="ease-out"
         />

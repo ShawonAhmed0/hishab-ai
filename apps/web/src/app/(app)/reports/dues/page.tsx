@@ -117,7 +117,7 @@ export default async function DuesReportPage({
                       <TD>
                         <Link
                           href={`/${isReceivable ? "customers" : "vendors"}/${row.partyId}`}
-                          className="font-medium text-primary hover:underline"
+                          className="font-medium text-primary-ink hover:underline"
                         >
                           {row.name}
                         </Link>

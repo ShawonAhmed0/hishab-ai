@@ -252,14 +252,18 @@ export default async function DashboardPage({
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div
-        className="rise flex flex-wrap items-end justify-between gap-3"
+        className="rise flex flex-wrap items-end justify-between gap-4"
         style={{ "--rise-delay": "0ms" } as CSSProperties}
       >
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t.nav.dashboard}</h1>
-          <p className="text-sm text-muted-foreground">{t.shell.motto}</p>
+        <div className="max-w-2xl">
+          <p className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-primary-ink">
+            <span className="h-px w-6 bg-primary/50" aria-hidden />
+            HishabAI
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{t.nav.dashboard}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t.shell.motto}</p>
         </div>
 
         <div className="flex flex-wrap items-end gap-2 no-print">
@@ -282,7 +286,7 @@ export default async function DashboardPage({
         the deltas below always say what they are measured against.
       */}
       <div
-        className="rise flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface-sunken px-3 py-2.5 no-print"
+        className="rise flex flex-wrap items-end justify-between gap-4 rounded-xl border border-border bg-surface/90 px-4 py-3.5 shadow-card backdrop-blur no-print"
         style={{ "--rise-delay": "60ms" } as CSSProperties}
       >
         <PeriodChips choices={periodChoices} label={t.dashboard.rangeHeading} />
@@ -322,7 +326,7 @@ export default async function DashboardPage({
         <h2 id="figures-heading" className="sr-only">
           {t.dashboard.figuresHeading}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             index={0}
             label={t.dashboard.monthIncome}
@@ -481,7 +485,7 @@ export default async function DashboardPage({
           <Card className="rise" style={{ "--rise-delay": "500ms" } as CSSProperties}>
             <CardHeader>
               <CardTitle>{t.dashboard.dueCustomers}</CardTitle>
-              <Link href="/customers" className="text-sm text-primary hover:underline">
+              <Link href="/customers" className="text-sm text-primary-ink hover:underline">
                 {t.actions.viewAll}
               </Link>
             </CardHeader>
@@ -523,7 +527,7 @@ export default async function DashboardPage({
       <Card className="rise" style={{ "--rise-delay": "560ms" } as CSSProperties}>
         <CardHeader>
           <CardTitle>{t.dashboard.recentTransactions}</CardTitle>
-          <Link href="/transactions" className="text-sm text-primary hover:underline">
+          <Link href="/transactions" className="text-sm text-primary-ink hover:underline">
             {t.actions.viewAll}
           </Link>
         </CardHeader>
@@ -562,7 +566,7 @@ export default async function DashboardPage({
                       <TD className="whitespace-nowrap">
                         <Link
                           href={`/transactions/${row.id}`}
-                          className="num text-primary hover:underline"
+                          className="num text-primary-ink hover:underline"
                         >
                           {row.voucherNo}
                         </Link>

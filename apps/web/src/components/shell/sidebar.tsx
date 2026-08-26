@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { BrandMark } from "@/components/brand-mark";
 import { NAV_GROUPS, NAV_ITEMS, type NavGroup } from "./nav-items";
 import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
@@ -34,19 +36,22 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
   return (
     <nav
       aria-label={t.shell.mainMenu}
-      className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex"
+      className="no-print relative hidden w-[17rem] shrink-0 flex-col overflow-hidden bg-[#171b3d] text-white shadow-[10px_0_36px_-28px_rgba(19,23,55,0.9)] lg:flex"
     >
       <Link
         href="/dashboard"
-        className="flex items-center gap-2.5 border-b border-border px-4 py-4"
+        className="flex items-center gap-3 border-b border-white/10 px-5 py-[1.125rem] transition-colors duration-200 hover:bg-white/[0.035]"
       >
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-on-primary">
-          <Wallet className="size-4" aria-hidden />
+        <BrandMark className="size-9 shrink-0" decorative />
+        <span className="min-w-0">
+          <span className="block font-bold tracking-[-0.025em]">HishabAI</span>
+          <span className="block truncate text-[0.6875rem] text-white/60">
+            {t.shell.tagline}
+          </span>
         </span>
-        <span className="font-bold tracking-tight">HishabAI</span>
       </Link>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-2 pt-3">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-3 pt-5">
         {NAV_GROUPS.map((group) => {
           const inGroup = items.filter((item) => item.group === group);
           // A role that cannot reach anything in a group gets no heading for
@@ -58,7 +63,7 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
             <section key={group} aria-labelledby={`nav-${group}`}>
               <h2
                 id={`nav-${group}`}
-                className="px-3 pb-1.5 text-[0.6875rem] font-semibold tracking-wide text-subtle-foreground uppercase"
+                className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.11em] text-white/60 uppercase"
               >
                 {t.navGroup[group as NavGroup]}
               </h2>
@@ -72,13 +77,26 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
                         href={item.href}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+                          "group relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2.5 text-sm font-medium transition-[color,background-color,transform] duration-200",
                           active
-                            ? "bg-primary-soft text-primary"
-                            : "text-muted-foreground hover:bg-surface-sunken hover:text-foreground",
+                            ? "bg-white/[0.11] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                            : "text-white/58 hover:translate-x-0.5 hover:bg-white/[0.055] hover:text-white",
                         )}
                       >
-                        <item.icon className="size-4 shrink-0" aria-hidden />
+                        <span
+                          className={cn(
+                            "absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-accent transition-transform duration-200",
+                            active ? "scale-y-100" : "scale-y-0",
+                          )}
+                          aria-hidden
+                        />
+                        <item.icon
+                          className={cn(
+                            "size-[1.125rem] shrink-0 transition-colors duration-200",
+                            active ? "text-[#f0bb63]" : "text-white/45 group-hover:text-white/80",
+                          )}
+                          aria-hidden
+                        />
                         {t.nav[item.label]}
                       </Link>
                     </li>
@@ -88,6 +106,12 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
             </section>
           );
         })}
+      </div>
+
+      <div className="border-t border-white/10 px-5 py-4">
+        <p className="max-w-[22ch] text-xs leading-relaxed text-white/60">
+          {t.shell.motto}
+        </p>
       </div>
     </nav>
   );
@@ -100,15 +124,24 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
 export function BottomNav({ allowed }: { allowed: string[] }) {
   const t = useT();
   const pathname = usePathname();
-  const shown = allowedItems(allowed)
-    .filter((item) => item.mobile)
-    .slice(0, 5);
+  const items = allowedItems(allowed);
+  const mobile = items.filter((item) => item.mobile);
+  const secondary = items.filter((item) => !item.mobile);
+  // Keep the bottom bar at five targets total. When a role has secondary
+  // destinations, the fifth slot becomes More and carries both those routes
+  // and the least-frequent mobile destination.
+  const shown = mobile.slice(0, secondary.length > 0 ? 4 : 5);
+  const overflow = [...mobile.slice(shown.length), ...secondary];
+  const overflowActive = overflow.some(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
+  const columns = shown.length + (overflow.length > 0 ? 1 : 0);
 
   return (
     <nav
       aria-label={t.shell.mainMenu}
-      className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
-      style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))` }}
+      className="no-print fixed inset-x-3 bottom-3 z-40 grid overflow-hidden rounded-2xl border border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-overlay backdrop-blur-xl lg:hidden"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {shown.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -119,15 +152,75 @@ export function BottomNav({ allowed }: { allowed: string[] }) {
             aria-current={active ? "page" : undefined}
             className={cn(
               // 44px minimum target height, with room for the label.
-              "flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-2 text-xs transition-colors duration-150",
-              active ? "text-primary" : "text-muted-foreground",
+              "group flex min-h-[3.75rem] flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium transition-colors duration-200",
+              active ? "text-primary-ink" : "text-muted-foreground",
             )}
           >
-            <item.icon className="size-5" aria-hidden />
+            <span
+              className={cn(
+                "flex size-7 items-center justify-center rounded-lg transition-colors duration-200",
+                active ? "bg-primary-soft" : "group-hover:bg-surface-sunken",
+              )}
+            >
+              <item.icon className="size-[1.125rem]" aria-hidden />
+            </span>
             <span className="truncate">{t.nav[item.label]}</span>
           </Link>
         );
       })}
+
+      {overflow.length > 0 ? (
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label={t.nav.more}
+              className={cn(
+                "group flex min-h-[3.75rem] cursor-pointer flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium transition-colors duration-200",
+                overflowActive ? "text-primary-ink" : "text-muted-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-lg transition-colors duration-200",
+                  overflowActive ? "bg-primary-soft" : "group-hover:bg-surface-sunken",
+                )}
+              >
+                <MoreHorizontal className="size-[1.125rem]" aria-hidden />
+              </span>
+              <span>{t.nav.more}</span>
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              side="top"
+              align="end"
+              sideOffset={10}
+              className="z-50 min-w-[13rem] rounded-xl border border-border bg-surface p-1.5 shadow-overlay"
+            >
+              {overflow.map((item) => {
+                const active =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <DropdownMenu.Item key={item.href} asChild>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors data-[highlighted]:bg-surface-sunken",
+                        active ? "font-semibold text-primary-ink" : "text-foreground",
+                      )}
+                    >
+                      <item.icon className="size-4 text-muted-foreground" aria-hidden />
+                      {t.nav[item.label]}
+                    </Link>
+                  </DropdownMenu.Item>
+                );
+              })}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      ) : null}
     </nav>
   );
 }
@@ -144,17 +237,15 @@ export function SidebarFrame() {
   return (
     <div
       aria-hidden
-      className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex"
+      className="no-print hidden w-[17rem] shrink-0 flex-col bg-[#171b3d] text-white lg:flex"
     >
-      <div className="flex items-center gap-2.5 border-b border-border px-4 py-4">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-on-primary">
-          <Wallet className="size-4" aria-hidden />
-        </span>
-        <span className="font-bold tracking-tight">HishabAI</span>
+      <div className="flex items-center gap-3 border-b border-white/10 px-5 py-[1.125rem]">
+        <BrandMark className="size-9 shrink-0" decorative />
+        <span className="font-bold tracking-[-0.025em]">HishabAI</span>
       </div>
-      <div className="flex flex-1 flex-col gap-0.5 p-2" aria-busy="true">
+      <div className="flex flex-1 flex-col gap-1 p-3 pt-5" aria-busy="true">
         {Array.from({ length: 9 }).map((_, index) => (
-          <span key={index} className="h-10 rounded-md bg-surface-sunken/60" />
+          <span key={index} className="h-10 rounded-lg bg-white/[0.045]" />
         ))}
       </div>
     </div>

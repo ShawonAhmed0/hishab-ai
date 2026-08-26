@@ -78,7 +78,7 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>
             <span className="inline-flex items-center gap-2">
-              <Building2 className="size-4 text-primary" aria-hidden />
+              <Building2 className="size-4 text-primary-ink" aria-hidden />
               {t.settings.companyProfile}
             </span>
           </CardTitle>
@@ -104,7 +104,7 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>
             <span className="inline-flex items-center gap-2">
-              <Wallet className="size-4 text-primary" aria-hidden />
+              <Wallet className="size-4 text-primary-ink" aria-hidden />
               {t.fields.paymentMethod}
             </span>
           </CardTitle>
@@ -189,7 +189,7 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>
               <span className="inline-flex items-center gap-2">
-                <Tags className="size-4 text-primary" aria-hidden />
+                <Tags className="size-4 text-primary-ink" aria-hidden />
                 {t.settings.categories}
               </span>
             </CardTitle>
@@ -245,7 +245,7 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle>
                 <span className="inline-flex items-center gap-2">
-                  <Ruler className="size-4 text-primary" aria-hidden />
+                  <Ruler className="size-4 text-primary-ink" aria-hidden />
                   {t.fields.unit}
                 </span>
               </CardTitle>
@@ -301,7 +301,7 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle>
                 <span className="inline-flex items-center gap-2">
-                  <Layers className="size-4 text-primary" aria-hidden />
+                  <Layers className="size-4 text-primary-ink" aria-hidden />
                   {t.settings.productCategories}
                 </span>
               </CardTitle>
@@ -339,7 +339,7 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>
             <span className="inline-flex items-center gap-2">
-              <Wrench className="size-4 text-primary" aria-hidden />
+              <Wrench className="size-4 text-primary-ink" aria-hidden />
               {t.fields.recipe}
             </span>
           </CardTitle>
@@ -403,7 +403,7 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>
               <span className="inline-flex items-center gap-2">
-                <CalendarClock className="size-4 text-primary" aria-hidden />
+                <CalendarClock className="size-4 text-primary-ink" aria-hidden />
                 {t.settings.policyTitle}
               </span>
             </CardTitle>
@@ -424,7 +424,7 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>
               <span className="inline-flex items-center gap-2">
-                <KeyRound className="size-4 text-primary" aria-hidden />
+                <KeyRound className="size-4 text-primary-ink" aria-hidden />
                 {t.override.setTitle}
               </span>
             </CardTitle>

@@ -6,22 +6,26 @@ import { cn } from "@/lib/utils";
 
 const button = cva(
   [
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md",
-    "font-medium transition-colors duration-150",
-    "disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg",
+    "font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out",
+    "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+    "active:translate-y-px",
     // Every clickable thing says so.
     "cursor-pointer",
   ],
   {
     variants: {
       variant: {
-        primary: "bg-primary text-on-primary shadow-card hover:bg-primary-hover",
+        primary:
+          "bg-primary text-on-primary shadow-card hover:-translate-y-px hover:bg-primary-hover hover:shadow-raised active:translate-y-0",
         secondary:
-          "border border-border-strong bg-surface text-foreground hover:bg-surface-sunken",
+          "border border-border-strong bg-surface text-foreground shadow-card hover:-translate-y-px hover:bg-surface-raised hover:shadow-raised active:translate-y-0",
         ghost: "text-muted-foreground hover:bg-surface-sunken hover:text-foreground",
-        accent: "bg-accent text-on-accent hover:brightness-95",
-        destructive: "bg-destructive text-on-destructive hover:brightness-95",
+        accent:
+          "bg-accent text-on-accent shadow-card hover:-translate-y-px hover:brightness-95 hover:shadow-raised active:translate-y-0",
+        destructive:
+          "bg-destructive text-on-destructive shadow-card hover:-translate-y-px hover:brightness-95 hover:shadow-raised active:translate-y-0",
       },
       size: {
         // 44px minimum on md and up — those are the sizes that meet a thumb.

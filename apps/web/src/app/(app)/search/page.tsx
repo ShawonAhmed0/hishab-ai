@@ -78,7 +78,7 @@ export default async function SearchPage({
               <CardHeader>
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
-                    <Users className="size-4 text-primary" aria-hidden />
+                    <Users className="size-4 text-primary-ink" aria-hidden />
                     {t.masterData.partiesHeading}
                   </span>
                 </CardTitle>
@@ -116,7 +116,7 @@ export default async function SearchPage({
               <CardHeader>
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
-                    <Boxes className="size-4 text-primary" aria-hidden />
+                    <Boxes className="size-4 text-primary-ink" aria-hidden />
                     {t.nav.inventory}
                   </span>
                 </CardTitle>
@@ -149,11 +149,11 @@ export default async function SearchPage({
               <CardHeader>
                 <CardTitle>
                   <span className="inline-flex items-center gap-2">
-                    <ArrowLeftRight className="size-4 text-primary" aria-hidden />
+                    <ArrowLeftRight className="size-4 text-primary-ink" aria-hidden />
                     {t.nav.transactions}
                   </span>
                 </CardTitle>
-                <Link href="/transactions" className="text-sm text-primary hover:underline">
+                <Link href="/transactions" className="text-sm text-primary-ink hover:underline">
                   {t.actions.viewAll}
                 </Link>
               </CardHeader>

@@ -71,7 +71,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         // Polite, not assertive: a save confirmation should not interrupt what
         // a screen reader is in the middle of saying.
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end"
+        className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 p-4 lg:inset-x-auto lg:bottom-0 lg:right-0 lg:items-end"
       >
         {toasts.map((toast) => {
           const { icon: Icon, className } = TONE[toast.tone];
@@ -79,7 +79,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               className={cn(
-                "stack-fade pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border p-3 shadow-overlay",
+                "stack-fade pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border p-3.5 shadow-overlay",
                 className,
               )}
             >

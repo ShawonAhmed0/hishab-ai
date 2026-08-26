@@ -106,17 +106,17 @@ export default async function ReportsPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {REPORTS.map((report) => (
-          <Card key={report.href} className="transition-colors hover:border-border-strong">
+          <Card key={report.href} variant="interactive">
             <Link href={report.href} className="block">
               <CardBody className="flex items-start gap-3">
-                <span className="rounded-md bg-surface-sunken p-2 text-primary">
+                <span className="rounded-xl bg-primary-soft p-2.5 text-primary-ink">
                   <report.icon className="size-5" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">{t.reports[report.title]}</span>
                   <span className="block text-sm text-muted-foreground">{t.reports[report.hint]}</span>
                 </span>
-                <ChevronRight className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
+                <ChevronRight className="mt-1 size-4 shrink-0 text-subtle-foreground" aria-hidden />
               </CardBody>
             </Link>
           </Card>

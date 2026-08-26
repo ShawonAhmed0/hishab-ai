@@ -93,7 +93,7 @@ export default async function CustomerHealthPage({
           </CardTitle>
           <Link
             href={winBackOnly ? "/customers/health" : "/customers/health?only=reactivation"}
-            className="text-sm text-primary hover:underline"
+            className="text-sm text-primary-ink hover:underline"
           >
             {winBackOnly ? t.actions.viewAll : t.activity.onlyReactivation}
           </Link>
@@ -132,7 +132,7 @@ export default async function CustomerHealthPage({
                       <TD>
                         <Link
                           href={`/customers/${customer.partyId}`}
-                          className="font-medium text-primary hover:underline"
+                          className="font-medium text-primary-ink hover:underline"
                         >
                           {customer.name}
                         </Link>

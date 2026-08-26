@@ -87,7 +87,7 @@ export default async function StockReportPage({
                       <TD>
                         <Link
                           href={`/inventory/${row.productId}`}
-                          className="font-medium text-primary hover:underline"
+                          className="font-medium text-primary-ink hover:underline"
                         >
                           {row.name}
                         </Link>

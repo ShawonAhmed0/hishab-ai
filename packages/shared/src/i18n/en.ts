@@ -30,6 +30,7 @@ export const en: Dictionary = {
     users: "Users",
     settings: "Settings",
     notifications: "Notifications",
+    more: "More",
   },
 
   navGroup: {
@@ -996,6 +997,7 @@ export const en: Dictionary = {
 
   shell: {
     mainMenu: "Main menu",
+    skipToContent: "Skip to content",
     company: "Company",
     switchCompany: "Switch company",
     searchPlaceholder: "Customers, products, memos, vouchers…",

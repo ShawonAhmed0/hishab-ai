@@ -142,7 +142,7 @@ export default async function ProductPage({
                           {movement.transactionId ? (
                             <Link
                               href={`/transactions/${movement.transactionId}`}
-                              className="num text-primary hover:underline"
+                              className="num text-primary-ink hover:underline"
                             >
                               {movement.voucherNo}
                             </Link>

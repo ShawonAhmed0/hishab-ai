@@ -38,7 +38,7 @@ export function PeriodChips({
           href={choice.href}
           aria-current={choice.active ? "page" : undefined}
           className={cn(
-            "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150",
+            "rounded-lg border px-3 py-1.5 text-xs font-medium transition-[color,background-color,border-color,transform] duration-200 active:translate-y-px",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
             choice.active
               ? "border-primary bg-primary text-on-primary"

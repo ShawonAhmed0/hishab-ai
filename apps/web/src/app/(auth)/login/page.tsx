@@ -27,8 +27,8 @@ function LoginForm() {
   const linkFailed = useSearchParams().get("error") === "link";
 
   return (
-    <Card>
-      <CardBody className="space-y-4">
+    <Card className="border-border/80 shadow-raised">
+      <CardBody className="space-y-5 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">{t.auth.loginTitle}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{t.auth.loginSubtitle}</p>
@@ -63,10 +63,10 @@ function LoginForm() {
         </form>
 
         <div className="flex items-center justify-between text-sm">
-          <Link href="/reset-password" className="text-primary hover:underline">
+          <Link href="/reset-password" className="text-primary-ink hover:underline">
             {t.auth.forgotPassword}
           </Link>
-          <Link href="/register" className="text-primary hover:underline">
+          <Link href="/register" className="text-primary-ink hover:underline">
             {t.auth.newAccount}
           </Link>
         </div>

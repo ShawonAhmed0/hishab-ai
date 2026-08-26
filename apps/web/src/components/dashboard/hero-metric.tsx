@@ -64,14 +64,22 @@ export function HeroMetric({
 
   return (
     <section
-      className="rise overflow-hidden rounded-lg border border-border bg-surface shadow-card"
+      className="rise overflow-hidden rounded-xl border border-border bg-surface shadow-card"
       style={{ "--rise-delay": "300ms" } as React.CSSProperties}
     >
       {/* A wash of the brand behind the headline figure, fading out before the
           plot starts. It marks this card as the one the page is about without
           spending a border, a badge or a second colour on saying so. */}
-      <div className="bg-gradient-to-b from-primary-soft/60 to-transparent">
-        <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-3">
+      <div className="relative overflow-hidden bg-primary-soft/55">
+        <span
+          className="pointer-events-none absolute -right-12 -top-20 size-48 rounded-full border-[32px] border-primary/5"
+          aria-hidden
+        />
+        <span
+          className="pointer-events-none absolute right-24 top-7 size-2 rounded-full bg-accent/55"
+          aria-hidden
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-3 p-5 pb-4 sm:p-6 sm:pb-5">
           <div className="min-w-0">
             <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
             <CountUp
@@ -79,7 +87,7 @@ export function HeroMetric({
               delayMs={380}
               durationMs={1100}
               className={cn(
-                "mt-1 block text-3xl font-bold tracking-tight sm:text-[2.5rem]",
+                "mt-1.5 block text-4xl font-bold tracking-[-0.035em] sm:text-[2.75rem]",
                 taka < 0 ? "text-debit" : taka > 0 ? "text-credit" : "text-foreground",
               )}
             />
@@ -93,7 +101,7 @@ export function HeroMetric({
           </div>
           <Link
             href={href}
-            className="shrink-0 rounded-md px-2 py-1 text-sm text-primary transition-colors duration-150 hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="shrink-0 rounded-lg border border-primary/10 bg-surface/55 px-3 py-1.5 text-sm font-medium text-primary-ink shadow-card transition-[background-color,border-color] duration-200 hover:border-primary/20 hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {t.actions.viewAll}
           </Link>
@@ -102,7 +110,7 @@ export function HeroMetric({
 
       {chart}
 
-      {footer ? <div className="border-t border-border p-4">{footer}</div> : null}
+      {footer ? <div className="border-t border-border p-4 sm:p-5">{footer}</div> : null}
     </section>
   );
 }

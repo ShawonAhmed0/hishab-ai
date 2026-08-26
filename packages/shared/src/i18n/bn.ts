@@ -39,6 +39,7 @@ export const nav = {
   users: "ব্যবহারকারী",
   settings: "সেটিংস",
   notifications: "বিজ্ঞপ্তি",
+  more: "আরও",
 } as const;
 
 /** Sidebar group headings — see NAV_GROUPS for why these three. */
@@ -988,6 +989,7 @@ export const monthsShort = [
  */
 export const shell = {
   mainMenu: "প্রধান মেনু",
+  skipToContent: "মূল অংশে যান",
   company: "কোম্পানি",
   switchCompany: "কোম্পানি পরিবর্তন করুন",
   searchPlaceholder: "কাস্টমার, পণ্য, মেমো, ভাউচার…",

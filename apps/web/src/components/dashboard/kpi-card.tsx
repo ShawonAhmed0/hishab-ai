@@ -14,6 +14,13 @@ const TONE: Record<string, string> = {
   neutral: "text-foreground",
 };
 
+const TONE_EDGE: Record<string, string> = {
+  credit: "bg-credit",
+  debit: "bg-debit",
+  due: "bg-due",
+  neutral: "bg-primary",
+};
+
 /**
  * A headline figure, what it did, and the shape it did it in.
  *
@@ -79,12 +86,16 @@ export function KpiCard<T extends string>({
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-2 px-4 pt-3.5">
+      <span
+        className={cn("absolute inset-x-4 top-0 h-0.5 rounded-b-full opacity-75", TONE_EDGE[tone])}
+        aria-hidden
+      />
+      <div className="flex items-start justify-between gap-2 px-4 pt-4 sm:px-5">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         {Icon ? (
           <span
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-sunken",
+              "flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-sunken",
               TONE[tone],
             )}
           >
@@ -93,11 +104,11 @@ export function KpiCard<T extends string>({
         ) : null}
       </div>
 
-      <div className="px-4">
+      <div className="px-4 sm:px-5">
         <CountUp
           value={taka}
           delayMs={step + 120}
-          className={cn("mt-1.5 block text-2xl sm:text-[1.75rem]", TONE[tone])}
+          className={cn("mt-2 block text-[1.75rem] sm:text-[1.875rem]", TONE[tone])}
         />
 
         {delta ? (
@@ -128,7 +139,7 @@ export function KpiCard<T extends string>({
   );
 
   const base = cn(
-    "rise lift block overflow-hidden rounded-lg border border-border bg-surface pb-1 shadow-card",
+    "rise lift relative block overflow-hidden rounded-xl border border-border bg-surface/95 pb-1 shadow-card",
     href && "cursor-pointer hover:border-border-strong",
   );
   const style = { "--rise-delay": `${step}ms` } as React.CSSProperties;

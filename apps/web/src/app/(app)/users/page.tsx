@@ -167,7 +167,7 @@ export default async function UsersPage() {
           <CardHeader>
             <CardTitle>
               <span className="inline-flex items-center gap-2">
-                <UserCog className="size-4 text-primary" aria-hidden />
+                <UserCog className="size-4 text-primary-ink" aria-hidden />
                 {t.users.whatRolesCanDo}
               </span>
             </CardTitle>
@@ -190,7 +190,7 @@ export default async function UsersPage() {
           <CardHeader>
             <CardTitle>
               <span className="inline-flex items-center gap-2">
-                <History className="size-4 text-primary" aria-hidden />
+                <History className="size-4 text-primary-ink" aria-hidden />
                 {t.users.recentActivity}
               </span>
             </CardTitle>

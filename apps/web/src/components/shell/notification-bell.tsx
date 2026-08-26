@@ -86,7 +86,7 @@ export function NotificationBell({
                     router.refresh();
                   })
                 }
-                className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
+                className="flex items-center gap-1 text-xs text-primary-ink hover:underline disabled:opacity-50"
               >
                 <Check className="size-3.5" aria-hidden />
                 {t.shell.markAllRead}

@@ -153,7 +153,7 @@ export default async function VendorsPage({
                         <TD>
                           <Link
                             href={`/vendors/${party.id}`}
-                            className="font-medium text-primary hover:underline"
+                            className="font-medium text-primary-ink hover:underline"
                           >
                             {party.name}
                           </Link>

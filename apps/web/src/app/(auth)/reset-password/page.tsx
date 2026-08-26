@@ -16,8 +16,8 @@ export default function ResetPasswordPage() {
   );
 
   return (
-    <Card>
-      <CardBody className="space-y-4">
+    <Card className="border-border/80 shadow-raised">
+      <CardBody className="space-y-5 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">{t.auth.resetTitle}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{t.auth.resetSubtitle}</p>
@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
         </form>
 
         <p className="text-center text-sm">
-          <Link href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-primary-ink hover:underline">
             {t.auth.backToLogin}
           </Link>
         </p>

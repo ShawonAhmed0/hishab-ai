@@ -39,23 +39,23 @@ export function Topbar({
   const [switching, setSwitching] = React.useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:px-4">
+    <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-1.5 border-b border-border/80 bg-background/85 px-2.5 backdrop-blur-xl sm:gap-2 sm:px-4 lg:px-5">
       {/* ---- company switcher ---- */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
             disabled={switching}
-            className="flex min-h-11 max-w-[15rem] cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="flex min-h-11 min-w-0 max-w-[11rem] cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition-colors duration-200 hover:bg-surface sm:max-w-[17rem] sm:px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-ink">
               <Building2 className="size-4" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">
                 {active?.nameBn || active?.name || t.shell.company}
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
+              <span className="hidden truncate text-xs text-muted-foreground sm:block">
                 {active ? t.role[active.role] : ""}
               </span>
             </span>
@@ -67,7 +67,7 @@ export function Topbar({
           <DropdownMenu.Content
             align="start"
             sideOffset={6}
-            className="z-50 min-w-[16rem] rounded-lg border border-border bg-surface p-1 shadow-overlay"
+            className="z-50 min-w-[16rem] rounded-xl border border-border bg-surface p-1.5 shadow-overlay"
           >
             <DropdownMenu.Label className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
               {t.shell.switchCompany}
@@ -95,7 +95,7 @@ export function Topbar({
                   </span>
                 </span>
                 {company.id === activeCompanyId ? (
-                  <Check className="size-4 shrink-0 text-primary" aria-hidden />
+                  <Check className="size-4 shrink-0 text-primary-ink" aria-hidden />
                 ) : null}
               </DropdownMenu.Item>
             ))}
@@ -114,7 +114,7 @@ export function Topbar({
       </DropdownMenu.Root>
 
       {/* ---- global search ---- */}
-      <form action="/search" className="ml-auto hidden max-w-sm flex-1 md:block">
+      <form action="/search" className="ml-auto hidden max-w-md flex-1 lg:block">
         <label className="sr-only" htmlFor="global-search">
           {t.actions.search}
         </label>
@@ -128,15 +128,22 @@ export function Topbar({
             name="q"
             type="search"
             placeholder={t.shell.searchPlaceholder}
-            className="h-10 w-full rounded-md border border-border-strong bg-surface-sunken pl-9 pr-3 text-sm placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            className="h-10 w-full rounded-xl border border-border bg-surface pl-9 pr-3 text-sm shadow-card placeholder:text-subtle-foreground transition-[border-color,box-shadow] duration-200 hover:border-border-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
         </div>
       </form>
 
       {/* ---- alerts and appearance ---- */}
-      <div className="ml-auto flex items-center md:ml-0">
+      <div className="ml-auto flex items-center rounded-xl sm:border sm:border-border sm:bg-surface/80 sm:p-0.5 sm:shadow-card lg:ml-0">
+        <Button asChild variant="ghost" size="icon" className="lg:hidden">
+          <Link href="/search" aria-label={t.actions.search}>
+            <Search className="size-5" aria-hidden />
+          </Link>
+        </Button>
         <LocaleToggle />
-        <ThemeToggle />
+        <span className="hidden sm:contents">
+          <ThemeToggle />
+        </span>
         {notifications}
       </div>
 
@@ -144,7 +151,7 @@ export function Topbar({
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <Button variant="ghost" size="icon" aria-label={userName}>
-            <span className="flex size-8 items-center justify-center rounded-full bg-surface-sunken text-sm font-semibold">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary-soft text-sm font-semibold text-primary-ink">
               {userName.slice(0, 1)}
             </span>
           </Button>
@@ -153,11 +160,18 @@ export function Topbar({
           <DropdownMenu.Content
             align="end"
             sideOffset={6}
-            className="z-50 min-w-[12rem] rounded-lg border border-border bg-surface p-1 shadow-overlay"
+            className="z-50 min-w-[12rem] rounded-xl border border-border bg-surface p-1.5 shadow-overlay"
           >
             <div className="px-2 py-1.5">
               <p className="truncate text-sm font-medium">{userName}</p>
             </div>
+            <DropdownMenu.Item
+              asChild
+              onSelect={(event) => event.preventDefault()}
+              className="sm:hidden"
+            >
+              <ThemeToggle showLabel />
+            </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-border" />
             <DropdownMenu.Item
               onSelect={() => void onSignOut()}
@@ -186,16 +200,16 @@ export function TopbarFrame() {
   return (
     <header
       aria-busy="true"
-      className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-surface px-3 md:px-4"
+      className="no-print sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border/80 bg-background/85 px-2.5 backdrop-blur-xl sm:px-4 lg:px-5"
     >
       <div className="flex max-w-[15rem] items-center gap-2 px-2 py-1.5" aria-hidden>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary-ink">
           <Building2 className="size-4" aria-hidden />
         </span>
         <span className="h-4 w-28 rounded bg-surface-sunken" />
       </div>
 
-      <form action="/search" className="ml-auto hidden max-w-sm flex-1 md:block">
+      <form action="/search" className="ml-auto hidden max-w-md flex-1 lg:block">
         <label className="sr-only" htmlFor="global-search-frame">
           {t.actions.search}
         </label>
@@ -209,13 +223,13 @@ export function TopbarFrame() {
             name="q"
             type="search"
             placeholder={t.shell.searchPlaceholder}
-            className="h-10 w-full rounded-md border border-border-strong bg-surface-sunken pl-9 pr-3 text-sm placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            className="h-10 w-full rounded-xl border border-border bg-surface pl-9 pr-3 text-sm shadow-card placeholder:text-subtle-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
         </div>
       </form>
 
       <span
-        className="ml-auto size-8 shrink-0 rounded-full bg-surface-sunken md:ml-0"
+        className="ml-auto size-9 shrink-0 rounded-lg bg-surface-sunken lg:ml-0"
         aria-hidden
       />
     </header>

@@ -13,27 +13,45 @@
 
 @theme {
   /* --- Brand ------------------------------------------------------------- */
-  --color-primary: #33408f;
-  --color-primary-hover: #3d4da8;
-  --color-primary-soft: #eef0fa;
-  --color-on-primary: #ffffff;
-  --color-secondary: #5b6ac4;
-  --color-accent: #b06a15;
-  --color-accent-soft: #fbf3e6;
-  --color-on-accent: #1a1204;
+  /* Bright green, and it is split in two because one green cannot do both
+     jobs. A green vivid enough to read as *bright* sits at 2.2:1 against
+     white — fine under a button, illegible as a word. So:
 
-  /* --- Surfaces ---------------------------------------------------------- */
-  --color-background: #f5f6f8;
-  --color-surface: #ffffff;
+       --color-primary      the fill. Buttons, active chips, the tab
+                            underline, the ক্যাশ segment. Nothing but
+                            `--color-on-primary` is ever set on top of it.
+       --color-primary-ink  the same brand as *text* — links, an icon beside
+                            a heading, a chart stroke. 6.2:1 on white.
+
+     Anything that puts words on the brand takes the ink. Getting this wrong
+     is quiet: the colour still looks right and only the reading gets hard. */
+  --color-primary: #00c853;
+  --color-primary-hover: #00b84b;
+  --color-primary-ink: #06703a;
+  --color-primary-soft: #e4faec;
+  /* Near-black carrying the brand's own hue rather than pure black — 7.6:1. */
+  --color-on-primary: #04220f;
+  --color-secondary: #06703a;
+  --color-accent: #9b5a0e;
+  --color-accent-soft: #faf0df;
+  --color-on-accent: #ffffff;
+
+  /* --- Surfaces ----------------------------------------------------------
+     Neutral, with the faintest trace of the brand's hue rather than the
+     blue-grey these were under an indigo brand. Everything on this page is
+     already either brand green or money colour; a ground that leans blue
+     makes a third temperature out of what should be the quiet part. */
+  --color-background: #f3f5f3;
+  --color-surface: #fdfefd;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #eeeff3;
-  --color-border: #e3e5ea;
-  --color-border-strong: #c8ccd4;
+  --color-surface-sunken: #eaeeea;
+  --color-border: #dee3df;
+  --color-border-strong: #8b9590;
 
   /* --- Text -------------------------------------------------------------- */
   /* Slate rather than the generator's navy: navy-on-white loses too much
      contrast once tables get to eight columns. */
-  --color-foreground: #14161d;
+  --color-foreground: #0e1512;
   --color-muted-foreground: #565b68;
   /* Subtle, not invisible. This carries tile captions, account codes and every
      em-dash standing in for an empty cell, and at #78899f it sat at 3.4:1 on
@@ -45,20 +63,31 @@
      Money needs its own vocabulary. These are used for amounts and deltas
      only — never as decoration — and every one of them is paired with a
      label or an icon so colour is never the sole carrier of meaning. */
-  --color-credit: #047857; /* আয় / জমা */
-  --color-credit-soft: #e8f6f0;
+  /* আয় / জমা. Teal-emerald now, and that move is forced by the brand above:
+     at #047857 the money green and the brand green sat 14° apart in hue —
+     two greens on one screen that nobody can tell apart, where one means
+     "the shop earned this" and the other means "this is a button". Teal
+     opens the gap to 26° and still reads as the positive side of a ledger. */
+  --color-credit: #0f766e;
+  --color-credit-soft: #e6f5f3;
   --color-debit: #be123c; /* ব্যয় / খরচ */
   --color-debit-soft: #fdeef1;
   /* বকেয়া. One notch darker than amber-700, which cleared 4.5:1 on white but
      not on the striped total rows the aging report puts it on. */
   --color-due: #a04405;
   --color-due-soft: #fdf3e4;
-  --color-info: #33408f;
-  --color-info-soft: #eef0fa;
+  /* Blue, and no longer a copy of the brand. It carries the neutral badge and
+     the ব্যাংক segment, both of which sit beside money — a third green there
+     would be one more thing to tell apart. */
+  --color-info: #1d4ed8;
+  --color-info-soft: #eaf0fe;
 
   --color-destructive: #dc2626;
   --color-on-destructive: #ffffff;
-  --color-ring: #33408f;
+  /* A focus ring is a graphic, not text, so it answers to 3:1 rather than
+     4.5:1 — and the *fill* green is 2.2:1 on white, failing even that. The
+     ink is the half of the brand that can actually be seen. */
+  --color-ring: #06703a;
 
   /* --- Typography --------------------------------------------------------
      Two families by role: Bengali text needs a face with matras and
@@ -93,78 +122,111 @@
      The hairline in the first slot is the thing that actually separates a card
      from the page at rest; the blur only does work once it is lifted. */
   --shadow-card:
-    0 0 0 1px rgb(51 64 143 / 0.04),
-    0 1px 2px -1px rgb(20 22 29 / 0.06),
-    0 2px 6px -2px rgb(20 22 29 / 0.05);
+    0 0 0 1px rgb(6 112 58 / 0.05),
+    0 1px 2px -1px rgb(10 26 17 / 0.05),
+    0 8px 24px -18px rgb(35 43 91 / 0.22);
   --shadow-raised:
-    0 0 0 1px rgb(51 64 143 / 0.05),
-    0 2px 4px -2px rgb(20 22 29 / 0.08),
-    0 8px 16px -6px rgb(20 22 29 / 0.08);
+    0 0 0 1px rgb(6 112 58 / 0.06),
+    0 2px 4px -2px rgb(10 26 17 / 0.08),
+    0 14px 30px -12px rgb(35 43 91 / 0.18);
   --shadow-overlay:
-    0 0 0 1px rgb(51 64 143 / 0.06),
-    0 8px 12px -6px rgb(20 22 29 / 0.10),
-    0 24px 40px -12px rgb(20 22 29 / 0.16);
+    0 0 0 1px rgb(6 112 58 / 0.07),
+    0 8px 12px -6px rgb(10 26 17 / 0.10),
+    0 24px 40px -12px rgb(10 26 17 / 0.16);
 
   /* A field is a recess, not a card: the light that lifts a surface has to
      fall *into* an input or the two read as the same object. One inset
      hairline at the top edge is the whole effect — enough for the eye to
      place the plane, not enough to muddy a value typed into it. */
-  --shadow-control: inset 0 1px 2px rgb(20 22 29 / 0.05);
+  --shadow-control: inset 0 1px 2px rgb(10 26 17 / 0.05);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* --- Dark ------------------------------------------------------------------
-   Same roles, re-pointed. Credit/debit hues are lifted so they still clear
-   4.5:1 against a dark surface. */
+   Not the light theme with the lamps off.
+
+   This was a blue-black ground (#0c0e16) left over from an indigo brand, and
+   under a green one it read as a different product in the dark. The ground is
+   now a charcoal carrying the brand's own hue at a trace — enough that the
+   greens sit *in* the page rather than on top of it, nowhere near enough to
+   look tinted.
+
+   Two things this theme did badly, both fixed here:
+
+   - **Surfaces were too close together.** #14171f on #0c0e16 is barely two
+     steps, so a card and the page behind it separated only by their hairline,
+     and the raised step above them did nothing at all. The four steps below
+     are spaced to be visible.
+   - **Colour was pinned at one lightness.** Every accent was a 400-weight
+     tint, so a badge fill and its own text were the same value and the soft
+     backgrounds all read as the same grey.
+   --------------------------------------------------------------------------- */
 @layer base {
   .dark {
-    --color-background: #0c0e16;
-    --color-surface: #14171f;
-    --color-surface-raised: #1b1f29;
-    --color-surface-sunken: #101219;
-    --color-border: #262a35;
-    --color-border-strong: #3a4050;
+    --color-background: #080c0a;
+    --color-surface: #101613;
+    --color-surface-raised: #18211c;
+    --color-surface-sunken: #0b100d;
+    --color-border: #212c26;
+    /* Carries the input border and the totals rule, so it has to clear 3:1
+       against the surface it sits on — the old #626d82 was blue on green. */
+    --color-border-strong: #46564d;
 
-    --color-foreground: #e9eaee;
-    --color-muted-foreground: #a2a6b2;
-    --color-subtle-foreground: #8e93a1;
+    --color-foreground: #e8ede9;
+    --color-muted-foreground: #a3b0a8;
+    --color-subtle-foreground: #8b978f;
 
-    --color-primary: #8f9cf0;
-    --color-primary-hover: #a3aef4;
-    --color-primary-soft: #1c1f33;
-    --color-on-primary: #0c0e16;
+    /* On a dark ground the fill and the ink swap roles: a bright green is
+       highly legible as text here, and it is the *dark* text on it that has
+       to be checked. Both are, at 10:1 and 7.5:1. */
+    --color-primary: #3ddc84;
+    --color-primary-hover: #5ce89a;
+    --color-primary-ink: #4ade80;
+    --color-primary-soft: #0d2b1a;
+    --color-on-primary: #04220f;
 
+    --color-secondary: #4ade80;
     --color-accent: #e0a441;
-    --color-accent-soft: #251d10;
+    --color-accent-soft: #2a2010;
+    --color-on-accent: #1a1204;
 
+    /* Depth on a dark ground cannot come from a darker shadow — there is no
+       darker. It comes from the surface getting lighter and from a top edge
+       catching the light, which is what the inset highlight is. */
     --shadow-card:
-      0 0 0 1px rgb(255 255 255 / 0.05),
-      0 1px 2px -1px rgb(0 0 0 / 0.5);
+      inset 0 1px 0 0 rgb(255 255 255 / 0.03),
+      0 0 0 1px rgb(0 0 0 / 0.4),
+      0 1px 2px -1px rgb(0 0 0 / 0.6);
     --shadow-raised:
-      0 0 0 1px rgb(255 255 255 / 0.07),
-      0 6px 14px -6px rgb(0 0 0 / 0.6);
+      inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+      0 0 0 1px rgb(0 0 0 / 0.5),
+      0 8px 18px -8px rgb(0 0 0 / 0.7);
     --shadow-overlay:
-      0 0 0 1px rgb(255 255 255 / 0.09),
-      0 20px 36px -12px rgb(0 0 0 / 0.7);
+      inset 0 1px 0 0 rgb(255 255 255 / 0.06),
+      0 0 0 1px rgb(0 0 0 / 0.6),
+      0 24px 44px -14px rgb(0 0 0 / 0.85);
 
-    --color-credit: #34d399;
-    --color-credit-soft: #12291f;
+    /* The same 26° of separation the light theme has: teal for money in,
+       bright green for the brand. Two greens here would be worse than in
+       light, because on a dark ground both are bright. */
+    --color-credit: #2dd4bf;
+    --color-credit-soft: #0c2a29;
     --color-debit: #fb7185;
     --color-debit-soft: #2c1319;
     --color-due: #fbbf24;
     --color-due-soft: #2b2110;
-    --color-info: #8f9cf0;
-    --color-info-soft: #1c1f33;
+    --color-info: #7da2ff;
+    --color-info-soft: #131c33;
 
     --color-destructive: #f87171;
     /* Light-on-dark inverts here: the destructive hue is lifted to sit on a
        dark surface, so anything *placed on it* has to go dark or the pairing
        lands at 2.9:1. */
     --color-on-destructive: #2b0d10;
-    --color-ring: #8f9cf0;
+    --color-ring: #3ddc84;
 
-    --shadow-control: inset 0 1px 2px rgb(0 0 0 / 0.28);
+    --shadow-control: inset 0 1px 2px rgb(0 0 0 / 0.32);
   }
 }
 
@@ -201,6 +263,8 @@
     /* 1.6, not 1.5: at 1.5 the matra of one line touches the descender above. */
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    min-width: 20rem;
+    min-height: 100dvh;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -218,7 +282,9 @@
 
   ::selection {
     background: var(--color-primary-soft);
-    color: var(--color-primary);
+    /* The ink, not the fill: selected text still has to be read, and the
+       fill green on the soft green is 1.5:1. */
+    color: var(--color-primary-ink);
   }
 
   /* The parts nobody draws still carry the design.
@@ -264,7 +330,9 @@
   textarea,
   select,
   [contenteditable] {
-    caret-color: var(--color-primary);
+    /* Ink again — a caret is a 1px line, and the fill green all but
+       disappears against a white field. */
+    caret-color: var(--color-primary-ink);
   }
 
   /* Underlines clear the descenders Bengali is full of, and sit at a weight
@@ -331,8 +399,71 @@
   .card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
+  }
+
+  /* The application canvas: one soft light in the corner the page starts from,
+     and nothing else.
+
+     This used to carry a 32px graph-paper grid as well, on the reasoning that
+     it added depth "without putting decoration behind the data itself" — which
+     was not true, since that is exactly where it was. Behind six columns of
+     figures a ruled field is one more set of lines to read past, and it is the
+     stock background of every generated dashboard. The light stays because a
+     single off-centre gradient is atmosphere rather than pattern; it is fixed,
+     so it never swims while a long report scrolls. */
+  .app-shell {
+    isolation: isolate;
+  }
+
+  .app-main {
+    position: relative;
+    background-image:
+      radial-gradient(circle at 12% 0%, rgb(0 200 83 / 0.05), transparent 32rem);
+    background-attachment: fixed;
+  }
+
+  .dark .app-main {
+    background-image:
+      radial-gradient(circle at 12% 0%, rgb(61 220 132 / 0.07), transparent 34rem);
+  }
+
+  /* Auth is the one calm, expressive surface in an otherwise data-dense app,
+     and the only place a gradient earns its keep — nothing is being read off
+     it. Two offset lights, brass and brand green, on a deep green panel.
+     No ruled grid: it was there to say "ledger" and said "template". */
+  .auth-visual {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background-color: #08251a;
+    background-image:
+      radial-gradient(circle at 18% 16%, rgb(224 164 65 / 0.18), transparent 20rem),
+      radial-gradient(circle at 84% 74%, rgb(0 200 83 / 0.22), transparent 28rem);
+  }
+
+  .auth-visual::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(125deg, transparent 30%, rgb(4 20 13 / 0.5));
+  }
+
+  .auth-ledger-line {
+    transform-origin: left center;
+    animation: grow-x 0.75s var(--ease-out) both;
+    animation-delay: var(--ledger-delay, 0ms);
+  }
+
+  /* The repeated page-title classes predate the shell. This one scoped rule
+     gives every route the same confident hierarchy without coupling otherwise
+     unrelated server pages to a new component. */
+  .app-main h1 {
+    font-size: clamp(1.625rem, 2.2vw, 2rem);
+    line-height: 1.25;
+    letter-spacing: -0.025em;
   }
 
   .stack-fade {
@@ -440,14 +571,40 @@
   .no-print {
     display: none !important;
   }
+  html,
+  html.dark {
+    color-scheme: light;
+    --color-background: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ffffff;
+    --color-surface-sunken: #f3f4f6;
+    --color-border: #d1d5db;
+    --color-border-strong: #737b89;
+    --color-foreground: #000000;
+    --color-muted-foreground: #3f3f46;
+    --color-subtle-foreground: #52525b;
+    --color-primary: #05512a;
+    --color-credit: #0b5751;
+    --color-debit: #9f1239;
+    --color-due: #92400e;
+  }
   body {
     background: #fff;
     color: #000;
     font-size: 11pt;
   }
+  .app-main {
+    background: #fff;
+    padding: 0 !important;
+  }
   .card {
     box-shadow: none;
     border: 1px solid #999;
+    break-inside: avoid;
+  }
+  [data-slot="card"] {
+    background: #fff;
+    box-shadow: none;
     break-inside: avoid;
   }
 }

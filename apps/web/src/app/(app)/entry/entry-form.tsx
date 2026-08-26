@@ -1155,8 +1155,8 @@ export function EntryForm({
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className={cn("size-4", active ? "text-primary" : "text-subtle-foreground")} aria-hidden />
-                    <span className={cn("font-medium", active && "text-primary")}>
+                    <Icon className={cn("size-4", active ? "text-primary-ink" : "text-subtle-foreground")} aria-hidden />
+                    <span className={cn("font-medium", active && "text-primary-ink")}>
                       {t.transactionType[option]}
                     </span>
                   </span>
@@ -1174,7 +1174,7 @@ export function EntryForm({
             onClick={() => setShowMore((v) => !v)}
             // This is how উৎপাদন and স্টক সমন্বয় are reached at all, and at
             // the text's own height it was a 20px target on a phone.
-            className="-mx-2 flex min-h-11 cursor-pointer items-center gap-1 px-2 text-sm text-primary hover:underline"
+            className="-mx-2 flex min-h-11 cursor-pointer items-center gap-1 px-2 text-sm text-primary-ink hover:underline"
           >
             <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} aria-hidden />
             {showMore ? t.entry.showFewerTypes : t.entry.showMoreTypes}
@@ -2124,7 +2124,7 @@ export function EntryForm({
         {gate?.kind === "duplicate" ? (
           <Link
             href={`/transactions/${gate.candidate.id}` as Route}
-            className="inline-flex min-h-11 items-center text-primary hover:underline"
+            className="inline-flex min-h-11 items-center text-primary-ink hover:underline"
             target="_blank"
           >
             {t.duplicate.viewExisting} — {gate.candidate.voucherNo}

@@ -162,7 +162,7 @@ export default async function TransactionsPage({
                       <TD className="whitespace-nowrap">
                         <Link
                           href={`/transactions/${row.id}`}
-                          className="num text-primary hover:underline"
+                          className="num text-primary-ink hover:underline"
                         >
                           {row.voucherNo}
                         </Link>

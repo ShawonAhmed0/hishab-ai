@@ -18,7 +18,7 @@ import { THEME_COOKIE } from "@/lib/theme";
  * the paint should happen on the click. The cookie is only so the server can
  * render the right class next time and avoid a flash of the wrong theme.
  */
-export function ThemeToggle() {
+export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
   const t = useT();
   const [dark, setDark] = React.useState(false);
 
@@ -39,12 +39,16 @@ export function ThemeToggle() {
   return (
     <Button
       variant="ghost"
-      size="icon"
+      size={showLabel ? "md" : "icon"}
+      className={showLabel ? "w-full justify-start" : undefined}
       onClick={toggle}
       aria-label={dark ? t.shell.toLightTheme : t.shell.toDarkTheme}
       aria-pressed={dark}
     >
       {dark ? <Sun className="size-5" aria-hidden /> : <Moon className="size-5" aria-hidden />}
+      {showLabel ? (
+        <span>{dark ? t.shell.toLightTheme : t.shell.toDarkTheme}</span>
+      ) : null}
     </Button>
   );
 }

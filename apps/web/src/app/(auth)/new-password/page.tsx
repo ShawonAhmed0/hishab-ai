@@ -23,8 +23,8 @@ export default function NewPasswordPage() {
   const [state, action, pending] = useActionState<AuthState, FormData>(setNewPassword, {});
 
   return (
-    <Card>
-      <CardBody className="space-y-4">
+    <Card className="border-border/80 shadow-raised">
+      <CardBody className="space-y-5 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">{t.auth.newPasswordTitle}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">

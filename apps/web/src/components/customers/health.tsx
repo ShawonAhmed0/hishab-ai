@@ -119,7 +119,7 @@ export function DailyAlertBlock({
     <Card>
       <CardHeader>
         <CardTitle>{t.activity.dailyTitle}</CardTitle>
-        <Link href="/customers/health" className="text-sm text-primary hover:underline">
+        <Link href="/customers/health" className="text-sm text-primary-ink hover:underline">
           {t.actions.viewAll}
         </Link>
       </CardHeader>
@@ -185,7 +185,7 @@ export function FollowUpList({
                 <PhoneCall className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
                 <Link
                   href={`/customers/${customer.partyId}`}
-                  className="truncate text-primary hover:underline"
+                  className="truncate text-primary-ink hover:underline"
                 >
                   {t.activity.followUpLine(customer.name)}
                 </Link>
@@ -193,7 +193,7 @@ export function FollowUpList({
               {customer.phone ? (
                 <a
                   href={`tel:${customer.phone}`}
-                  className="num shrink-0 text-sm text-primary hover:underline"
+                  className="num shrink-0 text-sm text-primary-ink hover:underline"
                 >
                   {customer.phone}
                 </a>

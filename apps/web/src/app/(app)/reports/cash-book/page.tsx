@@ -156,7 +156,7 @@ export default async function CashBookPage({
                         {entry.transactionId ? (
                           <Link
                             href={`/transactions/${entry.transactionId}`}
-                            className="num text-primary hover:underline"
+                            className="num text-primary-ink hover:underline"
                           >
                             {entry.voucherNo}
                           </Link>

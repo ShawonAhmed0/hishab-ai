@@ -13,8 +13,8 @@ export default function RegisterPage() {
   const [state, action, pending] = useActionState<AuthState, FormData>(signUp, {});
 
   return (
-    <Card>
-      <CardBody className="space-y-4">
+    <Card className="border-border/80 shadow-raised">
+      <CardBody className="space-y-5 sm:p-6">
         <div>
           <h2 className="text-lg font-semibold">{t.auth.registerTitle}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{t.auth.registerSubtitle}</p>
@@ -59,7 +59,7 @@ export default function RegisterPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           {t.auth.haveAccount}{" "}
-          <Link href="/login" className="text-primary hover:underline">
+          <Link href="/login" className="text-primary-ink hover:underline">
             {t.auth.loginTitle}
           </Link>
         </p>

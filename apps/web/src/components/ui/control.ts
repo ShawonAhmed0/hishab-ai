@@ -13,7 +13,7 @@
  */
 
 export const controlBase = [
-  "h-11 w-full rounded-md border bg-surface px-3 text-base text-foreground",
+  "h-11 w-full rounded-lg border bg-surface px-3 text-base text-foreground",
   "placeholder:text-subtle-foreground",
   // A recess, per --shadow-control.
   "shadow-control",

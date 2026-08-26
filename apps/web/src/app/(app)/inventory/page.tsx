@@ -188,7 +188,7 @@ export default async function InventoryPage({
                         <TD>
                           <Link
                             href={`/inventory/${product.id}`}
-                            className="font-medium text-primary hover:underline"
+                            className="font-medium text-primary-ink hover:underline"
                           >
                             {product.nameBn}
                           </Link>

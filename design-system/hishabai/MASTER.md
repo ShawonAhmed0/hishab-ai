@@ -19,9 +19,10 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#33408F` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#3B82F6` | `--color-secondary` |
+| Primary (fill) | `#00C853` | `--color-primary` |
+| Primary (ink) | `#06703A` | `--color-primary-ink` |
+| On Primary | `#04220F` | `--color-on-primary` |
+| Secondary | `#06703A` | `--color-secondary` |
 | On Secondary | `#000000` | `--color-on-secondary` |
 | Accent/CTA | `#D97706` | `--color-accent` |
 | On Accent/CTA | `#000000` | `--color-on-accent` |
@@ -34,24 +35,47 @@
 | Border | `#DBEAFE` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
 | On Destructive | `#FFFFFF` | `--color-on-destructive` |
-| Ring | `#1E40AF` | `--color-ring` |
+| Ring | `#06703A` | `--color-ring` |
 
-**Color Notes:** Deep natural indigo (নীল) + brass highlights.
+**Color Notes:** Bright green brand, split fill/ink; money in teal, out in rose.
 
-> **OVERRIDE — do not regenerate this section.** The generator proposed
-> `#1E40AF`, which is Tailwind's `blue-800`: the default blue of every SaaS
-> dashboard, and a colour with no claim on this product. Replaced with a deep
-> desaturated indigo. Bengal was the world's indigo centre, so নীল is the one
-> blue this product can call its own, and unlike a violet it never competes
-> with the green and red that carry credit and debit.
+> **OVERRIDE — do not regenerate this section.**
 >
-> Everything outside the brand and the money semantics is near-neutral by
-> design. The ground moved off blue-grey (`#F6F8FB`) onto `#F5F6F8` so the only
-> colours on a screen are the brand and what the money is doing.
+> **The brand is two greens, and that is not a redundancy.** A green vivid
+> enough to read as *bright* sits at 2.2:1 against white — fine under a
+> button, illegible as a word. `--color-primary` is the fill (buttons, active
+> chips, the tab underline, the ক্যাশ segment) and nothing but
+> `--color-on-primary` is ever placed on it. `--color-primary-ink` is the same
+> brand as text — links, an icon beside a heading, a chart stroke — at 6.2:1
+> on white. Putting the fill where the ink belongs is a quiet failure: the
+> colour still looks right and only the reading gets hard.
+>
+> **Money moved to make room.** আয়/জমা was `#047857`, which sat 14° of hue
+> from the brand green — two greens on one screen that nobody can tell apart,
+> where one means "the shop earned this" and the other means "this is a
+> button". Credit is now a teal-emerald (`#0F766E` light, `#2DD4BF` dark),
+> which opens the gap to 26° and still reads as the positive side of a ledger.
+> ব্যয় stays rose and বকেয়া stays amber.
+>
+> **`--color-info` is a real blue** rather than a copy of the brand, which is
+> what it was under indigo. It carries the neutral badge and the ব্যাংক
+> segment, both of which sit beside money; a third green there would be one
+> more thing to tell apart.
+>
+> Everything outside the brand and the money semantics is near-neutral, with
+> the faintest trace of the brand hue rather than the blue-grey the surfaces
+> had under indigo. A ground that leans blue makes a third temperature out of
+> what should be the quiet part.
 >
 > Elevation is tinted with the brand hue rather than black, and each step
 > carries a hairline plus an offset blur — the hairline separates a card at
 > rest, the blur only does work once it is lifted.
+>
+> **Dark is not the light theme with the lamps off.** The ground is a charcoal
+> carrying a trace of the brand hue (`#080C0A`), the four surface steps are
+> spaced far enough apart to actually be seen — the old `#14171F` on `#0C0E16`
+> was barely two — and depth comes from an inset top highlight rather than a
+> darker shadow, because on a dark ground there is no darker.
 
 ### Typography
 

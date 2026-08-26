@@ -110,7 +110,7 @@ export default async function RegisterPage({
                         {row.partyId ? (
                           <Link
                             href={`/${isSale ? "customers" : "vendors"}/${row.partyId}`}
-                            className="font-medium text-primary hover:underline"
+                            className="font-medium text-primary-ink hover:underline"
                           >
                             {row.name}
                           </Link>
@@ -229,7 +229,7 @@ export default async function RegisterPage({
                             <TD>
                               <Link
                                 href={`/inventory/${row.productId}`}
-                                className="font-medium text-primary hover:underline"
+                                className="font-medium text-primary-ink hover:underline"
                               >
                                 {row.name}
                               </Link>

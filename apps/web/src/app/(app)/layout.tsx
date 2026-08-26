@@ -25,7 +25,10 @@ import { markAllNotificationsReadAction } from "./notification-actions";
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh bg-background">
+    <div className="app-shell flex min-h-dvh bg-background">
+      <Suspense fallback={null}>
+        <SkipLink />
+      </Suspense>
       <Suspense fallback={<SidebarFrame />}>
         <SidebarSlot />
       </Suspense>
@@ -35,9 +38,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <TopbarSlot />
         </Suspense>
 
-        {/* Bottom padding clears the mobile nav bar. */}
-        <main className="min-w-0 flex-1 px-3 py-4 pb-24 md:px-6 md:py-6 md:pb-6">
-          {children}
+        {/* Bottom padding clears the floating mobile nav bar. The canvas is
+            deliberately constrained: financial tables can scroll inside
+            their cards, while the reading line never stretches indefinitely
+            across an ultrawide display. */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="app-main min-w-0 flex-1 px-3 py-5 pb-28 outline-none sm:px-5 lg:px-7 lg:py-7 lg:pb-8"
+        >
+          <div className="relative mx-auto w-full max-w-[100rem]">{children}</div>
         </main>
       </div>
 
@@ -45,6 +55,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <BottomNavSlot />
       </Suspense>
     </div>
+  );
+}
+
+async function SkipLink() {
+  const t = await dict();
+
+  return (
+    <a
+      href="#main-content"
+      className="fixed left-3 top-3 z-50 -translate-y-20 rounded-lg bg-primary px-4 py-2 font-medium text-on-primary shadow-overlay transition-transform focus:translate-y-0"
+    >
+      {t.shell.skipToContent}
+    </a>
   );
 }
 
