@@ -13,33 +13,33 @@
 
 @theme {
   /* --- Brand ------------------------------------------------------------- */
-  --color-primary: #1e40af;
-  --color-primary-hover: #1d3a9e;
-  --color-primary-soft: #eff4ff;
+  --color-primary: #33408f;
+  --color-primary-hover: #3d4da8;
+  --color-primary-soft: #eef0fa;
   --color-on-primary: #ffffff;
-  --color-secondary: #3b82f6;
-  --color-accent: #d97706;
-  --color-accent-soft: #fef6e7;
+  --color-secondary: #5b6ac4;
+  --color-accent: #b06a15;
+  --color-accent-soft: #fbf3e6;
   --color-on-accent: #1a1204;
 
   /* --- Surfaces ---------------------------------------------------------- */
-  --color-background: #f6f8fb;
+  --color-background: #f5f6f8;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #eef2f8;
-  --color-border: #dde5f0;
-  --color-border-strong: #c2cfe0;
+  --color-surface-sunken: #eeeff3;
+  --color-border: #e3e5ea;
+  --color-border-strong: #c8ccd4;
 
   /* --- Text -------------------------------------------------------------- */
   /* Slate rather than the generator's navy: navy-on-white loses too much
      contrast once tables get to eight columns. */
-  --color-foreground: #0f172a;
-  --color-muted-foreground: #526074;
+  --color-foreground: #14161d;
+  --color-muted-foreground: #565b68;
   /* Subtle, not invisible. This carries tile captions, account codes and every
      em-dash standing in for an empty cell, and at #78899f it sat at 3.4:1 on
      the sunken background — below AA everywhere it was used. The hierarchy
      against `muted` survives; the failure did not. */
-  --color-subtle-foreground: #5f6d80;
+  --color-subtle-foreground: #6b707d;
 
   /* --- Finance semantics -------------------------------------------------
      Money needs its own vocabulary. These are used for amounts and deltas
@@ -53,12 +53,12 @@
      not on the striped total rows the aging report puts it on. */
   --color-due: #a04405;
   --color-due-soft: #fdf3e4;
-  --color-info: #1e40af;
-  --color-info-soft: #eff4ff;
+  --color-info: #33408f;
+  --color-info-soft: #eef0fa;
 
   --color-destructive: #dc2626;
   --color-on-destructive: #ffffff;
-  --color-ring: #1e40af;
+  --color-ring: #33408f;
 
   /* --- Typography --------------------------------------------------------
      Two families by role: Bengali text needs a face with matras and
@@ -85,9 +85,25 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
-  --shadow-raised: 0 4px 6px -1px rgb(15 23 42 / 0.07), 0 2px 4px -2px rgb(15 23 42 / 0.05);
-  --shadow-overlay: 0 20px 25px -5px rgb(15 23 42 / 0.12), 0 8px 10px -6px rgb(15 23 42 / 0.08);
+  /* Elevation is tinted with the brand's own hue rather than black: a neutral
+     grey shadow over a warm-neutral ground reads as dirt, and a pure-black one
+     reads as a sticker. Each step keeps an offset and a soft blur, so depth
+     comes from light falling rather than from a halo.
+
+     The hairline in the first slot is the thing that actually separates a card
+     from the page at rest; the blur only does work once it is lifted. */
+  --shadow-card:
+    0 0 0 1px rgb(51 64 143 / 0.04),
+    0 1px 2px -1px rgb(20 22 29 / 0.06),
+    0 2px 6px -2px rgb(20 22 29 / 0.05);
+  --shadow-raised:
+    0 0 0 1px rgb(51 64 143 / 0.05),
+    0 2px 4px -2px rgb(20 22 29 / 0.08),
+    0 8px 16px -6px rgb(20 22 29 / 0.08);
+  --shadow-overlay:
+    0 0 0 1px rgb(51 64 143 / 0.06),
+    0 8px 12px -6px rgb(20 22 29 / 0.10),
+    0 24px 40px -12px rgb(20 22 29 / 0.16);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -97,24 +113,34 @@
    4.5:1 against a dark surface. */
 @layer base {
   .dark {
-    --color-background: #0b1120;
-    --color-surface: #131c2e;
-    --color-surface-raised: #1a2438;
-    --color-surface-sunken: #0f1728;
-    --color-border: #26324a;
-    --color-border-strong: #3a4a68;
+    --color-background: #0c0e16;
+    --color-surface: #14171f;
+    --color-surface-raised: #1b1f29;
+    --color-surface-sunken: #101219;
+    --color-border: #262a35;
+    --color-border-strong: #3a4050;
 
-    --color-foreground: #e8edf6;
-    --color-muted-foreground: #9dabc2;
-    --color-subtle-foreground: #8b99b0;
+    --color-foreground: #e9eaee;
+    --color-muted-foreground: #a2a6b2;
+    --color-subtle-foreground: #8e93a1;
 
-    --color-primary: #5b8def;
-    --color-primary-hover: #6f9bf2;
-    --color-primary-soft: #17233d;
-    --color-on-primary: #06122b;
+    --color-primary: #8f9cf0;
+    --color-primary-hover: #a3aef4;
+    --color-primary-soft: #1c1f33;
+    --color-on-primary: #0c0e16;
 
-    --color-accent: #f0a52a;
-    --color-accent-soft: #2c2110;
+    --color-accent: #e0a441;
+    --color-accent-soft: #251d10;
+
+    --shadow-card:
+      0 0 0 1px rgb(255 255 255 / 0.05),
+      0 1px 2px -1px rgb(0 0 0 / 0.5);
+    --shadow-raised:
+      0 0 0 1px rgb(255 255 255 / 0.07),
+      0 6px 14px -6px rgb(0 0 0 / 0.6);
+    --shadow-overlay:
+      0 0 0 1px rgb(255 255 255 / 0.09),
+      0 20px 36px -12px rgb(0 0 0 / 0.7);
 
     --color-credit: #34d399;
     --color-credit-soft: #12291f;
@@ -122,15 +148,15 @@
     --color-debit-soft: #2c1319;
     --color-due: #fbbf24;
     --color-due-soft: #2b2110;
-    --color-info: #5b8def;
-    --color-info-soft: #17233d;
+    --color-info: #8f9cf0;
+    --color-info-soft: #1c1f33;
 
     --color-destructive: #f87171;
     /* Light-on-dark inverts here: the destructive hue is lifted to sit on a
        dark surface, so anything *placed on it* has to go dark or the pairing
        lands at 2.9:1. */
     --color-on-destructive: #2b0d10;
-    --color-ring: #5b8def;
+    --color-ring: #8f9cf0;
 
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
     --shadow-raised: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
@@ -189,6 +215,59 @@
   ::selection {
     background: var(--color-primary-soft);
     color: var(--color-primary);
+  }
+
+  /* The parts nobody draws still carry the design.
+
+     A scrollbar, a caret and an underline ship with browser defaults that
+     belong to no design system, and on a dense financial screen the scrollbar
+     is on view all day. Theming them is the difference between a page that was
+     built and one that was assembled. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-strong);
+    border-radius: 99px;
+    /* Inset by its own border so the thumb reads as a floating pill rather
+       than a bar wedged against the edge. */
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-subtle-foreground);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* The caret is brand-coloured in every field: it is the one piece of the
+     interface that is only ever seen while somebody is working in it. */
+  input,
+  textarea,
+  select,
+  [contenteditable] {
+    caret-color: var(--color-primary);
+  }
+
+  /* Underlines clear the descenders Bengali is full of, and sit at a weight
+     that does not compete with the text. */
+  a {
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: from-font;
   }
 
   /* Motion is decoration here, so it goes away entirely when asked. */

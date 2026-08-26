@@ -19,7 +19,7 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#1E40AF` | `--color-primary` |
+| Primary | `#33408F` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
 | Secondary | `#3B82F6` | `--color-secondary` |
 | On Secondary | `#000000` | `--color-on-secondary` |
@@ -36,7 +36,22 @@
 | On Destructive | `#FFFFFF` | `--color-on-destructive` |
 | Ring | `#1E40AF` | `--color-ring` |
 
-**Color Notes:** Blue data + amber highlights [Accent adjusted from #F59E0B]
+**Color Notes:** Deep natural indigo (নীল) + brass highlights.
+
+> **OVERRIDE — do not regenerate this section.** The generator proposed
+> `#1E40AF`, which is Tailwind's `blue-800`: the default blue of every SaaS
+> dashboard, and a colour with no claim on this product. Replaced with a deep
+> desaturated indigo. Bengal was the world's indigo centre, so নীল is the one
+> blue this product can call its own, and unlike a violet it never competes
+> with the green and red that carry credit and debit.
+>
+> Everything outside the brand and the money semantics is near-neutral by
+> design. The ground moved off blue-grey (`#F6F8FB`) onto `#F5F6F8` so the only
+> colours on a screen are the brand and what the money is doing.
+>
+> Elevation is tinted with the brand hue rather than black, and each step
+> carries a hairline plus an offset blur — the hairline separates a card at
+> rest, the blur only does work once it is lifted.
 
 ### Typography
 
