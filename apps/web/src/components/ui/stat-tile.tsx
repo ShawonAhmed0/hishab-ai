@@ -41,7 +41,12 @@ function DeltaChip({ delta, t }: { delta: Delta; t: Dictionary }) {
     <p className={cn("mt-1.5 flex items-center gap-1 text-xs font-medium", tone)}>
       <Icon className="size-3.5 shrink-0" aria-hidden />
       <span className="num">{label}</span>
-      <span className="font-normal text-subtle-foreground">{t.dashboard.vsPrevious}</span>
+      {/* "আগে কিছু ছিল না" already says what it is measured against; adding
+          "আগের সময়ের তুলনায়" after it reads as "nothing before, versus
+          before". The caption only earns its place next to a real figure. */}
+      {delta.percent === null ? null : (
+        <span className="font-normal text-subtle-foreground">{t.dashboard.vsPrevious}</span>
+      )}
     </p>
   );
 }
@@ -99,7 +104,15 @@ export function StatTile<T extends string>({
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         {Icon ? <Icon className="size-4 shrink-0 text-subtle-foreground" aria-hidden /> : null}
       </div>
-      <MoneyText value={value} tone={tone} size="xl" decimals={0} className="mt-2 block" />
+      {/* Steps down on a phone. At the desktop size, four stacked tiles put
+          the figure the page is actually about a full screen below the fold. */}
+      <MoneyText
+        value={value}
+        tone={tone}
+        size="xl"
+        decimals={0}
+        className="mt-1.5 block text-2xl sm:mt-2 sm:text-3xl"
+      />
       {delta && t ? <DeltaChip delta={delta} t={t} /> : null}
       {footnote ? (
         <p className="mt-1 text-xs text-subtle-foreground">{footnote}</p>
@@ -108,7 +121,7 @@ export function StatTile<T extends string>({
   );
 
   const base = cn(
-    "rounded-lg border border-border bg-surface p-4 shadow-card",
+    "rounded-lg border border-border bg-surface p-3.5 shadow-card sm:p-4",
     href && "cursor-pointer transition-colors duration-150 hover:border-border-strong",
     className,
   );

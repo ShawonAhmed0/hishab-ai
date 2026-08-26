@@ -3,14 +3,9 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   AlertTriangle,
-  Banknote,
-  Building,
-  Boxes,
-  Smartphone,
   TrendingDown,
   TrendingUp,
   Users,
-  Wallet,
   PlusCircle,
   ReceiptText,
 } from "lucide-react";
@@ -28,6 +23,8 @@ import {
   type ChartPoint,
 } from "@/components/charts/trend-charts";
 import { DailyAlertBlock } from "@/components/customers/health";
+import { HeroMetric } from "@/components/dashboard/hero-metric";
+import { SegmentedTotal } from "@/components/dashboard/segmented-total";
 import { PrintButton } from "@/components/ui/print-button";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
@@ -216,44 +213,17 @@ export default async function DashboardPage({
         </form>
       </div>
 
-      {/* ---- money on hand ---- */}
-      <section aria-labelledby="balances-heading">
-        <h2 id="balances-heading" className="sr-only">
-          {t.dashboard.balancesHeading}
+      {/*
+        Four figures, then one answer. This was nine tiles in three rows of
+        three, every number the same size: a wall with no hierarchy and nothing
+        to look at first. The four here are what a shop checks in passing; the
+        hero below is the question they were all circling.
+      */}
+      <section aria-labelledby="figures-heading">
+        <h2 id="figures-heading" className="sr-only">
+          {t.dashboard.figuresHeading}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile
-            label={t.dashboard.cash}
-            value={tiles.cash}
-            icon={Wallet}
-            href="/reports/cash-book?kind=cash"
-          />
-          <StatTile
-            label={t.dashboard.bank}
-            value={tiles.bank}
-            icon={Building}
-            href="/reports/cash-book?kind=bank"
-          />
-          <StatTile
-            label={t.dashboard.mfs}
-            value={tiles.mfs}
-            icon={Smartphone}
-            href="/reports/cash-book?kind=mfs"
-          />
-        </div>
-      </section>
-
-      {/* ---- this month ---- */}
-      <section aria-labelledby="month-heading">
-        <h2 id="month-heading" className="sr-only">
-          {t.dashboard.thisMonthHeading}
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/*
-            Only the flow tiles carry a comparison. A wallet balance or a stock
-            value is a position rather than a flow, and "12% more cash than
-            last month" invites a conclusion the figure does not support.
-          */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile
             label={t.dashboard.monthIncome}
             value={tiles.monthIncome}
@@ -269,30 +239,12 @@ export default async function DashboardPage({
             tone="debit"
             icon={TrendingDown}
             href={monthReport}
-            // Spending less is the good direction, so the chip is green when
-            // this falls. A tile that paints a cost increase green because the
-            // arrow points up says the opposite of what happened.
+            // Spending less is the good direction, so this goes green when it
+            // falls. Painting a cost increase green because the arrow points
+            // up would say the opposite of what happened.
             delta={deltaOf(tiles.monthExpense, previous.expense, { higherIsBetter: false })}
             t={t}
           />
-          <StatTile
-            label={t.dashboard.netProfit}
-            value={tiles.netProfit}
-            tone="auto"
-            icon={Banknote}
-            href={monthReport}
-            delta={deltaOf(tiles.netProfit, previous.netProfit)}
-            t={t}
-          />
-        </div>
-      </section>
-
-      {/* ---- what is owed ---- */}
-      <section aria-labelledby="dues-heading">
-        <h2 id="dues-heading" className="sr-only">
-          {t.dashboard.duesAndStockHeading}
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatTile
             label={t.dashboard.customerDue}
             value={tiles.customerDue}
@@ -307,38 +259,61 @@ export default async function DashboardPage({
             icon={ReceiptText}
             href="/reports/dues?side=payable"
           />
-          <StatTile
-            label={t.dashboard.stockValue}
-            value={tiles.stockValue}
-            icon={Boxes}
-            href="/reports/stock"
-          />
         </div>
       </section>
 
-      {/* ---- charts ---- */}
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.dashboard.incomeVsExpense}</CardTitle>
-            <Link href={monthReport} className="text-sm text-primary hover:underline">
-              {t.actions.viewAll}
-            </Link>
-          </CardHeader>
-          <CardBody>
-            {flowData.length > 0 ? (
-              <>
-                <IncomeVsExpenseChart data={flowData} />
-                {monthLinks(flowData)}
-              </>
-            ) : (
+      {/* ---- the answer, and how it got there ---- */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          {flowData.length > 0 ? (
+            <HeroMetric
+              label={t.dashboard.netProfit}
+              value={tiles.netProfit}
+              delta={deltaOf(tiles.netProfit, previous.netProfit)}
+              caption={t.dashboard.vsPrevious}
+              href={monthReport}
+              t={t}
+              chart={<IncomeVsExpenseChart data={flowData} />}
+              footer={
+                <>
+                  <h3 className="mb-2.5 text-sm font-medium text-muted-foreground">
+                    {t.dashboard.balancesHeading}
+                  </h3>
+                  {/* Where the money actually is. Three tiles answered "how
+                      much is in the bank" and hid the proportion. */}
+                  <SegmentedTotal
+                    emptyLabel={t.dashboard.noBalances}
+                    // Stock belongs here with the wallets: for a trader, money
+                    // in the godown is money, and separating it invited the
+                    // reader to forget it. Four places it can be, one bar.
+                    segments={[
+                      { key: "cash", label: t.dashboard.cash, value: tiles.cash, tone: "bg-primary", href: "/reports/cash-book?kind=cash" },
+                      { key: "bank", label: t.dashboard.bank, value: tiles.bank, tone: "bg-info", href: "/reports/cash-book?kind=bank" },
+                      { key: "mfs", label: t.dashboard.mfs, value: tiles.mfs, tone: "bg-accent", href: "/reports/cash-book?kind=mfs" },
+                      { key: "stock", label: t.dashboard.stockValue, value: tiles.stockValue, tone: "bg-credit", href: "/reports/stock" },
+                    ]}
+                  />
+                </>
+              }
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.dashboard.netProfit}</CardTitle>
+              </CardHeader>
               <EmptyState
+                icon={ReceiptText}
                 title={t.emptyStates.noTransactions}
                 hint={t.emptyStates.noTransactionsHint}
+                action={
+                  <Button asChild size="sm">
+                    <Link href="/entry">{t.nav.newEntry}</Link>
+                  </Button>
+                }
               />
-            )}
-          </CardBody>
-        </Card>
+            </Card>
+          )}
+        </div>
 
         <Card>
           <CardHeader>
@@ -351,11 +326,19 @@ export default async function DashboardPage({
             </Link>
           </CardHeader>
           <CardBody>
-            {salesData.length > 0 ? (
+            {/*
+              An area chart needs two points to draw a line between. With a
+              single month it renders an empty plot frame, a legend and one
+              dot, which looks like a broken chart rather than a young shop.
+              Say what is missing instead.
+            */}
+            {salesData.length > 1 ? (
               <>
                 <SalesTrendChart data={salesData} />
                 {monthLinks(salesData)}
               </>
+            ) : salesData.length === 1 ? (
+              <EmptyState title={t.dashboard.oneMonthOnly} />
             ) : (
               <EmptyState
                 title={t.emptyStates.noTransactions}
