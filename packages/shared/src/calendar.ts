@@ -54,3 +54,57 @@ export function currentMonthRange(reference: Date = new Date()): DateRange {
     to: `${year}-${pad(month)}-${pad(lastDay)}`,
   };
 }
+
+/** The presets the dashboard offers as one-tap ranges. */
+export type PresetRange = "thisMonth" | "lastMonth" | "threeMonths" | "thisYear";
+
+export const PRESET_RANGES = [
+  "thisMonth",
+  "lastMonth",
+  "threeMonths",
+  "thisYear",
+] as const satisfies readonly PresetRange[];
+
+/**
+ * A named range, resolved against Dhaka's today.
+ *
+ * These are the periods a shop actually asks for, and typing two dates to get
+ * "last month" is four taps and a chance to fumble one. The result is an
+ * ordinary `DateRange`, so a preset and a hand-typed range are the same thing
+ * by the time anything reads them — the URL carries dates either way, and a
+ * chosen period stays bookmarkable.
+ *
+ * Month arithmetic goes through `Date.UTC` with an out-of-range month index,
+ * which normalises across a year boundary on its own: month 0 of 2027 is
+ * December 2026. Only the *choice* of today is a Dhaka question, and
+ * `todayIso` has already answered it.
+ */
+export function presetRange(preset: PresetRange, reference: Date = new Date()): DateRange {
+  const [year, month] = todayIso(reference).split("-").map(Number) as [number, number];
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const lastDayOf = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const iso = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
+
+  switch (preset) {
+    case "lastMonth": {
+      const date = new Date(Date.UTC(year, month - 2, 1));
+      const y = date.getUTCFullYear();
+      const m = date.getUTCMonth() + 1;
+      return { from: iso(y, m, 1), to: iso(y, m, lastDayOf(y, m)) };
+    }
+    case "threeMonths": {
+      // This month and the two before it — three months of trading, ending
+      // today rather than at a month boundary nobody has reached yet.
+      const start = new Date(Date.UTC(year, month - 3, 1));
+      return {
+        from: iso(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+        to: todayIso(reference),
+      };
+    }
+    case "thisYear":
+      return { from: iso(year, 1, 1), to: todayIso(reference) };
+    case "thisMonth":
+    default:
+      return currentMonthRange(reference);
+  }
+}

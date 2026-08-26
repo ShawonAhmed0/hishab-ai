@@ -9,6 +9,7 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -126,14 +127,26 @@ const GRID_DASH = "2 6";
 const AXIS = "var(--color-subtle-foreground)";
 
 /**
- * Charts render at their final values immediately.
+ * Charts grow into their values.
  *
- * The grow-in animation left bars stuck near zero height while the axis showed
- * the correct scale — a chart that lies about its own numbers. It is also
- * motion for its own sake, which this design direction (motion 3, subtle) does
- * not want and reduced-motion users would drop anyway.
+ * This was off, for a real reason: bars used to sit stuck near zero height
+ * while the axis already showed the full scale — a chart lying about its own
+ * numbers. The cause was a re-render landing mid-animation (a
+ * `ResponsiveContainer` resize is one, and it fires on first layout), which
+ * restarts recharts' interpolation from wherever it had got to and sometimes
+ * never finishes.
+ *
+ * The fix is to make each chart animate once per dataset: the plot is keyed on
+ * the periods it is drawing, so a resize re-renders without resetting the
+ * animation, and a genuinely new range gets a fresh one. The duration is kept
+ * short enough that the final figures are on screen before anyone has finished
+ * reading the headline above them.
  */
-const ANIMATE = false;
+const ANIMATE = true;
+const ANIMATE_MS = 750;
+
+/** One animation per dataset, not one per render. See `ANIMATE`. */
+const seriesKey = (data: { period: string }[]) => data.map((d) => d.period).join(",");
 
 export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
   const t = useT();
@@ -147,8 +160,9 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart
+        key={seriesKey(rows)}
         data={rows}
-        margin={{ top: 4, right: 4, bottom: 0, left: -4 }}
+        margin={{ top: 4, right: 16, bottom: 0, left: -4 }}
         onClick={onSegmentClick}
         className="cursor-pointer"
       >
@@ -176,6 +190,8 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           radius={[6, 6, 0, 0]}
           maxBarSize={26}
           isAnimationActive={ANIMATE}
+          animationDuration={ANIMATE_MS}
+          animationEasing="ease-out"
         />
         <Bar
           dataKey="expense"
@@ -184,6 +200,9 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           radius={[6, 6, 0, 0]}
           maxBarSize={26}
           isAnimationActive={ANIMATE}
+          animationDuration={ANIMATE_MS}
+          animationBegin={120}
+          animationEasing="ease-out"
         />
       </BarChart>
     </ResponsiveContainer>
@@ -202,8 +221,9 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <AreaChart
+        key={seriesKey(rows)}
         data={rows}
-        margin={{ top: 4, right: 4, bottom: 0, left: -4 }}
+        margin={{ top: 4, right: 16, bottom: 0, left: -4 }}
         onClick={onSegmentClick}
         className="cursor-pointer"
       >
@@ -238,6 +258,8 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           strokeWidth={2}
           fill="url(#salesFill)"
           isAnimationActive={ANIMATE}
+          animationDuration={ANIMATE_MS}
+          animationEasing="ease-out"
         />
         {/* Dashed, not just a different hue — the two series stay apart in
             greyscale and for colour-blind readers. */}
@@ -250,6 +272,79 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
           strokeDasharray="5 4"
           fill="none"
           isAnimationActive={ANIMATE}
+          animationDuration={ANIMATE_MS}
+          animationBegin={150}
+          animationEasing="ease-out"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+/**
+ * Profit alone, over the same months.
+ *
+ * Its own tab rather than a second line on the sales chart, because profit is
+ * the only series here that goes negative, and a shared axis with sales — an
+ * order of magnitude larger — flattens every loss into the baseline. On its
+ * own scale a bad month is visibly a bad month.
+ *
+ * The zero line is drawn explicitly. On a series that crosses it, the gridline
+ * that matters is not "some round number" but the one separating a profit from
+ * a loss.
+ */
+export function ProfitTrendChart({ data }: { data: ChartPoint[] }) {
+  const t = useT();
+  const onSegmentClick = useSegmentClick(data);
+  const rows = data.map((d) => ({ period: d.period, profit: d.profit }));
+  const anyLoss = rows.some((r) => r.profit < 0);
+
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart
+        key={seriesKey(rows)}
+        data={rows}
+        margin={{ top: 4, right: 16, bottom: 0, left: -4 }}
+        onClick={onSegmentClick}
+        className="cursor-pointer"
+      >
+        <defs>
+          <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-credit)" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="var(--color-credit)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray={GRID_DASH} stroke={GRID} vertical={false} />
+        <XAxis
+          dataKey="period"
+          tickFormatter={(period: string) => periodLabel(period, t.monthsShort)}
+          tick={{ fontSize: 12, fill: AXIS }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tickFormatter={axisMoney}
+          tick={{ fontSize: 12, fill: AXIS }}
+          axisLine={false}
+          tickLine={false}
+          width={68}
+        />
+        <Tooltip content={<MoneyTooltip />} />
+        {anyLoss ? (
+          <ReferenceLine y={0} stroke="var(--color-border-strong)" strokeWidth={1} />
+        ) : null}
+        <Area
+          type="monotone"
+          dataKey="profit"
+          name={t.dashboard.seriesProfit}
+          stroke="var(--color-credit)"
+          strokeWidth={2.5}
+          fill="url(#profitFill)"
+          dot={{ r: 3, strokeWidth: 0, fill: "var(--color-credit)" }}
+          activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-surface)" }}
+          isAnimationActive={ANIMATE}
+          animationDuration={ANIMATE_MS}
+          animationEasing="ease-out"
         />
       </AreaChart>
     </ResponsiveContainer>

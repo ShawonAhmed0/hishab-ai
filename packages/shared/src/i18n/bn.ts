@@ -180,6 +180,17 @@ export const dashboard = {
   deltaUp: (percent: string) => `${percent}% বেশি`,
   deltaDown: (percent: string) => `${percent}% কম`,
   deltaFlat: "আগের সমান",
+  /* One-tap ranges. `thisMonth` above is the same period; these are the
+     chips beside the date inputs. */
+  rangeLastMonth: "গত মাস",
+  rangeThreeMonths: "৩ মাস",
+  rangeThisYear: "চলতি বছর",
+  rangeCustom: "নিজের মতো",
+  rangeHeading: "সময়কাল বেছে নিন",
+  shareOfTotal: (percent: string) => `মোট টাকার ${percent}%`,
+  netOwedToYou: (amount: string) => `নিট ${amount} আপনার পাওনা`,
+  netYouOwe: (amount: string) => `নিট ${amount} আপনার দেনা`,
+  netSettled: "পাওনা আর দেনা সমান",
   balancesHeading: "টাকা কোথায় আছে",
   noBalances: "কোনো মাধ্যমে টাকা নেই",
   thisMonthHeading: "চলতি মাস",

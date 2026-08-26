@@ -9,22 +9,32 @@ import {
   PlusCircle,
   ReceiptText,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { dailyAlertsFrom, getCustomerHealth, getDashboard } from "@hishabai/core";
-import { currentMonthRange, deltaOf, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import {
+  PRESET_RANGES,
+  currentMonthRange,
+  deltaOf,
+  formatMoney,
+  formatQty,
+  moneyFromDb,
+  negMoney,
+  presetRange,
+  subMoney,
+  qtyFromDb,
+} from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MoneyText } from "@/components/ui/money";
-import { StatTile } from "@/components/ui/stat-tile";
 import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
-import {
-  IncomeVsExpenseChart,
-  SalesTrendChart,
-  type ChartPoint,
-} from "@/components/charts/trend-charts";
+import type { ChartPoint } from "@/components/charts/trend-charts";
 import { DailyAlertBlock } from "@/components/customers/health";
+import { ChartDeck, type DeckTab } from "@/components/dashboard/chart-deck";
 import { HeroMetric } from "@/components/dashboard/hero-metric";
-import { SegmentedTotal } from "@/components/dashboard/segmented-total";
+import { KpiCard } from "@/components/dashboard/kpi-card";
+import { MoneyBar, type BarSegment } from "@/components/dashboard/money-bar";
+import { PeriodChips, type PeriodChoice } from "@/components/dashboard/period-chips";
 import { PrintButton } from "@/components/ui/print-button";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
@@ -116,17 +126,107 @@ export default async function DashboardPage({
     bounds: monthBounds(point.period),
   }));
 
-  // The two charts answer different questions, so a click on each lands
-  // somewhere different: আয় বনাম ব্যয় on that month's লাভ-ক্ষতি, বিক্রয় on that
+  // Each tab answers a different question, so a click on each lands somewhere
+  // different: আয় বনাম ব্যয় and লাভ on that month's লাভ-ক্ষতি, বিক্রয় on that
   // month's বিক্রয় রেজিস্টার.
-  const flowData: ChartPoint[] = points.map((p) => ({
-    ...p,
-    href: `/reports/profit-loss?from=${p.bounds.from}&to=${p.bounds.to}` as Route,
-  }));
-  const salesData: ChartPoint[] = points.map((p) => ({
-    ...p,
-    href: `/reports/register?type=sale&from=${p.bounds.from}&to=${p.bounds.to}` as Route,
-  }));
+  const withHref = (build: (bounds: { from: string; to: string }) => Route): ChartPoint[] =>
+    points.map((point) => ({ ...point, href: build(point.bounds) }));
+
+  const profitLossHref = withHref((b) => `/reports/profit-loss?from=${b.from}&to=${b.to}` as Route);
+  const deckTabs: DeckTab[] = [
+    { key: "flow", label: t.dashboard.incomeVsExpense, data: profitLossHref },
+    {
+      key: "sales",
+      label: t.dashboard.salesTrend,
+      data: withHref((b) => `/reports/register?type=sale&from=${b.from}&to=${b.to}` as Route),
+    },
+    { key: "profit", label: t.dashboard.profitTrend, data: profitLossHref },
+  ];
+
+  // The sparkline under each KPI. `trend` is oldest-first, so these read
+  // left-to-right the way the chart below them does.
+  const incomeSeries = points.map((point) => point.income);
+  const expenseSeries = points.map((point) => point.expense);
+
+  /**
+   * The four one-tap ranges, each carrying the dates it resolves to.
+   *
+   * Resolved on the server against Dhaka's today, so the link is an ordinary
+   * dated URL — a preset and a hand-typed range are indistinguishable by the
+   * time anything reads them, and "গত মাস" stays meaningful when it is opened
+   * next week.
+   */
+  const presetLabel: Record<(typeof PRESET_RANGES)[number], string> = {
+    thisMonth: t.dashboard.thisMonth,
+    lastMonth: t.dashboard.rangeLastMonth,
+    threeMonths: t.dashboard.rangeThreeMonths,
+    thisYear: t.dashboard.rangeThisYear,
+  };
+  const periodChoices: PeriodChoice[] = PRESET_RANGES.map((preset) => {
+    const resolved = presetRange(preset);
+    return {
+      key: preset,
+      label: presetLabel[preset],
+      href: `/dashboard?from=${resolved.from}&to=${resolved.to}` as Route,
+      active: resolved.from === period.from && resolved.to === period.to,
+    };
+  });
+
+  /**
+   * Where the money is, as shares of one whole.
+   *
+   * The percentages are worked out here, from the bigints, because the bar is
+   * a client component and money does not cross that boundary. It receives a
+   * width and an already-formatted caption; it never divides an amount.
+   */
+  const walletParts = [
+    { key: "cash", label: t.dashboard.cash, value: tiles.cash, tone: "bg-primary", href: "/reports/cash-book?kind=cash" as Route },
+    { key: "bank", label: t.dashboard.bank, value: tiles.bank, tone: "bg-info", href: "/reports/cash-book?kind=bank" as Route },
+    { key: "mfs", label: t.dashboard.mfs, value: tiles.mfs, tone: "bg-accent", href: "/reports/cash-book?kind=mfs" as Route },
+    { key: "stock", label: t.dashboard.stockValue, value: tiles.stockValue, tone: "bg-credit", href: "/reports/stock" as Route },
+  ];
+  // A negative balance cannot take up width. An overdrawn wallet is a data
+  // problem the alerts already raise; it must not invert the bar.
+  const walletTotal = walletParts.reduce(
+    (sum, part) => sum + (part.value > 0n ? part.value : 0n),
+    0n,
+  );
+  const walletSegments: BarSegment[] = walletParts.map((part) => {
+    // Integer arithmetic on the bigints, then one division for the width.
+    const percent =
+      walletTotal > 0n && part.value > 0n
+        ? Number((part.value * 1000n) / walletTotal) / 10
+        : 0;
+    return {
+      key: part.key,
+      label: part.label,
+      formatted: formatMoney(part.value, { decimals: 0, symbol: false }),
+      percent,
+      // Worded here, not in the bar: `shareOfTotal` is a function, and a
+      // function cannot be handed to a client component.
+      share: t.dashboard.shareOfTotal(String(Math.round(percent))),
+      tone: part.tone,
+      href: part.href,
+    };
+  });
+
+  /**
+   * What is owed to the shop against what the shop owes.
+   *
+   * Two figures on their own invite the reader to do this subtraction in their
+   * head and get it wrong; stating it is one line and it is the number that
+   * actually describes the position.
+   */
+  // `subMoney`, not `a - b`: subtracting two `Money` values yields a plain
+  // bigint and loses the brand, which is a type error at the next call rather
+  // than a wrong number — and this is the call.
+  const netDue = subMoney(tiles.customerDue, tiles.vendorPayable);
+  const netNote =
+    netDue > 0n
+      ? t.dashboard.netOwedToYou(formatMoney(netDue, { decimals: 0 }))
+      : netDue < 0n
+        ? t.dashboard.netYouOwe(formatMoney(negMoney(netDue), { decimals: 0 }))
+        : t.dashboard.netSettled;
 
   const alerts = [
     ...lowStock.map((product) => ({
@@ -151,42 +251,50 @@ export default async function DashboardPage({
       : []),
   ];
 
-  /** The month chips under each chart — the drill-down, reachable by keyboard. */
-  const monthLinks = (data: ChartPoint[]) => (
-    <nav className="mt-3 flex flex-wrap gap-1.5 px-1" aria-label={t.dashboard.lastSixMonths}>
-      {data.map((point) => (
-        <Link
-          key={point.period}
-          href={point.href}
-          className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:border-border-strong hover:text-foreground"
-        >
-          {t.monthsShort[Number(point.period.slice(5, 7)) - 1]}
-        </Link>
-      ))}
-    </nav>
-  );
-
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div
+        className="rise flex flex-wrap items-end justify-between gap-3"
+        style={{ "--rise-delay": "0ms" } as CSSProperties}
+      >
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t.nav.dashboard}</h1>
           <p className="text-sm text-muted-foreground">{t.shell.motto}</p>
         </div>
 
-        {/*
-          The range every figure on this page is measured over. A GET form, so
-          the chosen period is in the URL: it survives a reload, it can be
-          bookmarked, and the deltas below it always say what they are against.
-        */}
-        <form className="flex flex-wrap items-end gap-2 no-print">
+        <div className="flex flex-wrap items-end gap-2 no-print">
+          <PrintButton />
+          <Button asChild size="sm">
+            <Link href="/entry">
+              <PlusCircle className="size-4" aria-hidden />
+              {t.nav.newEntry}
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/*
+        The range every figure on this page is measured over.
+
+        Chips for the four periods a shop actually asks for, and the two date
+        inputs beside them for everything else. Both put the dates in the URL,
+        so the chosen period survives a reload, can be bookmarked and sent, and
+        the deltas below always say what they are measured against.
+      */}
+      <div
+        className="rise flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface-sunken px-3 py-2.5 no-print"
+        style={{ "--rise-delay": "60ms" } as CSSProperties}
+      >
+        <PeriodChips choices={periodChoices} label={t.dashboard.rangeHeading} />
+
+        <form className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             {t.dashboard.periodFrom}
             <input
               type="date"
               name="from"
               defaultValue={period.from}
-              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground shadow-control transition-colors duration-150 hover:border-subtle-foreground focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
@@ -195,20 +303,11 @@ export default async function DashboardPage({
               type="date"
               name="to"
               defaultValue={period.to}
-              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              className="h-9 rounded-md border border-border-strong bg-surface px-2 text-sm text-foreground shadow-control transition-colors duration-150 hover:border-subtle-foreground focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             />
           </label>
           <Button type="submit" variant="secondary" size="sm">
             {t.dashboard.applyRange}
-          </Button>
-          {/* Printing is how this app makes a PDF — same route the statements
-              take, rather than a second layout that could disagree. */}
-          <PrintButton />
-          <Button asChild size="sm" className="no-print">
-            <Link href="/entry">
-              <PlusCircle className="size-4" aria-hidden />
-              {t.nav.newEntry}
-            </Link>
           </Button>
         </form>
       </div>
@@ -224,18 +323,22 @@ export default async function DashboardPage({
           {t.dashboard.figuresHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile
+          <KpiCard
+            index={0}
             label={t.dashboard.monthIncome}
-            value={tiles.monthIncome}
+            taka={toTaka(tiles.monthIncome)}
             tone="credit"
             icon={TrendingUp}
             href={monthReport}
             delta={deltaOf(tiles.monthIncome, previous.income)}
+            series={incomeSeries}
+            sparkId="income"
             t={t}
           />
-          <StatTile
+          <KpiCard
+            index={1}
             label={t.dashboard.monthExpense}
-            value={tiles.monthExpense}
+            taka={toTaka(tiles.monthExpense)}
             tone="debit"
             icon={TrendingDown}
             href={monthReport}
@@ -243,21 +346,37 @@ export default async function DashboardPage({
             // falls. Painting a cost increase green because the arrow points
             // up would say the opposite of what happened.
             delta={deltaOf(tiles.monthExpense, previous.expense, { higherIsBetter: false })}
+            series={expenseSeries}
+            sparkId="expense"
             t={t}
           />
-          <StatTile
+          {/*
+            No sparkline and no delta on these two. They are positions, not
+            flows: the payload carries no history for them, and "12% more due
+            than last month" invites a conclusion the number does not support.
+
+            The net line belongs to the *pair*, so it is stated once, under the
+            second of them. On both it read as two findings that happened to
+            use identical words.
+          */}
+          <KpiCard
+            index={2}
             label={t.dashboard.customerDue}
-            value={tiles.customerDue}
+            taka={toTaka(tiles.customerDue)}
             tone="due"
             icon={Users}
             href="/reports/dues?side=receivable"
+            t={t}
           />
-          <StatTile
+          <KpiCard
+            index={3}
             label={t.dashboard.vendorPayable}
-            value={tiles.vendorPayable}
+            taka={toTaka(tiles.vendorPayable)}
             tone="due"
             icon={ReceiptText}
             href="/reports/dues?side=payable"
+            note={netNote}
+            t={t}
           />
         </div>
       </section>
@@ -265,33 +384,39 @@ export default async function DashboardPage({
       {/* ---- the answer, and how it got there ---- */}
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
-          {flowData.length > 0 ? (
+          {points.length > 0 ? (
             <HeroMetric
               label={t.dashboard.netProfit}
-              value={tiles.netProfit}
+              taka={toTaka(tiles.netProfit)}
               delta={deltaOf(tiles.netProfit, previous.netProfit)}
               caption={t.dashboard.vsPrevious}
               href={monthReport}
               t={t}
-              chart={<IncomeVsExpenseChart data={flowData} />}
+              chart={
+                <ChartDeck
+                  tabs={deckTabs}
+                  monthsLabel={t.dashboard.lastSixMonths}
+                  monthNames={t.monthsShort}
+                  emptyState={
+                    <EmptyState
+                      title={t.emptyStates.noTransactions}
+                      hint={t.emptyStates.noTransactionsHint}
+                    />
+                  }
+                  singleMonthState={<EmptyState title={t.dashboard.oneMonthOnly} />}
+                />
+              }
               footer={
                 <>
                   <h3 className="mb-2.5 text-sm font-medium text-muted-foreground">
                     {t.dashboard.balancesHeading}
                   </h3>
-                  {/* Where the money actually is. Three tiles answered "how
-                      much is in the bank" and hid the proportion. */}
-                  <SegmentedTotal
+                  {/* Where the money actually is. Four tiles answered "how
+                      much is in the bank" and hid the proportion; pointing at
+                      any part of this isolates it and states its share. */}
+                  <MoneyBar
+                    segments={walletSegments}
                     emptyLabel={t.dashboard.noBalances}
-                    // Stock belongs here with the wallets: for a trader, money
-                    // in the godown is money, and separating it invited the
-                    // reader to forget it. Four places it can be, one bar.
-                    segments={[
-                      { key: "cash", label: t.dashboard.cash, value: tiles.cash, tone: "bg-primary", href: "/reports/cash-book?kind=cash" },
-                      { key: "bank", label: t.dashboard.bank, value: tiles.bank, tone: "bg-info", href: "/reports/cash-book?kind=bank" },
-                      { key: "mfs", label: t.dashboard.mfs, value: tiles.mfs, tone: "bg-accent", href: "/reports/cash-book?kind=mfs" },
-                      { key: "stock", label: t.dashboard.stockValue, value: tiles.stockValue, tone: "bg-credit", href: "/reports/stock" },
-                    ]}
                   />
                 </>
               }
@@ -315,152 +440,6 @@ export default async function DashboardPage({
           )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.dashboard.salesTrend}</CardTitle>
-            <Link
-              href={`/reports/register?type=sale&from=${period.from}&to=${period.to}` as Route}
-              className="text-sm text-primary hover:underline"
-            >
-              {t.actions.viewAll}
-            </Link>
-          </CardHeader>
-          <CardBody>
-            {/*
-              An area chart needs two points to draw a line between. With a
-              single month it renders an empty plot frame, a legend and one
-              dot, which looks like a broken chart rather than a young shop.
-              Say what is missing instead.
-            */}
-            {salesData.length > 1 ? (
-              <>
-                <SalesTrendChart data={salesData} />
-                {monthLinks(salesData)}
-              </>
-            ) : salesData.length === 1 ? (
-              <EmptyState title={t.dashboard.oneMonthOnly} />
-            ) : (
-              <EmptyState
-                title={t.emptyStates.noTransactions}
-                hint={t.emptyStates.noTransactionsHint}
-              />
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        {/* ---- recent transactions ---- */}
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>{t.dashboard.recentTransactions}</CardTitle>
-            <Link href="/transactions" className="text-sm text-primary hover:underline">
-              {t.actions.viewAll}
-            </Link>
-          </CardHeader>
-
-          {recent.length === 0 ? (
-            <EmptyState
-              icon={ReceiptText}
-              title={t.emptyStates.noTransactions}
-              hint={t.emptyStates.noTransactionsHint}
-              action={
-                <Button asChild size="sm">
-                  <Link href="/entry">{t.nav.newEntry}</Link>
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              <div className="hidden md:block">
-                <TableScroll>
-                  <THead>
-                    <TR>
-                      <TH>{t.fields.date}</TH>
-                      <TH>{t.fields.voucherNo}</TH>
-                      <TH>{t.fields.type}</TH>
-                      <TH>{t.fields.party}</TH>
-                      <TH numeric>{t.fields.grandTotal}</TH>
-                      <TH numeric>{t.fields.dueAmount}</TH>
-                    </TR>
-                  </THead>
-                  <tbody>
-                    {recent.map((row) => (
-                      <TR key={row.id}>
-                        <TD className="whitespace-nowrap text-muted-foreground">
-                          {formatDateShort(row.date)}
-                        </TD>
-                        <TD>
-                          <Link
-                            href={`/transactions/${row.id}`}
-                            className="num text-primary hover:underline"
-                          >
-                            {row.voucherNo}
-                          </Link>
-                        </TD>
-                        <TD>
-                          <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                            {t.transactionType[row.type]}
-                          </Badge>
-                          {row.status === "cancelled" ? (
-                            <Badge tone="neutral" className="ml-1">
-                              {t.transactionStatus.cancelled}
-                            </Badge>
-                          ) : null}
-                        </TD>
-                        <TD className="max-w-[12rem] truncate">{row.partyName ?? "—"}</TD>
-                        <TD numeric>
-                          <MoneyText value={moneyFromDb(row.total)} size="sm" symbol={false} />
-                        </TD>
-                        <TD numeric>
-                          <MoneyText
-                            value={moneyFromDb(row.dueAmount)}
-                            size="sm"
-                            symbol={false}
-                            tone={moneyFromDb(row.dueAmount) > 0n ? "due" : "neutral"}
-                          />
-                        </TD>
-                      </TR>
-                    ))}
-                  </tbody>
-                </TableScroll>
-              </div>
-
-              <MobileCards>
-                {recent.map((row) => (
-                  <MobileRow
-                    key={row.id}
-                    href={`/transactions/${row.id}`}
-                    title={row.partyName ?? t.transactionType[row.type]}
-                    subtitle={`${row.voucherNo} · ${formatDateShort(row.date)}`}
-                    meta={
-                      <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
-                        {t.transactionType[row.type]}
-                      </Badge>
-                    }
-                    right={
-                      <>
-                        <MoneyText value={moneyFromDb(row.total)} size="sm" />
-                        {moneyFromDb(row.dueAmount) > 0n ? (
-                          <p className="mt-0.5 text-xs text-due">
-                            {t.fields.dueAmount}{" "}
-                            <MoneyText
-                              value={moneyFromDb(row.dueAmount)}
-                              size="sm"
-                              tone="due"
-                              symbol={false}
-                            />
-                          </p>
-                        ) : null}
-                      </>
-                    }
-                  />
-                ))}
-              </MobileCards>
-            </>
-          )}
-        </Card>
-
         <div className="space-y-4">
           {/* ---- R5.4: who has gone quiet, derived this morning ---- */}
           <Suspense fallback={<AlertsSkeleton title={t.activity.dailyTitle} />}>
@@ -468,7 +447,7 @@ export default async function DashboardPage({
           </Suspense>
 
           {/* ---- alerts ---- */}
-          <Card>
+          <Card className="rise" style={{ "--rise-delay": "420ms" } as CSSProperties}>
             <CardHeader>
               <CardTitle>{t.dashboard.alerts}</CardTitle>
             </CardHeader>
@@ -499,7 +478,7 @@ export default async function DashboardPage({
           </Card>
 
           {/* ---- customers who owe ---- */}
-          <Card>
+          <Card className="rise" style={{ "--rise-delay": "500ms" } as CSSProperties}>
             <CardHeader>
               <CardTitle>{t.dashboard.dueCustomers}</CardTitle>
               <Link href="/customers" className="text-sm text-primary hover:underline">
@@ -531,6 +510,125 @@ export default async function DashboardPage({
           </Card>
         </div>
       </div>
+
+      {/* ----------------------------------------------------------------
+          Recent entries.
+
+          Full width now, rather than two thirds of a row shared with the
+          alerts. It is a nine-column ledger: the space it was given decided
+          how much of it could be read without scrolling sideways, and the
+          alerts beside it are three short lines that never needed a third of
+          the page.
+          ---------------------------------------------------------------- */}
+      <Card className="rise" style={{ "--rise-delay": "560ms" } as CSSProperties}>
+        <CardHeader>
+          <CardTitle>{t.dashboard.recentTransactions}</CardTitle>
+          <Link href="/transactions" className="text-sm text-primary hover:underline">
+            {t.actions.viewAll}
+          </Link>
+        </CardHeader>
+
+        {recent.length === 0 ? (
+          <EmptyState
+            icon={ReceiptText}
+            title={t.emptyStates.noTransactions}
+            hint={t.emptyStates.noTransactionsHint}
+            action={
+              <Button asChild size="sm">
+                <Link href="/entry">{t.nav.newEntry}</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <div className="hidden md:block">
+              <TableScroll>
+                <THead>
+                  <TR>
+                    <TH>{t.fields.date}</TH>
+                    <TH>{t.fields.voucherNo}</TH>
+                    <TH>{t.fields.type}</TH>
+                    <TH>{t.fields.party}</TH>
+                    <TH numeric>{t.fields.grandTotal}</TH>
+                    <TH numeric>{t.fields.dueAmount}</TH>
+                  </TR>
+                </THead>
+                <tbody>
+                  {recent.map((row) => (
+                    <TR key={row.id}>
+                      <TD className="whitespace-nowrap text-muted-foreground">
+                        {formatDateShort(row.date)}
+                      </TD>
+                      <TD className="whitespace-nowrap">
+                        <Link
+                          href={`/transactions/${row.id}`}
+                          className="num text-primary hover:underline"
+                        >
+                          {row.voucherNo}
+                        </Link>
+                      </TD>
+                      <TD>
+                        <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
+                          {t.transactionType[row.type]}
+                        </Badge>
+                        {row.status === "cancelled" ? (
+                          <Badge tone="neutral" className="ml-1">
+                            {t.transactionStatus.cancelled}
+                          </Badge>
+                        ) : null}
+                      </TD>
+                      <TD className="max-w-[14rem] truncate">{row.partyName ?? "—"}</TD>
+                      <TD numeric>
+                        <MoneyText value={moneyFromDb(row.total)} size="sm" symbol={false} />
+                      </TD>
+                      <TD numeric>
+                        <MoneyText
+                          value={moneyFromDb(row.dueAmount)}
+                          size="sm"
+                          symbol={false}
+                          tone={moneyFromDb(row.dueAmount) > 0n ? "due" : "neutral"}
+                        />
+                      </TD>
+                    </TR>
+                  ))}
+                </tbody>
+              </TableScroll>
+            </div>
+
+            <MobileCards>
+              {recent.map((row) => (
+                <MobileRow
+                  key={row.id}
+                  href={`/transactions/${row.id}`}
+                  title={row.partyName ?? t.transactionType[row.type]}
+                  subtitle={`${row.voucherNo} · ${formatDateShort(row.date)}`}
+                  meta={
+                    <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>
+                      {t.transactionType[row.type]}
+                    </Badge>
+                  }
+                  right={
+                    <>
+                      <MoneyText value={moneyFromDb(row.total)} size="sm" />
+                      {moneyFromDb(row.dueAmount) > 0n ? (
+                        <p className="mt-0.5 text-xs text-due">
+                          {t.fields.dueAmount}{" "}
+                          <MoneyText
+                            value={moneyFromDb(row.dueAmount)}
+                            size="sm"
+                            tone="due"
+                            symbol={false}
+                          />
+                        </p>
+                      ) : null}
+                    </>
+                  }
+                />
+              ))}
+            </MobileCards>
+          </>
+        )}
+      </Card>
     </div>
   );
 }

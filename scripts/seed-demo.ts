@@ -223,6 +223,20 @@ async function main(): Promise<void> {
   });
 
   const today = new Date().toISOString().slice(0, 10);
+
+  /**
+   * The same day-of-month, `back` months ago.
+   *
+   * `Date.UTC` normalises an out-of-range month index on its own — month −1 of
+   * January is December of the year before — and clamping the day to 28 keeps
+   * every one of these a real date without a leap-year table.
+   */
+  function monthsAgo(back: number, day: number): string {
+    const now = new Date();
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, Math.min(day, 28)));
+    return date.toISOString().slice(0, 10);
+  }
+
   const posted = await withTenant(session, async (tx) =>
     tx
       .select({ type: transactions.type })
@@ -230,6 +244,126 @@ async function main(): Promise<void> {
       .where(eq(transactions.companyId, company.id)),
   );
   const already = new Set(posted.map((row) => row.type));
+
+  /**
+   * Five months of trading before this one.
+   *
+   * Without it the dashboard has a single month of data, so every trend chart
+   * draws one bar, every sparkline refuses to draw at all, and every delta
+   * reads "nothing before" — the screens that exist to show change have
+   * nothing to show it against.
+   *
+   * Back-dated on purpose, which is ordinary practice here and the case
+   * `occurred_at` was fixed for: the entry carries the date the trade
+   * happened, not the date it was typed.
+   *
+   * Posted oldest-first, and inside each month the sale comes before the
+   * purchase. Both of the rules that could refuse these read a *running*
+   * balance maintained by trigger, not a position at the entry's date, so what
+   * matters is the order they are inserted in and not the dates they carry:
+   *
+   * - `insufficientFunds` refused the first draft of this, where the shop paid
+   *   a vendor ৳40,000 out of a ৳30,000 wallet. Selling first is also what
+   *   actually happens — the money comes in before it goes out.
+   * - `negativeStock` is the mirror of it, and is why the opening stock is
+   *   large enough to cover the first month's sale before any purchase lands.
+   *
+   * Every historical sale is settled in full, and that is a rule talking too:
+   * `riskyParty` refused the draft where they were not, because five months of
+   * part-paid bills age the customer into the red band and the shop is then
+   * blocked from selling to them at all. A shop that collects is the ordinary
+   * case; the one bill left outstanding is this month's, which is the spec's
+   * worked example and the reason the বকেয়া screens have anything on them.
+   */
+  const HISTORY = [
+    { back: 5, buyQty: 420, buyRate: 118, sellQty: 300, sellRate: 155, vendorPaid: "40000" },
+    { back: 4, buyQty: 500, buyRate: 121, sellQty: 460, sellRate: 158, vendorPaid: "50000" },
+    { back: 3, buyQty: 380, buyRate: 124, sellQty: 350, sellRate: 162, vendorPaid: "47000" },
+    { back: 2, buyQty: 560, buyRate: 122, sellQty: 520, sellRate: 159, vendorPaid: "60000" },
+    { back: 1, buyQty: 600, buyRate: 126, sellQty: 540, sellRate: 165, vendorPaid: "70000" },
+  ];
+
+  /**
+   * Which of these are already posted, by চালান number.
+   *
+   * Not "does any back-dated entry exist": the first run of this block was
+   * refused part-way through by `insufficientFunds`, and the months that had
+   * already committed made that coarser guard true — so the re-run skipped
+   * every remaining month and left the demo with one month of history and a
+   * chart that could not draw a line. Idempotent *per fixture* is what this
+   * file promises, and a half-applied loop is exactly the case that needs it.
+   */
+  const postedMemos = new Set(
+    (
+      await withTenant(session, async (tx) =>
+        tx
+          .select({ memoNo: transactions.memoNo })
+          .from(transactions)
+          .where(eq(transactions.companyId, company.id)),
+      )
+    )
+      .map((row) => row.memoNo)
+      .filter((memo): memo is string => memo !== null),
+  );
+
+  let historyPosted = 0;
+  for (const month of HISTORY) {
+    const saleMemo = `${100 - month.back}`;
+    const buyMemo = `RPM-${4400 - month.back}`;
+
+    if (!postedMemos.has(saleMemo)) {
+      historyPosted += 1;
+      await createTransaction(session, {
+        type: "sale",
+        date: monthsAgo(month.back, 8),
+        source: "manual",
+        partyId: refs.customerId,
+        // Unique per (company, party, memo) — ours to number on a sale.
+        memoNo: saleMemo,
+        lines: [
+          {
+            productId: paperId,
+            unitId: refs.unitId,
+            quantity: String(month.sellQty),
+            rate: String(month.sellRate),
+          },
+        ],
+        // Settled in full — derived from the line rather than restated, so the
+        // two can never drift into a residue that ages.
+        payments: [
+          {
+            financialAccountId: refs.walletId,
+            amount: String(month.sellQty * month.sellRate),
+          },
+        ],
+      });
+    }
+
+    if (!postedMemos.has(buyMemo)) {
+      historyPosted += 1;
+      await createTransaction(session, {
+        type: "purchase",
+        date: monthsAgo(month.back, 18),
+        source: "manual",
+        partyId: refs.vendorId,
+        // On a purchase the number is the *vendor's*, not ours.
+        memoNo: buyMemo,
+        lines: [
+          {
+            productId: paperId,
+            unitId: refs.unitId,
+            quantity: String(month.buyQty),
+            rate: String(month.buyRate),
+          },
+        ],
+        payments: [{ financialAccountId: refs.walletId, amount: month.vendorPaid }],
+      });
+    }
+  }
+
+  if (historyPosted > 0) {
+    console.log(`✓ ${historyPosted} back-dated entries posted across ${HISTORY.length} months`);
+  }
 
   // The spec's worked example: ৳80,000 billed, ৳50,000 taken, ৳30,000 left.
   if (!already.has("sale")) {

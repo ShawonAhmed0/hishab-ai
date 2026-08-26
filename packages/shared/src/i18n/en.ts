@@ -169,6 +169,17 @@ export const en: Dictionary = {
     deltaUp: (percent: string) => `${percent}% up`,
     deltaDown: (percent: string) => `${percent}% down`,
     deltaFlat: "No change",
+    /* One-tap ranges. `thisMonth` above is the same period; these are the
+       chips beside the date inputs. */
+    rangeLastMonth: "Last month",
+    rangeThreeMonths: "3 months",
+    rangeThisYear: "This year",
+    rangeCustom: "Custom",
+    rangeHeading: "Choose a period",
+    shareOfTotal: (percent: string) => `${percent}% of everything`,
+    netOwedToYou: (amount: string) => `${amount} owed to you, net`,
+    netYouOwe: (amount: string) => `${amount} you owe, net`,
+    netSettled: "Receivables and payables are level",
     balancesHeading: "Where the money is",
     noBalances: "No money in any method",
     thisMonthHeading: "This month",

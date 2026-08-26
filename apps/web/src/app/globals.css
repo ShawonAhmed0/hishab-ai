@@ -338,6 +338,89 @@
   .stack-fade {
     animation: fade-up 0.35s var(--ease-out) both;
   }
+
+  /* ------------------------------------------------------------------------
+     Motion
+
+     One orchestrated arrival, then stillness. Nothing here loops: a dashboard
+     is read all day, and a thing still moving after the first second is a
+     thing competing with the number beside it. Every animation uses
+     `both` so the reduced-motion rule above — which cuts durations to
+     0.01ms rather than removing the animation — lands on the finished state
+     instead of the starting one.
+     --------------------------------------------------------------------- */
+
+  /* The page assembles itself top-down. `--rise-delay` is set per element so
+     one keyframe serves a whole staggered column. */
+  .rise {
+    animation: rise 0.5s var(--ease-out) both;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+
+  /* A bar that fills rather than appears. Scaled, not width-animated, so it
+     never reflows the row of figures underneath it. */
+  .grow-x {
+    transform-origin: left center;
+    animation: grow-x 0.7s var(--ease-out) both;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+
+  /* A line that draws itself. Requires `pathLength="1"` on the path, which
+     normalises any geometry to a unit length — the alternative is measuring
+     the path in JS, which cannot happen on the server. */
+  .draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 0.9s var(--ease-out) both;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+
+  /* Something that answers the pointer by rising toward it. Transform and
+     shadow only — both composited, so a grid of these does not relayout. */
+  .lift {
+    transition:
+      transform 0.18s var(--ease-out),
+      box-shadow 0.18s var(--ease-out),
+      border-color 0.18s var(--ease-out);
+  }
+
+  .lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* The pressed state. A surface that lifts to meet the pointer has to go
+     back down when it is actually clicked, or the click has no feedback. */
+  .lift:active {
+    transform: translateY(0);
+    transition-duration: 0.06s;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes fade-up {
