@@ -10,6 +10,7 @@ import { LocaleToggle } from "@/components/shell/locale-toggle";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { useT } from "@/components/locale-provider";
 import { cn } from "@/lib/utils";
+import { SearchHint } from "./shortcuts";
 
 export interface CompanyOption {
   id: string;
@@ -128,8 +129,9 @@ export function Topbar({
             name="q"
             type="search"
             placeholder={t.shell.searchPlaceholder}
-            className="h-10 w-full rounded-xl border border-border bg-surface pl-9 pr-3 text-sm shadow-card placeholder:text-subtle-foreground transition-[border-color,box-shadow] duration-200 hover:border-border-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            className="h-10 w-full rounded-xl border border-border bg-surface pl-9 pr-16 text-sm shadow-card placeholder:text-subtle-foreground transition-[border-color,box-shadow] duration-200 hover:border-border-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           />
+          <SearchHint />
         </div>
       </form>
 

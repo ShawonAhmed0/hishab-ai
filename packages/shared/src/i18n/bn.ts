@@ -998,7 +998,8 @@ export const shell = {
   tagline: "Smart হিসাব, Smarter Business",
   /** The product promise, and the line under every page title. */
   motto: "একবার লিখুন — বাকিটা HishabAI করবে",
-  appDescription: "বাংলায় ব্যবসার সম্পূর্ণ হিসাব — একবার লিখুন, বাকিটা HishabAI করবে।",
+  appDescription:
+    "বাংলায় ব্যবসার সম্পূর্ণ হিসাব\u00a0— একবার লিখুন, বাকিটা HishabAI করবে।",
   markAllRead: "সব পড়া হয়েছে",
   noNotifications: "এখন কিছু দেখার নেই।",
   notificationsWithCount: (count: string) => `বিজ্ঞপ্তি — ${count}টি`,

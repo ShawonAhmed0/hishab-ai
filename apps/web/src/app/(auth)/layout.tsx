@@ -9,7 +9,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-dvh bg-background p-2 sm:p-3 lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(28rem,0.92fr)] lg:gap-3">
-      <aside className="auth-visual hidden min-h-[calc(100dvh-1.5rem)] flex-col rounded-[1.75rem] p-8 text-white lg:flex xl:p-12">
+      <aside data-rail
+        className="auth-visual hidden min-h-[calc(100dvh-1.5rem)] flex-col rounded-[1.75rem] p-8 text-white lg:flex xl:p-12">
         <div className="flex items-center gap-3">
           <BrandMark className="size-11" decorative />
           <div>
@@ -19,8 +20,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
         </div>
 
         <div className="my-auto max-w-xl py-8 xl:py-14">
-          <p className="mb-5 flex items-center gap-2 text-sm font-medium text-[#f0bb63]">
-            <span className="h-px w-8 bg-[#f0bb63]/70" aria-hidden />
+          <p className="mb-5 flex items-center gap-2 text-sm font-medium text-gold">
+            <span className="h-px w-8 bg-gold/70" aria-hidden />
             {t.shell.motto}
           </p>
           <h1 className="max-w-[14ch] text-3xl font-semibold leading-[1.18] tracking-[-0.035em] text-balance xl:text-5xl">
@@ -40,7 +41,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
                   ৳1,28,450.00
                 </span>
               </div>
-              <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0bb63]/15 text-sm font-semibold text-[#f0bb63]">
+              <span className="flex size-9 items-center justify-center rounded-lg bg-gold/15 text-sm font-semibold text-gold">
                 +18
               </span>
             </div>

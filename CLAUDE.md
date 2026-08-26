@@ -41,6 +41,13 @@ tests can see it — that runs as the owner via `SUPABASE_DB_ADMIN_URL`, applies
 the drizzle migrations, then re-applies every file in `packages/db/src/sql`
 (they are idempotent, which is why re-running after a policy edit is safe).
 
+**Never run `npm run build` while the dev server is up.** Both write
+`apps/web/.next`, and the build leaves the running server with a manifest it
+cannot read — every route then answers *Internal Server Error* until the server
+is restarted against a clean directory. It looks exactly like a code failure
+and is not one. Stop the dev server first, or accept that you will be stopping
+it, `rm -rf apps/web/.next`, and starting it again afterwards.
+
 `npm run build`, not just `npm run typecheck` — `typedRoutes` types are
 generated at build time, so `tsc -b` cannot see a bad `href` and will pass on
 code that fails to build.

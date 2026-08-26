@@ -8,7 +8,16 @@ import { Card, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { FilterBar, FilterCheck, FilterField, FilterInput } from "@/components/ui/filter-bar";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { MoneyText } from "@/components/ui/money";
-import { MobileCards, MobileRow, TD, TH, THead, TR, TableScroll } from "@/components/ui/table";
+import {
+  MobileCards,
+  MobileRow,
+  RowLink,
+  TD,
+  TH,
+  THead,
+  TR,
+  TableScroll,
+} from "@/components/ui/table";
 import { dict } from "@/lib/locale.server";
 import { sessionWithData } from "@/lib/session";
 import { formatDateShort } from "@/lib/utils";
@@ -152,7 +161,11 @@ export default async function TransactionsPage({
                 </THead>
                 <tbody>
                   {rows.map((row) => (
-                    <TR key={row.id} className={row.status === "cancelled" ? "opacity-60" : ""}>
+                    <TR
+                      key={row.id}
+                      linked
+                      className={row.status === "cancelled" ? "opacity-60" : ""}
+                    >
                       <TD className="whitespace-nowrap text-muted-foreground">
                         {formatDateShort(row.date)}
                       </TD>
@@ -160,12 +173,12 @@ export default async function TransactionsPage({
                           as "OPEN-" over "000002", which is not a number
                           anybody can read back to a customer. */}
                       <TD className="whitespace-nowrap">
-                        <Link
+                        <RowLink
                           href={`/transactions/${row.id}`}
-                          className="num text-primary-ink hover:underline"
+                          className="num text-primary-ink"
                         >
                           {row.voucherNo}
-                        </Link>
+                        </RowLink>
                       </TD>
                       <TD>
                         <Badge tone={TYPE_TONE[row.type] ?? "neutral"}>

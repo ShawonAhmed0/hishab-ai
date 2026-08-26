@@ -1004,8 +1004,10 @@ export const en: Dictionary = {
     user: "User",
     tagline: "Smart হিসাব, Smarter Business",
     motto: "Write it once — HishabAI does the rest",
+    // The no-break space binds the em dash to the word before it, so a line
+    // can break after the dash rather than starting with one.
     appDescription:
-      "Complete books for your business — write it once, HishabAI does the rest.",
+      "Complete books for your business\u00a0— write it once, HishabAI does the rest.",
     markAllRead: "Mark all as read",
     noNotifications: "Nothing to see right now.",
     notificationsWithCount: (count: string) => `Notifications — ${count}`,

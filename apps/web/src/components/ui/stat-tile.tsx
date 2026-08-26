@@ -6,6 +6,15 @@ import type { Delta, Dictionary, Money } from "@hishabai/shared";
 import { MoneyText } from "./money";
 import { cn } from "@/lib/utils";
 
+/** The icon chip picks up whatever the figure below it is saying. */
+const TONE_TEXT: Record<string, string> = {
+  credit: "text-credit",
+  debit: "text-debit",
+  due: "text-due",
+  auto: "text-subtle-foreground",
+  neutral: "text-subtle-foreground",
+};
+
 /**
  * How this figure moved against the same figure last month.
  *
@@ -102,7 +111,16 @@ export function StatTile<T extends string>({
     <>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        {Icon ? <Icon className="size-4 shrink-0 text-subtle-foreground" aria-hidden /> : null}
+        {Icon ? (
+          <span
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-sunken",
+              TONE_TEXT[tone] ?? "text-subtle-foreground",
+            )}
+          >
+            <Icon className="size-4" aria-hidden />
+          </span>
+        ) : null}
       </div>
       {/* Steps down on a phone. At the desktop size, four stacked tiles put
           the figure the page is actually about a full screen below the fold. */}
@@ -121,8 +139,11 @@ export function StatTile<T extends string>({
   );
 
   const base = cn(
-    "rounded-lg border border-border bg-surface p-3.5 shadow-card sm:p-4",
-    href && "cursor-pointer transition-colors duration-150 hover:border-border-strong",
+    // Same card, same arrival and same lift as the dashboard's KPI cards.
+    // These sit on fourteen other screens, and two tile treatments in one
+    // product reads as two products.
+    "tile-rise lift block rounded-xl border border-border bg-surface p-3.5 shadow-card sm:p-4",
+    href && "cursor-pointer hover:border-border-strong",
     className,
   );
 
@@ -186,7 +207,16 @@ export function CountTile<T extends string>({
     <>
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        {Icon ? <Icon className="size-4 shrink-0 text-subtle-foreground" aria-hidden /> : null}
+        {Icon ? (
+          <span
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-sunken",
+              TONE_TEXT[tone] ?? "text-subtle-foreground",
+            )}
+          >
+            <Icon className="size-4" aria-hidden />
+          </span>
+        ) : null}
       </div>
       <p className={cn("num-lg mt-2 text-2xl font-bold", toneClass)}>
         {value}
@@ -197,8 +227,8 @@ export function CountTile<T extends string>({
   );
 
   const base = cn(
-    "rounded-lg border border-border bg-surface p-4 shadow-card",
-    href && "cursor-pointer transition-colors duration-150 hover:border-border-strong",
+    "tile-rise lift block rounded-xl border border-border bg-surface p-4 shadow-card",
+    href && "cursor-pointer hover:border-border-strong",
   );
 
   return href ? (

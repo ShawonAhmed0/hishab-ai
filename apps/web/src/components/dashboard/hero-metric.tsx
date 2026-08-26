@@ -70,15 +70,12 @@ export function HeroMetric({
       {/* A wash of the brand behind the headline figure, fading out before the
           plot starts. It marks this card as the one the page is about without
           spending a border, a badge or a second colour on saying so. */}
+      {/* The wash alone. A decorative ring used to sit up here too, and it
+          landed exactly behind the "সব দেখুন" link — so the one control in
+          this header read as a permanently highlighted pill. Ornament that
+          collides with a control is not ornament, and the wash was already
+          doing the job the ring was added for. */}
       <div className="relative overflow-hidden bg-primary-soft/55">
-        <span
-          className="pointer-events-none absolute -right-12 -top-20 size-48 rounded-full border-[32px] border-primary/5"
-          aria-hidden
-        />
-        <span
-          className="pointer-events-none absolute right-24 top-7 size-2 rounded-full bg-accent/55"
-          aria-hidden
-        />
         <div className="relative flex flex-wrap items-start justify-between gap-3 p-5 pb-4 sm:p-6 sm:pb-5">
           <div className="min-w-0">
             <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>

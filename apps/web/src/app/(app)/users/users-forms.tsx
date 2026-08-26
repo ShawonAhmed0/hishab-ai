@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/components/locale-provider";
 import { Field, FieldLabel, Input, Select } from "@/components/ui/field";
 import { attempt } from "@/lib/attempt";
+import { FilterSelect } from "@/components/ui/filter-select";
 import {
   addMemberAction,
   changeRoleAction,
@@ -111,7 +112,7 @@ export function RoleSelect({
 
   return (
     <span className="flex flex-col gap-1">
-      <select
+      <FilterSelect
         value={value}
         disabled={pending}
         onChange={(event) => {
@@ -134,14 +135,14 @@ export function RoleSelect({
             }
           });
         }}
-        className="h-9 cursor-pointer rounded-md border border-border-strong bg-surface px-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-50"
+        className="h-9 w-auto px-2 pr-8 text-sm"
       >
         {ROLES.map((option) => (
           <option key={option} value={option}>
             {t.role[option]}
           </option>
         ))}
-      </select>
+      </FilterSelect>
       {error ? <span className="text-xs text-debit">{error}</span> : null}
     </span>
   );

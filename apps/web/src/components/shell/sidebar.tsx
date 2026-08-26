@@ -35,8 +35,9 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
 
   return (
     <nav
+      data-rail
       aria-label={t.shell.mainMenu}
-      className="no-print relative hidden w-[17rem] shrink-0 flex-col overflow-hidden bg-[#171b3d] text-white shadow-[10px_0_36px_-28px_rgba(19,23,55,0.9)] lg:flex"
+      className="no-print relative hidden w-[17rem] shrink-0 flex-col overflow-hidden bg-rail text-rail-foreground shadow-[10px_0_36px_-28px_rgb(7_36_27/0.9)] lg:flex"
     >
       <Link
         href="/dashboard"
@@ -93,7 +94,7 @@ export function Sidebar({ allowed }: { allowed: string[] }) {
                         <item.icon
                           className={cn(
                             "size-[1.125rem] shrink-0 transition-colors duration-200",
-                            active ? "text-[#f0bb63]" : "text-white/45 group-hover:text-white/80",
+                            active ? "text-gold" : "text-white/45 group-hover:text-white/80",
                           )}
                           aria-hidden
                         />
@@ -237,7 +238,7 @@ export function SidebarFrame() {
   return (
     <div
       aria-hidden
-      className="no-print hidden w-[17rem] shrink-0 flex-col bg-[#171b3d] text-white lg:flex"
+      className="no-print hidden w-[17rem] shrink-0 flex-col bg-rail text-rail-foreground lg:flex"
     >
       <div className="flex items-center gap-3 border-b border-white/10 px-5 py-[1.125rem]">
         <BrandMark className="size-9 shrink-0" decorative />

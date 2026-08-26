@@ -77,17 +77,78 @@ export function TH({
 
 export function TR({
   className,
+  linked,
   ...props
-}: React.HTMLAttributes<HTMLTableRowElement>) {
+}: React.HTMLAttributes<HTMLTableRowElement> & {
+  /**
+   * The row stands for one thing, and the whole row opens it.
+   *
+   * A ledger row used to be openable only by the voucher number — a 60px
+   * target in a 1200px row, which is a lot of aiming for the most common
+   * action on the page. Pair this with `<RowLink>` on the cell that names
+   * the thing: that link stretches to fill the row while staying one real
+   * anchor, so middle-click, copy-link and the tab order all still work.
+   */
+  linked?: boolean;
+}) {
   return (
     <tr
       className={cn(
         "border-b border-border last:border-0 transition-colors duration-150 hover:bg-surface-sunken",
+        // The positioning context the stretched link resolves against.
+        linked && "relative cursor-pointer",
         className,
       )}
       {...props}
     />
   );
+}
+
+/**
+ * The one link in a `linked` row that covers the whole row.
+ *
+ * `after:absolute after:inset-0` is the stretched-link pattern: the anchor
+ * stays exactly where it is for the keyboard and the accessibility tree, and
+ * an invisible pseudo-element takes the clicks across the row. Anything else
+ * in the row that must stay clickable — a second link, a button — needs to sit
+ * above it, which is what `RowAbove` is for.
+ *
+ * A `<tr>` cannot be a link and cannot contain one; this is the only way to
+ * make a table row navigable without rebuilding the table out of divs and
+ * losing everything a real table gives a screen reader.
+ */
+export function RowLink<T extends string>({
+  href,
+  className,
+  children,
+}: {
+  href: Route<T>;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "after:absolute after:inset-0 after:content-['']",
+        "hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        className,
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** Anything in a `linked` row that has its own target. */
+export function RowAbove({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return <span className={cn("relative z-10", className)}>{children}</span>;
 }
 
 export function TD({

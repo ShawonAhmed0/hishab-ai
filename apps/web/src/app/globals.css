@@ -32,6 +32,22 @@
   /* Near-black carrying the brand's own hue rather than pure black — 7.6:1. */
   --color-on-primary: #04220f;
   --color-secondary: #06703a;
+
+  /* --- The rail ----------------------------------------------------------
+     The deep surface behind the sidebar and the auth panel — the one piece of
+     chrome that frames the whole product rather than sitting inside it.
+
+     It was `bg-[#171b3d]`, an arbitrary Tailwind value, which is why it stayed
+     navy when the brand went green: a hex written inline is invisible to every
+     sweep that looks at the token layer. It is also the same colour in both
+     themes on purpose. The rail is the frame, not the page; a frame that
+     changes with the contents reads as part of them.
+
+     Gold is the rail's own accent, and the only place brass appears as
+     interface rather than as data. */
+  --color-rail: #07241b;
+  --color-rail-foreground: #ffffff;
+  --color-gold: #f0bb63;
   --color-accent: #9b5a0e;
   --color-accent-soft: #faf0df;
   --color-on-accent: #ffffff;
@@ -273,6 +289,17 @@
     letter-spacing: -0.005em;
   }
 
+  /* The rail is dark, and the ring is the brand's ink green — 2.65:1 against
+     it, under the 3:1 a focus indicator has to clear. A keyboard user could
+     barely see which navigation item they were on. Inside the rail the ring
+     switches to gold, which is the rail's own accent and reads at 9.4:1.
+
+     Scoped by attribute rather than by the utility class, so the rule survives
+     a change of background utility on the element. */
+  [data-rail] :focus-visible {
+    outline-color: var(--color-gold);
+  }
+
   /* Focus is never removed, only restyled. */
   :focus-visible {
     outline: 2px solid var(--color-ring);
@@ -437,7 +464,7 @@
     position: relative;
     isolation: isolate;
     overflow: hidden;
-    background-color: #08251a;
+    background-color: var(--color-rail);
     background-image:
       radial-gradient(circle at 18% 16%, rgb(224 164 65 / 0.18), transparent 20rem),
       radial-gradient(circle at 84% 74%, rgb(0 200 83 / 0.22), transparent 28rem);
@@ -505,6 +532,24 @@
     animation: draw 0.9s var(--ease-out) both;
     animation-delay: var(--rise-delay, 0ms);
   }
+
+  /* A row of tiles that arrives in sequence, without every page having to
+     thread an index prop through forty call sites.
+
+     `:nth-child` is evaluated against the element's own position among its
+     siblings, so a tile can stagger itself: the parent grid needs to know
+     nothing and no page changes. Eight steps is more than any row here has;
+     past that they all land together, which is the right failure. */
+  .tile-rise {
+    animation: rise 0.5s var(--ease-out) both;
+  }
+  .tile-rise:nth-child(2) { animation-delay: 60ms; }
+  .tile-rise:nth-child(3) { animation-delay: 120ms; }
+  .tile-rise:nth-child(4) { animation-delay: 180ms; }
+  .tile-rise:nth-child(5) { animation-delay: 240ms; }
+  .tile-rise:nth-child(6) { animation-delay: 300ms; }
+  .tile-rise:nth-child(7) { animation-delay: 360ms; }
+  .tile-rise:nth-child(8) { animation-delay: 420ms; }
 
   /* Something that answers the pointer by rising toward it. Transform and
      shadow only — both composited, so a grid of these does not relayout. */

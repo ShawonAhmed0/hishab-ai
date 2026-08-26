@@ -9,6 +9,7 @@ import { sessionContext } from "@/lib/session";
 import { switchCompanyAction } from "@/app/onboarding/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { markAllNotificationsReadAction } from "./notification-actions";
+import { Shortcuts } from "@/components/shell/shortcuts";
 
 /**
  * The shell does not block the page.
@@ -50,6 +51,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="relative mx-auto w-full max-w-[100rem]">{children}</div>
         </main>
       </div>
+
+      <Shortcuts />
 
       <Suspense fallback={null}>
         <BottomNavSlot />

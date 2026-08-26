@@ -3,7 +3,9 @@ import { ArrowLeftRight, Boxes, SearchX, Users } from "lucide-react";
 import { search } from "@hishabai/core";
 import { formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
+import { FilterInput } from "@/components/ui/filter-bar";
 import { MoneyText } from "@/components/ui/money";
 import { MobileCards, MobileRow } from "@/components/ui/table";
 import { dict } from "@/lib/locale.server";
@@ -34,20 +36,15 @@ export default async function SearchPage({
       <Card>
         <CardBody>
           <form className="flex flex-wrap gap-3">
-            <input
+            <FilterInput
               name="q"
               type="search"
               defaultValue={results.query}
               autoFocus={!results.query}
               placeholder={t.masterData.searchPlaceholder}
-              className="h-11 min-w-[14rem] flex-1 rounded-md border border-border-strong bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              className="min-w-[14rem] flex-1"
             />
-            <button
-              type="submit"
-              className="h-11 rounded-md bg-primary px-5 font-medium text-on-primary"
-            >
-              {t.actions.search}
-            </button>
+            <Button type="submit">{t.actions.search}</Button>
           </form>
         </CardBody>
       </Card>
