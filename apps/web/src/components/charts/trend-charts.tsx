@@ -115,6 +115,8 @@ function useSegmentClick(data: ChartPoint[]) {
 }
 
 const GRID = "var(--color-border)";
+/** The axis line is not data. It sits behind it. */
+const GRID_DASH = "2 6";
 const AXIS = "var(--color-subtle-foreground)";
 
 /**
@@ -144,7 +146,7 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
         onClick={onSegmentClick}
         className="cursor-pointer"
       >
-        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+        <CartesianGrid strokeDasharray={GRID_DASH} stroke={GRID} vertical={false} />
         <XAxis
           dataKey="period"
           tickFormatter={(period: string) => periodLabel(period, t.monthsShort)}
@@ -165,16 +167,16 @@ export function IncomeVsExpenseChart({ data }: { data: ChartPoint[] }) {
           dataKey="income"
           name={t.dashboard.seriesIncome}
           fill="var(--color-credit)"
-          radius={[3, 3, 0, 0]}
-          maxBarSize={28}
+          radius={[6, 6, 0, 0]}
+          maxBarSize={26}
           isAnimationActive={ANIMATE}
         />
         <Bar
           dataKey="expense"
           name={t.dashboard.seriesExpense}
           fill="var(--color-debit)"
-          radius={[3, 3, 0, 0]}
-          maxBarSize={28}
+          radius={[6, 6, 0, 0]}
+          maxBarSize={26}
           isAnimationActive={ANIMATE}
         />
       </BarChart>
@@ -205,7 +207,7 @@ export function SalesTrendChart({ data }: { data: ChartPoint[] }) {
             <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+        <CartesianGrid strokeDasharray={GRID_DASH} stroke={GRID} vertical={false} />
         <XAxis
           dataKey="period"
           tickFormatter={(period: string) => periodLabel(period, t.monthsShort)}

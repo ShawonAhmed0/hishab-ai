@@ -20,3 +20,4 @@ export {
 } from "./i18n";
 export type { Dictionary, Locale, StringKeys } from "./i18n";
 export * from "./whatsapp";
+export * from "./delta";

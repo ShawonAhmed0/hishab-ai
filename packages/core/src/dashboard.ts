@@ -33,6 +33,24 @@ export interface DashboardTiles {
   stockValue: Money;
 }
 
+/**
+ * The same month's figures, a month earlier.
+ *
+ * A figure on its own is not information: ৳1,99,000 of income is a good month
+ * or a bad one depending entirely on what last month was, and the dashboard
+ * used to make the reader remember. Only the *flows* are compared — income,
+ * expense, profit. A wallet balance and a stock value are positions rather
+ * than flows, and "12% more cash than last month" invites a conclusion the
+ * number does not support.
+ */
+export interface PreviousPeriod {
+  from: string;
+  to: string;
+  income: Money;
+  expense: Money;
+  netProfit: Money;
+}
+
 export interface TrendPoint {
   /** ISO month, e.g. "2026-08". */
   period: string;
@@ -65,6 +83,7 @@ export interface LowStockItem {
 
 export interface DashboardData {
   tiles: DashboardTiles;
+  previous: PreviousPeriod;
   trend: TrendPoint[];
   recent: RecentTransaction[];
   topDueCustomers: { id: string; name: string; receivable: Money }[];
@@ -75,11 +94,30 @@ function monthRange(reference = new Date()): { from: string; to: string } {
   return currentMonthRange(reference);
 }
 
+/**
+ * The calendar month before the one given.
+ *
+ * Taken from the period's own start rather than from today, so a dashboard
+ * asked about March compares against February and not against last month.
+ */
+function previousMonthOf(period: { from: string }): { from: string; to: string } {
+  const year = Number(period.from.slice(0, 4));
+  const month = Number(period.from.slice(5, 7));
+  const prev = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
+  const lastDay = new Date(Date.UTC(prev.y, prev.m, 0)).getUTCDate();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    from: `${prev.y}-${pad(prev.m)}-01`,
+    to: `${prev.y}-${pad(prev.m)}-${pad(lastDay)}`,
+  };
+}
+
 /** `tx.execute` requires an index signature; the shape is documented above. */
 interface RawDashboard {
   [key: string]: unknown;
   wallets: { kind: string; balance: string }[] | null;
   flows: { type: string; amount: string }[] | null;
+  prior_flows: { type: string; amount: string }[] | null;
   dues: { receivable: string; payable: string } | null;
   stock_value: string | null;
   trend: { period: string; income: string; expense: string; sales: string }[] | null;
@@ -96,6 +134,7 @@ export async function getDashboard(
     from: options.from ?? monthRange().from,
     to: options.to ?? monthRange().to,
   };
+  const prior = previousMonthOf(period);
   const months = options.months ?? 6;
 
   // One statement, one round trip. Each subquery returns JSON so the whole
@@ -120,6 +159,21 @@ export async function getDashboard(
                 and a.type in ('income', 'expense')
               group by a.type
            ) t) as flows,
+
+        -- The same aggregation a month earlier, so every flow tile can say
+        -- what it is up or down against. One more subquery on the same
+        -- (company_id, date) index rather than a second round trip.
+        (select coalesce(json_agg(json_build_object('type', t.type, 'amount', t.amount)), '[]'::json)
+           from (
+             select a.type::text as type,
+                    coalesce(sum(jl.credit - jl.debit), 0)::text as amount
+               from journal_lines jl
+               join accounts a on a.id = jl.account_id
+              where jl.company_id = app.current_company_id()
+                and jl.date between ${prior.from}::date and ${prior.to}::date
+                and a.type in ('income', 'expense')
+              group by a.type
+           ) t) as prior_flows,
 
         (select json_build_object(
                   'receivable', coalesce(sum(receivable), 0)::text,
@@ -204,10 +258,14 @@ export async function getDashboard(
 
   const flow = (type: string) =>
     moneyFromDb((raw.flows ?? []).find((f) => f.type === type)?.amount ?? "0");
+  const priorFlow = (type: string) =>
+    moneyFromDb((raw.prior_flows ?? []).find((f) => f.type === type)?.amount ?? "0");
 
   const monthIncome = flow("income");
   // Expenses are debit-normal, so `credit - debit` comes back negative.
   const monthExpense = -flow("expense") as Money;
+  const priorIncome = priorFlow("income");
+  const priorExpense = -priorFlow("expense") as Money;
 
   const trend: TrendPoint[] = (raw.trend ?? []).map((row) => {
     const income = moneyFromDb(row.income);
@@ -232,6 +290,13 @@ export async function getDashboard(
       customerDue: moneyFromDb(raw.dues?.receivable ?? "0"),
       vendorPayable: moneyFromDb(raw.dues?.payable ?? "0"),
       stockValue: moneyFromDb(raw.stock_value ?? "0"),
+    },
+    previous: {
+      from: prior.from,
+      to: prior.to,
+      income: priorIncome,
+      expense: priorExpense,
+      netProfit: (priorIncome - priorExpense) as Money,
     },
     trend,
     recent: raw.recent ?? [],

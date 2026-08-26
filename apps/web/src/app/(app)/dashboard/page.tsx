@@ -15,7 +15,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { dailyAlertsFrom, getCustomerHealth, getDashboard } from "@hishabai/core";
-import { currentMonthRange, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
+import { currentMonthRange, deltaOf, formatQty, moneyFromDb, qtyFromDb } from "@hishabai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
   // it runs alongside the session lookup rather than after it.
   const [
     {
-      data: { tiles, trend, recent, topDueCustomers, lowStock },
+      data: { tiles, previous, trend, recent, topDueCustomers, lowStock },
     },
     t,
   ] = await Promise.all([sessionWithData(getDashboard), dict()]);
@@ -201,12 +201,19 @@ export default async function DashboardPage() {
           {t.dashboard.thisMonthHeading}
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/*
+            Only the flow tiles carry a comparison. A wallet balance or a stock
+            value is a position rather than a flow, and "12% more cash than
+            last month" invites a conclusion the figure does not support.
+          */}
           <StatTile
             label={t.dashboard.monthIncome}
             value={tiles.monthIncome}
             tone="credit"
             icon={TrendingUp}
             href={monthReport}
+            delta={deltaOf(tiles.monthIncome, previous.income)}
+            t={t}
           />
           <StatTile
             label={t.dashboard.monthExpense}
@@ -214,6 +221,11 @@ export default async function DashboardPage() {
             tone="debit"
             icon={TrendingDown}
             href={monthReport}
+            // Spending less is the good direction, so the chip is green when
+            // this falls. A tile that paints a cost increase green because the
+            // arrow points up says the opposite of what happened.
+            delta={deltaOf(tiles.monthExpense, previous.expense, { higherIsBetter: false })}
+            t={t}
           />
           <StatTile
             label={t.dashboard.netProfit}
@@ -221,6 +233,8 @@ export default async function DashboardPage() {
             tone="auto"
             icon={Banknote}
             href={monthReport}
+            delta={deltaOf(tiles.netProfit, previous.netProfit)}
+            t={t}
           />
         </div>
       </section>

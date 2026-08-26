@@ -1,9 +1,50 @@
 import type * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import type { Money } from "@hishabai/shared";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import type { Delta, Dictionary, Money } from "@hishabai/shared";
 import { MoneyText } from "./money";
 import { cn } from "@/lib/utils";
+
+/**
+ * How this figure moved against the same figure last month.
+ *
+ * The arrow and the words both carry the direction, so the movement survives
+ * greyscale, a colour-blind reader, and a printed page. Colour is the third
+ * signal here, never the only one.
+ *
+ * `good` and the direction are deliberately separate: an expense that rose is
+ * an up arrow and bad news, and a tile that paints it green because the number
+ * grew tells the shopkeeper the opposite of what happened.
+ */
+function DeltaChip({ delta, t }: { delta: Delta; t: Dictionary }) {
+  const Icon =
+    delta.direction === "up" ? ArrowUpRight : delta.direction === "down" ? ArrowDownRight : Minus;
+
+  const label =
+    delta.percent === null
+      ? t.dashboard.noComparison
+      : delta.direction === "flat"
+        ? t.dashboard.deltaFlat
+        : delta.direction === "up"
+          ? t.dashboard.deltaUp(String(Math.abs(delta.percent)))
+          : t.dashboard.deltaDown(String(Math.abs(delta.percent)));
+
+  const tone =
+    delta.direction === "flat" || delta.percent === null
+      ? "text-muted-foreground"
+      : delta.good
+        ? "text-credit"
+        : "text-debit";
+
+  return (
+    <p className={cn("mt-1.5 flex items-center gap-1 text-xs font-medium", tone)}>
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      <span className="num">{label}</span>
+      <span className="font-normal text-subtle-foreground">{t.dashboard.vsLastMonth}</span>
+    </p>
+  );
+}
 
 /**
  * A dashboard tile.
@@ -18,6 +59,8 @@ export function StatTile<T extends string>({
   tone = "neutral",
   icon: Icon,
   footnote,
+  delta,
+  t,
   href,
   className,
 }: {
@@ -26,6 +69,16 @@ export function StatTile<T extends string>({
   tone?: "neutral" | "credit" | "debit" | "due" | "auto";
   icon?: React.ComponentType<{ className?: string }>;
   footnote?: string;
+  /**
+   * The same figure a month ago, when comparing it means something.
+   *
+   * Only for flows. A wallet balance and a stock value are positions, and
+   * "12% more cash than last month" invites a conclusion the number does not
+   * support — so those tiles carry no chip rather than a misleading one.
+   */
+  delta?: Delta;
+  /** Needed for the chip's wording; a shared component never calls useT(). */
+  t?: Dictionary;
   /**
    * Spec R5.7 — a tile that cannot be opened is a number the user has to take
    * on trust.
@@ -47,6 +100,7 @@ export function StatTile<T extends string>({
         {Icon ? <Icon className="size-4 shrink-0 text-subtle-foreground" aria-hidden /> : null}
       </div>
       <MoneyText value={value} tone={tone} size="xl" decimals={0} className="mt-2 block" />
+      {delta && t ? <DeltaChip delta={delta} t={t} /> : null}
       {footnote ? (
         <p className="mt-1 text-xs text-subtle-foreground">{footnote}</p>
       ) : null}
